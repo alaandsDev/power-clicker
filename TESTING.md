@@ -1,0 +1,204 @@
+# Testing
+
+## Automated (unit tests)
+They run automatically on every **Play in Studio** (`DevConfig.RunTestsInStudio`). Output:
+```
+[TESTS] N passed, 0 failed (17 specs, …)
+```
+Failures are printed as `[TESTS][FAIL] Spec > describe > test: message`.
+
+| Spec | Covers |
+|---|---|
+| RateLimiter | burst, refill, per-key isolation, spam simulation (1000 req/s), clock going backwards |
+| Guard | NaN/inf, ranges, integers, UTF-8, unknown keys, extra args |
+| TableUtil | deep copy, reconcile (no overwrite, no shared refs), freeze |
+| EconomyFormulas | monotonic costs, max level, negatives, huge levels capped, combo clamp, sanitize |
+| ConfigValidator | shipped configs valid, plus detection of 7 kinds of broken config |
+| SignalTry | signal delivery/disconnect/once, isolation of erroring handlers, Try |
+| Migrations | sequential steps, missing step, failing step, future/invalid versions |
+| DataSanitizer | NaN/inf repair, Instances/functions removed, arrays kept contiguous, cycles |
+| PlayerDataStore | new player, existing player, transient failure retry, **persistent failure ≠ new player**, live lock respected, lock handoff, stale lock takeover, future version untouched, corrupt untouched, cancel on leave, player isolation, lock refresh, **no write after lock lost**, idempotent release, save retry/failure, missing record |
+| FormulasPhase2 | NumberFormat, ComboLogic (cap/timeout/decay), PowerFormula (unknown/invalid layers ignored, NaN base, cap) |
+| Economy | CurrencyLogic (invalid amounts, never negative, cap, corrupted balance), UpgradeLogic (no funds, cost, max level, unknown id, gems vs power, corrupted level, effects), RebirthLogic (refuse, reset/keep/reward, growing cost, max) |
+| ClickPatternDetector | flags zero-jitter fast clicking; not human jitter, not slow clicking; one signal per window |
+| Localization | same keys in every locale, same placeholders, every upgrade/world/pet/egg/rarity translated, locale resolution, number separators |
+| Pets | PetLogic (unique uids, stale counter safe, unknown pet/variant, inventory cap, equip ownership/dup/cap, slot upgrades+passes, multiplier ignores unknown, equip best, lock/delete, sanitize), EggOdds (sum 1, luck shifts to rare, clamp, pick boundaries, 100k-roll distribution), EggLogic (no funds, charge+roll+stats, full inventory refused before charge, unknown egg/locked world, mythic counter) |
+| Worlds | unlock requires rebirths/cost/previous world, disabled/unknown/already, travel rules, sanitize, eggs only in own world |
+| Retention | BoostLogic (stack cap, invalid, highest-per-category, tick/expire), RewardLogic (combo grant, atomic on full inventory/invalid entry), DailyRewardLogic (first, interval, cycle loop, streak reset, clock backwards, valid rewards), QuestLogic (cap, claim once, daily reset), AchievementLogic (thresholds, worlds, idempotent), CodeLogic (normalize/format, validate) |
+| LevelFormula | nível pela curva geométrica, limites exatos de cada nível, lixo (NaN/negativo), número gigante sem travar |
+| CutLogic | requisito de vitórias, compra única, melhor corte vale, curva sempre crescente, registro corrompido |
+| AuraRuneLogic | auras (posse, requisito, velocidade dentro do teto), runas (slots, cópias, multiplicador, sorteio por mundo, reparo) |
+| CosmeticLogic | espadas e auras cosméticas: desbloqueio por renascimento/vitória/estágio, equipar só o que é seu, tetos de partícula, reparo |
+| Purchases | receipt ledger idempotency, FIFO trimming, one-time offers, NaN robux, unconfigured ids unresolvable, paid pets bypass inventory cap, all products have valid rewards |
+
+Tests use only pure modules or the explicitly named `MockDataStoreBackend`. They never touch a real DataStore.
+
+Add a test: create `src/server/Tests/<Area>/<Name>.spec.luau` returning `function(T) ... end` (see TestRunner).
+
+## Manual — Phase 1 checklist
+
+| # | Scenario | How | Expected | Status |
+|---|---|---|---|---|
+| 1 | Boot + tests | Play `PowerClicker_StudioMock.rbxlx` | `Configs valid`, `booted 3 services`, `[TESTS] … 0 failed` | ✅ Phase 2: 102/102, 0 failed (12 specs) |
+| 2 | New player | same | `created new data (sessions=1)`, client `Data loaded` | ✅ |
+| 3 | Autosave | wait 60 s | `user=… saved` | ✅ |
+| 4 | Leave / close | Stop | `saved + released` | ✅ |
+| 5 | Script Analysis | Window › Script › Analysis | 0 errors, 0 type warnings from our scripts | ✅ 0 errors / 0 warnings (strict) |
+| 6 | Real DataStore unavailable | Play `PowerClicker.rbxlx` on an unpublished place | player kicked with the "couldn't load" + Studio hint; **no data created** | ⏳ |
+| 7 | Real DataStore | publish + enable API access, play twice | second session `loaded data (sessions=2)` | ⏳ |
+| 8 | Multiplayer | Test › Clients and Servers › 2–5 players | every player loads; data isolated | ⏳ |
+| 9 | Wrong-direction remote | Client command bar: `game.ReplicatedStorage.Remotes.DataChanged:FireServer()` repeatedly | ignored; AntiExploit logs (Debug) | ⏳ |
+| 10 | Remote spam | client: `for i=1,100 do game.ReplicatedStorage.Remotes.ClientReady:FireServer() end` | only 2 accepted; rest `RateLimited` | ⏳ |
+| 11 | Invalid args | client: `...ClientReady:FireServer(0/0, {}, "x")` | dropped, `InvalidArguments` | ⏳ |
+
+## Manual — Phase 2 checklist (Studio, `PowerClicker_StudioMock.rbxlx`)
+
+| # | Scenario | How | Expected |
+|---|---|---|---|
+| 2.0 | Join | Play | button shows LOADING... until data arrives, then CLICK!; server logs `snapshot sent (~0.2s after join)` |
+| 2.1 | Click | click the button | floating "+1", Power rises, combo counts up |
+| 2.2 | Combo decay | stop clicking ~2 s | combo drops, then disappears |
+| 2.3 | First upgrade | reach 20 Power, Upgrades, Click Strength | cost charged, "+2 per click", badge "!" when affordable |
+| 2.4 | No funds | buy without funds | toast "Not enough!", nothing charged |
+| 2.5 | Overdrive | click 400x or Debug > Overdrive | orange button, "OVERDRIVE x3 20s", per click x3, then 10s cooldown |
+| 2.6 | Rebirth refused | Rebirth panel below cost | "Not enough Power"; server refuses if forced |
+| 2.7 | Rebirth | Debug > Rebirth | flash, toast "+10 Gems", Power 0, Power upgrades reset, Gem upgrades kept, multiplier x1.5 |
+| 2.8 | Gem upgrade | Debug > +100 Gems, Gems tab, Eternal Power | multiplier rises, kept after rebirth |
+| 2.9 | Auto click | Debug > Auto Click | "+X (auto)" 4x/s without clicking, no combo |
+| 2.10 | Click spam | command bar (client): `for i=1,200 do game.ReplicatedStorage.Remotes.Click:FireServer() end` | only ~burst accepted; AntiExploit logs (Debug level) |
+| 2.11 | Bad args | `game.ReplicatedStorage.Remotes.BuyUpgrade:InvokeServer("FreeMoney")` | `{Ok=false, Code="InvalidRequest"}` |
+| 2.12 | Debug in live | publish, join as non-admin | no debug panel; DebugCommand returns `Forbidden` |
+| 2.13 | Mobile | Studio device emulator (phone) | button large, panels fit, safe area respected |
+| 2.14 | Console | gamepad R2 / X | clicks register |
+| 2.15 | Multiplayer | Test > 2-3 players | each has own Power/combo/overdrive |
+
+## Manual — Phase 3 checklist
+
+| # | Scenario | How | Expected |
+|---|---|---|---|
+| 3.1 | Egg shop | Ovos panel | 3 eggs, prices, chances per pet colored by rarity, "Sorte: x1" |
+| 3.2 | No funds | hatch Ovo Básico with 0 Power | toast "Saldo insuficiente!", nothing charged |
+| 3.3 | Hatch | Debug +1M Power, hatch | shake + reveal with rarity color, Power charged 2K, pet in Pets panel |
+| 3.4 | Legendary/Mythic | Debug +100 Gems several times, Ovo Místico | colored full-screen flash; other players get a toast |
+| 3.5 | Equip | Pets panel, tap a pet, Equipar | ✅ on card, "Equipados 1/3", per-click multiplier rises, ball follows the character |
+| 3.6 | Equip limit | equip 4 pets | "Todos os espaços de pet estão ocupados!" |
+| 3.7 | Equip best | button | strongest 3 equipped |
+| 3.8 | Lock/Delete | lock, then try delete; unlock, delete twice (confirm) | locked pet can't be deleted; deleted pet removed/unequipped |
+| 3.9 | Pet slots upgrade | Gems tab, Espaços de Pet | "Equipados x/4" |
+| 3.10 | Inventory full | 50 pets, hatch | "Inventário de pets cheio!" and NO charge |
+| 3.11 | Fake uid | client: `Remotes.PetAction:InvokeServer("Equip","99999")` | `NotOwned` |
+| 3.12 | Fake egg | client: `Remotes.HatchEgg:InvokeServer("GoldenEgg")` | `InvalidRequest` |
+| 3.13 | Hatch spam | invoke HatchEgg 20x fast | only ~1 per 0.75 s accepted |
+| 3.14 | Multiplayer | 2 players | each sees the other's pets following them |
+
+## Manual — Phases 4–5 checklist
+
+| # | Scenario | How | Expected |
+|---|---|---|---|
+| 4.1 | Worlds panel | Mundos | 5 worlds; Treino "Você está aqui"; others "Bloqueado" (Studio: all enabled) |
+| 4.2 | Unlock refused | City without rebirths | "Renascimentos insuficientes!" |
+| 4.3 | Unlock | Debug Rebirth x5 + Gems, Desbloquear City | cost charged, toast, button "Viajar" |
+| 4.4 | Travel | Viajar | character teleported to the City platform; per-click multiplier x10 |
+| 4.5 | Eggs per world | open Ovos in City | "Não há ovos neste mundo." |
+| 4.6 | Rejoin | leave in City and rejoin | spawns in City |
+| 5.1 | Daily | Prêmios, RESGATAR | day 1 reward; button shows countdown; badge disappears |
+| 5.2 | Next day | Debug "Pular dia" | day 2 claimable; after claim streak 2 |
+| 5.3 | Device clock | change the PC clock | nothing changes (server clock only) |
+| 5.4 | Codes | RELEASE, then again, then "xyz" | +25 Gemas; "Você já usou esse código."; "Código inválido." |
+| 5.5 | Quests | click 100x | toast "Missão concluída", badge; Resgatar grants Gems |
+| 5.6 | Daily quests | Debug "Pular dia" | daily quests reset |
+| 5.7 | Achievements | first click / 1K clicks / first rebirth | toast + Gems automatically |
+| 5.8 | Boosts | Debug "Boosts" | HUD "2x Power 15:00" countdown; per-click x2; expires |
+| 5.9 | Ranking | Ranking panel | Studio: local ranking note; your row highlighted |
+| 5.10 | leaderstats | player list | Power and Rebirths columns |
+
+## Manual — Phase 6 checklist
+
+| # | Scenario | How | Expected |
+|---|---|---|---|
+| 6.1 | Shop | Loja panel | Offers/Passes/Items tabs; every button "Em breve" while ids are 0 |
+| 6.2 | Prompt refused | client: `Remotes.PromptPurchase:InvokeServer("GemsSmall")` with id 0 | `NotAvailable` (no prompt) |
+| 6.3 | Passes (Studio) | Debug "Teste: passes" | per-click x2.5 (2x × VIP 1.25), luck x2, "Equipados x/6", auto click on, VIP Crown Cat pet once, [VIP] chat tag |
+| 6.4 | Starter pack (Studio) | Debug "Teste: pacote" twice | first: pet + 250 Gemas + boosts; Offer shows "Adquirido ✓"; second grant also works (debug bypasses the prompt) and uses a new purchase id |
+| 6.5 | Auto click toggle | Passes tab, toggle | ON/OFF; without the pass → `NotOwned` |
+| 6.6 | Real product (live test server) | configure ids, buy GemsSmall | gems once; server log `granted GemsSmall (purchase …)`; rejoin → no re-grant |
+| 6.7 | Receipt retry | buy while DataStore throttled (or kick right after purchase) | granted exactly once after rejoin |
+| 6.8 | Game pass (live) | buy 2x Power | benefit applies immediately (PromptGamePassPurchaseFinished) and after rejoin (UserOwnsGamePassAsync) |
+
+## Manual — Phase 7 checklist
+
+| # | Scenario | How | Expected |
+|---|---|---|---|
+| 7.1 | Loading | Play | branded "⚡ POWER CLICKER ⚡ / Carregando..." until data arrives, then fades |
+| 7.2 | Onboarding | Debug "Resetar dados" | banner "Clique no botão…", then Melhorias pulses, then Ovos, Pets, Renascer; "Tutorial concluído!" at the end |
+| 7.3 | Settings | Ajustes | toggles persist after rejoin (real DataStore) |
+| 7.4 | Reduced effects | enable | no floating numbers / ring / flashes / Overdrive glow |
+| 7.5 | Panels | open any panel | quick pop-in animation |
+| 7.6 | Mobile | Studio device emulator (phone, landscape) | everything fits; big button; toasts don't cover the button |
+
+## Manual — World maps
+
+| # | Scenario | How | Expected |
+|---|---|---|---|
+| W.1 | Training map | Play | grass island: trees, fence, flowers, dummies, sunny sky, no force-field bubble |
+| W.2 | Egg stands | walk to the 3 eggs, press E / tap | Ovos panel opens; stand shows name + price |
+| W.3 | Rebirth altar / portal | press E | Renascer / Mundos panel opens |
+| W.4 | Other worlds (Studio) | Debug Liberar mundos, travel to each | City at sunset with lit windows, Volcano with lava and a red sky, Space with stars and asteroids, Galaxy with crystals and rings |
+| W.5 | Fall off the island | walk off the edge | respawn at the current world's spawn |
+| W.6 | Performance | Studio MicroProfiler / Stats | stable FPS; each world is ~300 anchored parts |
+
+## Static audit
+`python tools/audit.py` checks remotes (handlers/listeners), deprecated APIs, stray prints, localization keys and per-player cleanup. Run it before every build; it must print `OK`.
+
+## Later phases (planned)
+Click (normal, spam, multiple players, reconnect) · Pets (add, equip, unequip, full inventory, nonexistent pet, duplication) · Eggs (no funds, funds, RNG distribution over 100k rolls, spam) · Rebirth (below requirement, at requirement, reward, reset, many) · Monetization (gamepass, product, **repeated receipt**, failed processing) · Security (spam, invalid args, negatives, huge numbers, wrong types, out-of-order calls).
+
+---
+
+## Lista de teste manual (reestruturação da Torre)
+
+O que precisa ser verificado dentro do Roblox Studio ou no jogo publicado —
+nada disto é coberto pelos testes automáticos, porque depende de física,
+câmera, toque e replicação.
+
+### Jogador novo
+1. Entrar com uma conta sem dados: nasce na praça, com o Corte 1 e a Lâmina de Ferro.
+2. Segurar o clique: ganha Power contínuo, arco aparece na cor da espada.
+3. Barra de Nível enche e sobe de nível.
+4. Andar pelo caminho de pedra até a boca do corredor.
+5. Quebrar a barreira 1 (3 fileiras), pegar o pad e ser teleportado à praça.
+
+### Jogador existente (dados antigos)
+6. Entrar com a conta que já jogava: **não pode ser expulso nem resetado**.
+7. Conferir que gemas, pets, melhorias e renascimentos continuam lá.
+8. Quem estava num mundo dormente (Cidade/Vulcão/Espaço/Galáxia) é trazido para a praça, não cai no vazio.
+9. Espadas e auras cosméticas já conquistadas aparecem desbloqueadas na entrada.
+
+### Corredor
+10. As 10 áreas estão em linha reta, no mesmo nível, sem escada.
+11. Cada barreira tem arco, e dá para ver a luz do tema seguinte ao fundo.
+12. A faixa do corredor aparece ao chegar perto e some no lobby.
+13. O pad de voltar funciona em todas as áreas.
+14. A barreira 10 é visivelmente maior e o portal diz "em breve" (e não teleporta).
+
+### Treino
+15. Subir em cada máquina: o aviso "Treinando" aparece com o ganho por segundo.
+16. Pular ou sair do pad para o ganho.
+17. Máquina com requisito de vitórias não paga antes do requisito.
+
+### Economia
+18. Comprar corte nos pads da torre (E) — preço e requisito conferem.
+19. Renascer: a tela mostra requisito, quanto falta, ganho e **o que fica**.
+20. Após renascer: Power zera, pets/gemas/vitórias/cortes/espadas/auras/torre permanecem.
+21. Ovo da Torre só abre depois do estágio 5; Ovo do Colosso depois do 10.
+
+### Interface
+22. Moedas na horizontal no topo, sem sobrepor nada.
+23. Menu: cinco botões principais maiores; "Mais" abre e fecha os secundários.
+24. Painel "Progresso" mostra os 10 estágios e marca o atual.
+25. Testar em celular (375x812), tablet e PC: nada cortado, botão de clique alcançável com o polegar.
+
+### Limites e segurança
+26. Tentar atravessar a muralha da ilha pulando: não pode subir (degrau de 14 studs).
+27. Cair do corredor: não existe vão entre a ilha e a entrada.
+28. Dois jogadores no mesmo servidor quebrando a mesma barreira: ambos recebem o pad, uma vez cada.

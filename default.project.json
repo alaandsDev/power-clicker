@@ -1,0 +1,86 @@
+{
+  "name": "PowerClicker",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "$ignoreUnknownInstances": true,
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Assets": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Pets": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        },
+        "Eggs": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        }
+      }
+    },
+    "ReplicatedFirst": {
+      "$className": "ReplicatedFirst",
+      "$ignoreUnknownInstances": true,
+      "LoadingScreen": {
+        "$path": "src/first/LoadingScreen.client.luau"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "$ignoreUnknownInstances": true,
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "$ignoreUnknownInstances": true,
+      "Assets": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Worlds": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        }
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "$ignoreUnknownInstances": true,
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "$ignoreUnknownInstances": true,
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "$ignoreUnknownInstances": true,
+      "Map": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Worlds": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        },
+        "Spawns": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        },
+        "Teleporters": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        },
+        "Interactables": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true
+        }
+      }
+    }
+  }
+}

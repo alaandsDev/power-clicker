@@ -1,0 +1,12 @@
+﻿node_modules/
+.env
+.env.*
+*.log
+dist/
+build/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+__pycache__/
+*.pyc

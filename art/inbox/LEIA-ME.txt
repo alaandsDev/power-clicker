@@ -1,0 +1,2 @@
+Coloque aqui os PNGs gerados (nomes como em docs/ART_PROMPTS.md).
+Esta pasta NAO vai para o Roblox; serve para conferencia e organizacao.
