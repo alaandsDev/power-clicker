@@ -2,14 +2,19 @@
 
 All values live in `src/shared/Config/*`. Formulas live **only** in `src/shared/Formulas/` (`EconomyFormulas`, `PowerFormula`, `ComboLogic`, `EggOdds`).
 
+> **Valores atuais.** A tabela abaixo mostra as fórmulas em vigor (após a
+> Fase H). As seções históricas mais adiante ("Phase 8 audit", "Diagnóstico
+> atual") registram os números da época em que foram escritas — por exemplo
+> custo ×2,3 e multiplicador `1 + 0,5R` — e foram mantidas como histórico.
+
 ## Formulas
 
 | What | Formula | Config |
 |---|---|---|
 | Upgrade cost (level L → L+1) | `ceil(BaseCost × CostGrowth^L)` | UpgradeConfig |
-| Rebirth cost (r done) | `ceil(200,000 × 2.3^r)` | RebirthConfig |
-| Gems per rebirth | `floor(15 + 8r)` | RebirthConfig |
-| Rebirth multiplier | `1 + 0.5 × R` | RebirthConfig |
+| Rebirth cost (r done) | `ceil(200,000 × 3.2^r)` | RebirthConfig |
+| Gems per rebirth | `floor(30 + 20r)` | RebirthConfig |
+| Rebirth multiplier | `1.75 ^ R` (composto; `(1 + MultiplierPerRebirth)^R` com 0,75) | RebirthConfig |
 | Combo multiplier | `min(1 + 0.02 × stacks, 2)`, 50 stacks max | ComboConfig |
 | Overdrive | 400 manual clicks to charge, ×3 for 20 s, 10 s cooldown | OverdriveConfig |
 | Pet multiplier | `1 + Σ(bonus × variantScale)` of equipped pets (3 slots base, +1 per Pet Slots level, +3 pass, max 12) | PetConfig |
@@ -18,9 +23,13 @@ All values live in `src/shared/Config/*`. Formulas live **only** in `src/shared/
 
 Power per click (server only, `PowerFormula` + `PowerService`):
 ```
-(1 + ClickStrength) × Upgrade(1 + 0.25·PowerBoost) × Rebirth × Pet × World
+(1 + ClickStrength + Corte) × Upgrade(1 + 0.25·PowerBoost) × Rebirth(1.75^R) × Pet × World
   × Permanent(1 + 0.1·EternalPower) × GamePass × TemporaryBoost × Overdrive × Combo
+  × demais camadas registradas (Aura de gemas, Runas, Social, Evento, Zona...)
 ```
+A lista completa de camadas é `EconomyConfig.MultiplierLayers`. Auras
+cosméticas (`AuraSkinConfig`) e espadas (`SwordConfig`) **não** registram
+camada: não mexem em Power.
 Every stored amount is sanitized (finite, ≥ 0, ≤ `1e100`).
 
 ## Phase 8 audit: full simulation
@@ -348,3 +357,18 @@ quem já estava avançado acelera. O custo do próximo renascimento sobe
   consequência de balanceamento.
 - O simulador ainda não modela auras de poder, runas, passes nem boosts; os
   números acima são, portanto, um **piso**.
+
+---
+
+# Limitações conhecidas (mundos 2–5 dormentes)
+
+Registradas durante a auditoria do polimento; **nenhuma foi alterada**:
+
+- **Runas**: o chefe só aparece em mundo habilitado, então no jogo publicado
+  só as 4 runas do mundo Treino podem cair (16 de 20 ficam inalcançáveis
+  enquanto Cidade/Vulcão/Espaço/Galáxia estiverem dormentes).
+- **Conquistas** `UnlockCity` e `UnlockSpace` não podem ser completadas.
+- **Mundos**: os dados (`PlayerData.Worlds`) e o `WorldController`/`WorldService`
+  continuam no jogo para compatibilidade; o portal de mundos do lobby só é
+  construído quando algum mundo além do inicial estiver habilitado.
+- O simulador ainda não modela auras de poder, runas, passes nem boosts.

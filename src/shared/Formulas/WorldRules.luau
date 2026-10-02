@@ -26,6 +26,21 @@ function WorldRules.IsEnabled(world: WorldData): boolean
 	return world.Enabled or studioOverride
 end
 
+--[[
+	Há algum mundo além do inicial para onde viajar? Enquanto os mundos 2–5
+	estiverem dormentes a resposta é não, e o portal de mundos do lobby nem é
+	construído (um portal que abre um painel sem destino é pior que nenhum).
+	Ligar um mundo no WorldConfig traz o portal de volta sozinho.
+]]
+function WorldRules.TravelAvailable(): boolean
+	for _, world in WorldConfig.Worlds do
+		if world.Id ~= WorldConfig.DefaultWorld and WorldRules.IsEnabled(world) then
+			return true
+		end
+	end
+	return false
+end
+
 -- Worlds sorted by Order.
 function WorldRules.Ordered(): { WorldData }
 	local list: { WorldData } = {}

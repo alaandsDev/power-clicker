@@ -531,7 +531,7 @@ return {
 	["pet.Nova.name"] = "Nova",
 	["pet.Colossus.name"] = "Lesser Colossus",
 	["code.StageLocked"] = "Break the Path stage that unlocks this egg.",
-	["eggs.stageLocked"] = "🗼 Stage {order}",
+	["eggs.stageLocked"] = "⚔️ Stage {order}",
 	["rebirth.keeps"] = "Kept: gems, pets, wins, cuts, swords, auras and the Path",
 	["rebirth.missing"] = "{amount} {icon} to go",
 	["rebirth.ready"] = "Ready to rebirth!",

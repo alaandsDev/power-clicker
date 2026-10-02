@@ -69,7 +69,7 @@ local Eggs: { [string]: EggData } = {
 	},
 	TowerEgg = {
 		Id = "TowerEgg",
-		DisplayName = "Ovo da Torre",
+		DisplayName = "Ovo do Caminho", -- reserva; o nome real vem de egg.TowerEgg.name
 		WorldId = "Training",
 		-- Abre depois da Estrutura Dourada: as gemas das primeiras conquistas
 		-- são exatamente o que paga este ovo.

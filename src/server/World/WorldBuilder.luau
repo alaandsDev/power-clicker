@@ -35,6 +35,7 @@ local LobbyConfig = require(Shared.Config.LobbyConfig)
 local TrainingConfig = require(Shared.Config.TrainingConfig)
 local CutLogic = require(Shared.Formulas.CutLogic)
 local ZoneRules = require(Shared.Formulas.ZoneRules)
+local WorldRules = require(Shared.Formulas.WorldRules)
 local NumberFormat = require(Shared.Utils.NumberFormat)
 local Text = require(Shared.Localization)
 
@@ -1067,17 +1068,89 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 					stage.Material
 				)
 			end
+			--[[
+				CONTENÇÃO DO FIM. Antes a praça final terminava no vazio: dava
+				para andar além do portal e cair. Agora o fundo é um MACIÇO do
+				Colosso — blocos de rocha em alturas diferentes, mais altos que
+				qualquer pulo, com cristais na cor do tema — e o portal fica
+				encostado nele, como se tivesse sido escavado na montanha. É uma
+				parede de verdade, não uma cerca, e não fica na frente do portal.
+			]]
+			local portalColor = Color3.fromRGB(190, 120, 255)
+			local backX = cursor + plazaLength
+			local rockColor = shade(stage.Color, 0.32)
+			-- {deslocamento Z (fração da largura), largura, altura, recuo}
+			local massif = {
+				{ -0.42, 0.30, 1.55, 6 },
+				{ -0.17, 0.26, 1.95, 0 },
+				{ 0.17, 0.26, 1.95, 0 },
+				{ 0.42, 0.30, 1.45, 8 },
+			}
+			for _, piece in massif do
+				local pieceWidth = (width + layout.SideThickness * 2) * piece[2]
+				local pieceHeight = layout.SideHeight * piece[3]
+				-- A face da frente fica sempre 1 stud SOBRE o piso: sem fresta.
+				local depth = 16 + piece[4]
+				block(
+					model,
+					CFrame.new(origin + Vector3.new(backX - 1 + depth / 2, pieceHeight / 2 - layout.FloorThickness, piece[1] * width)),
+					Vector3.new(depth, pieceHeight + layout.FloorThickness, pieceWidth),
+					rockColor,
+					Enum.Material.Basalt
+				)
+			end
+			-- Faixa central mais baixa: é a "boca" escavada onde o portal fica.
+			block(
+				model,
+				CFrame.new(origin + Vector3.new(backX - 1 + 12, layout.SideHeight * 0.75 - layout.FloorThickness / 2, 0)),
+				Vector3.new(24, layout.SideHeight * 1.5 + layout.FloorThickness, width * 0.36),
+				shade(rockColor, 0.8),
+				Enum.Material.Basalt
+			)
+			-- Cristais nos cantos do maciço (sem colisão: o maciço já segura).
+			for _, side in { -1, 1 } do
+				for index, size in { 16, 24 } do
+					local crystal = block(
+						model,
+						CFrame.new(origin + Vector3.new(backX - 4 - index * 6, size / 2, side * (half - 6 - index * 5)))
+							* CFrame.Angles(0, math.rad(25 * side), math.rad(10 * side)),
+						Vector3.new(4, size, 4),
+						stage.Accent,
+						Enum.Material.Neon,
+						false
+					)
+					crystal.Transparency = 0.15
+				end
+			end
+
+			-- O portal: disco virado para o jogador, com moldura de pedra.
+			local portalX = backX - 4
+			local portalCenter = origin + Vector3.new(portalX, 22, 0)
 			local portal = makePart(model, {
 				Name = "NextWorldPortal",
 				Shape = Enum.PartType.Cylinder,
-				Size = Vector3.new(3, 36, 36),
-				CFrame = CFrame.new(origin + Vector3.new(cursor + plazaLength * 0.7, 20, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-				Color = Color3.fromRGB(190, 120, 255),
+				Size = Vector3.new(1.5, 34, 34),
+				CFrame = CFrame.new(portalCenter),
+				Color = portalColor,
 				Material = Enum.Material.Neon,
 				CanCollide = false,
 				Transparency = 0.35,
 			})
-			light(portal, Color3.fromRGB(190, 120, 255), 60, 3)
+			-- Moldura: oito pedras em anel (barato e lê como um portal).
+			for segment = 0, 7 do
+				local angle = segment * math.pi / 4
+				block(
+					model,
+					-- Gira em X para o lado comprido ficar tangente ao anel.
+					CFrame.new(portalCenter + Vector3.new(0.5, math.sin(angle) * 19, math.cos(angle) * 19))
+						* CFrame.Angles(-angle - math.pi / 2, 0, 0),
+					Vector3.new(4, 5, 15),
+					shade(stage.Accent, 0.55),
+					Enum.Material.Marble,
+					false
+				)
+			end
+			light(portal, portalColor, 60, 3)
 			billboard(portal, Text.GetFor(nil, "wall.portalSoon"), Color3.fromRGB(210, 160, 255), 24)
 		end
 	end
@@ -1413,7 +1486,10 @@ function WorldBuilder.Build(world: WorldData, origin: Vector3, worldsFolder: Fol
 	buildSpawn(model, origin, palette, world, spawnsFolder, withSpawnLocation)
 	buildEggStands(model, origin, palette, world)
 	buildAltar(model, origin, palette)
-	buildPortal(model, origin, palette)
+	-- Portal de mundos só existe se houver mundo para onde ir (WorldRules).
+	if WorldRules.TravelAvailable() then
+		buildPortal(model, origin, palette)
+	end
 	buildStations(model, origin, palette)
 	buildScoreboard(model, origin, palette)
 	if ZoneConfig.Build then

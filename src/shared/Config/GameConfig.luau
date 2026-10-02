@@ -31,7 +31,10 @@ local GameConfig = {
 	Dev = {
 		-- Studio only: make every world playable (placeholder maps are generated)
 		-- so the world system can be tested. No effect in live servers.
-		EnableAllWorldsInStudio = true,
+		-- Desligado por padrão: o Studio tem de mostrar o mesmo jogo que está
+		-- publicado (só o mundo inicial, sem o portal de mundos). Ligue apenas
+		-- para testar o sistema de mundos dormente.
+		EnableAllWorldsInStudio = false,
 	},
 
 	Numbers = {

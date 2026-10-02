@@ -81,7 +81,14 @@ Referência: os clickers de espada com corredor de vitórias (Steal/Sword style)
 Falta desta fase: espadas + forja, inventário em abas, troca (liberada só
 depois do Mundo 2) e o relógio de evento no topo da tela.
 
-## Fase B (reestruturação) — Torre vertical ✅ FEITA
+## Fase B (reestruturação) — Torre vertical ⚠️ SUBSTITUÍDA
+
+> **Histórico.** A torre vertical descrita abaixo foi construída e depois
+> **substituída pelo CAMINHO DO PODER**: um corredor horizontal reto, no mesmo
+> nível do chão (ver "Tower Layout → Linear Progression Corridor" mais abaixo).
+> Os 10 estágios, HP, recompensas e dados (`PlayerData.Tower`, DataVersion 6)
+> continuam os mesmos; só a geometria mudou. O nome "Tower" sobrevive apenas em
+> ids internos, que não podem ser renomeados.
 
 - 10 estágios empilhados com tema próprio (madeira → ruínas → gelo → cristal →
   ouro → pedra antiga → vulcânica → magma → energia → colosso).
@@ -155,7 +162,7 @@ Primeira fase a mudar valores, com antes → depois em ECONOMY.md:
 - Gemas por renascimento de `15+8r` para `30+20r`, destravando os ovos bons.
 - Simulação: 2 h chega ao estágio 5–7; 12 h ao 7–9; estágio 10 é meta de dias.
 
-## Tower Layout → Linear Progression Corridor ✅ FEITO
+## Tower Layout → Linear Progression Corridor (CAMINHO DO PODER) ✅ FEITO — layout atual
 
 Correção de layout pedida durante a Fase H. **Nenhum sistema foi refeito**: HP,
 recompensas, gemas, dados, serviços, pets, ovos, treino, armas e economia

@@ -97,7 +97,7 @@ local Areas: { [string]: Area } = {
 	Tower = {
 		Id = "Tower",
 		NameKey = "area.tower",
-		Icon = "🗼",
+		Icon = "⚔️",
 		-- Boca da torre: o caminho de pedra sai da praça e termina aqui.
 		Offset = Vector3.new(130, 0, 0),
 		Radius = 34,

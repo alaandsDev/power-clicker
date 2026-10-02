@@ -543,7 +543,7 @@ return {
 	["pet.Nova.name"] = "Nova",
 	["pet.Colossus.name"] = "Colosso Menor",
 	["code.StageLocked"] = "Quebre o estágio do Caminho que libera esse ovo.",
-	["eggs.stageLocked"] = "🗼 Estágio {order}",
+	["eggs.stageLocked"] = "⚔️ Estágio {order}",
 	["rebirth.keeps"] = "Fica: gemas, pets, vitórias, cortes, espadas, auras e o Caminho",
 	["rebirth.missing"] = "Faltam {amount} {icon}",
 	["rebirth.ready"] = "Pronto para renascer!",

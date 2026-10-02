@@ -4,7 +4,15 @@ Roblox clicker/simulator. Server-authoritative, config-driven, modular Luau.
 
 **Status: all 8 phases implemented.** Validated in Studio up to Phase 2. Phases 3–8 are built, statically audited and unit tested, but still need a Studio run (see [MVP checklist](#mvp-checklist)). Core loop, pets & eggs, worlds, retention, monetization, polish and audit are all done; PT-BR is the default language.
 
-Other docs: [ECONOMY.md](ECONOMY.md) · [SECURITY.md](SECURITY.md) · [TESTING.md](TESTING.md)
+Other docs: [ECONOMY.md](ECONOMY.md) · [SECURITY.md](SECURITY.md) · [TESTING.md](TESTING.md) · [docs/ROADMAP.md](docs/ROADMAP.md)
+
+> **Estado atual (resumo).** A progressão principal é o **CAMINHO DO PODER**:
+> um corredor horizontal reto com 10 barreiras, saindo do lobby para +X
+> (`WallConfig` + `WallService`, construído por `WorldBuilder.buildCorridor`).
+> Não é uma torre. Ids internos como `Tower`, `TowerEgg`, `TowerStage` e
+> `PlayerData.Tower` vêm da versão antiga e **não podem ser renomeados**
+> (estão em saves e strings). Mundos 2–5 estão dormentes (`WorldConfig.Enabled
+> = false`). O idioma padrão é **PT-BR** (`GameConfig.Localization.ForceLocale`).
 
 ---
 
@@ -48,11 +56,18 @@ ReplicatedStorage.Assets/{Pets,Eggs}  client-rendered models (TODO_ASSET; placeh
 ServerScriptService.Server        (src/server)
   ServerBootstrap                 the only server Script
   ServerConfig/  server-only: DataConfig, AdminConfig, CodeConfig, AntiExploitConfig, DevConfig
-  Services/      AntiExploitService, NetService, DataService/, CurrencyService, PowerService,
-                 OverdriveService, PetService, EggService, WorldService, ClickService,
-                 UpgradeService, RebirthService, BoostService, RewardService,
-                 DailyRewardService, QuestService, AchievementService, CodeService,
-                 LeaderboardService, MonetizationService, SettingsService, DebugService
+  Services/      Núcleo: AntiExploitService, NetService, DataService/, CurrencyService,
+                 PowerService, OverdriveService, ClickService, UpgradeService, RebirthService
+                 Caminho do Poder: WallService (barreiras/pads), CutService (dano do Corte),
+                 TrainingService (máquinas do lobby), SwordService (espadas cosméticas)
+                 Coleção: PetService, EggService, AuraService (auras de gemas, dão Power),
+                 AuraSkinService (auras cosméticas), RuneService, CosmeticService
+                 Mundo/eventos: WorldService, PickupService (orbes), BossService, ZoneService +
+                 TargetService (zonas antigas, desligadas por ZoneConfig.Build), SessionService
+                 Retenção: BoostService, RewardService, DailyRewardService, QuestService,
+                 AchievementService, CodeService, SeasonService, SocialService
+                 Outros: LeaderboardService, MonetizationService, SettingsService, DebugService
+                 (ordem de boot: SERVICE_ORDER em ServerBootstrap)
   Logic/         pure rules: CurrencyLogic, UpgradeLogic, RebirthLogic, PetLogic, EggLogic,
                  WorldLogic, BoostLogic, RewardLogic, QuestLogic, AchievementLogic,
                  CodeLogic, PurchaseLogic, ClickPatternDetector
@@ -62,13 +77,13 @@ ServerScriptService.Server        (src/server)
 ServerStorage.Assets/Worlds       server-only models (TODO_ASSET)
 StarterPlayerScripts.Client       (src/client)
   ClientBootstrap                 the only LocalScript
-  Controllers/   DataController, UIController, SoundController, NotificationController,
-                 GameStateController, MenuController, HudController, ClickController,
-                 UpgradeController, RebirthController, PetController, EggController,
-                 WorldController, RewardsController, QuestController,
-                 LeaderboardController, ShopController, VipController,
-                 SettingsController, TutorialController, PetFollowController,
-                 DebugController
+  Controllers/   36 controllers. Base: DataController, UIController, MenuController,
+                 HudController, NotificationController, GameStateController, SoundController.
+                 Caminho do Poder: WallController (vida/efeitos na barreira),
+                 CorridorHudController (faixa contextual), TowerController (painel Progresso).
+                 Sistemas: Click, Upgrade, Rebirth, Pet, Egg, Sword, Aura, Rune, Quest,
+                 Rewards, Season, Shop, Vip, Leaderboard, Settings, Training, Tutorial...
+                 WorldController (painel de mundos) existe, mas sem entrada no menu.
   UI/            Theme, Build (instance helpers), Messages, RewardText
   Net/           ClientNet
 ReplicatedFirst.LoadingScreen     (src/first) branded loading screen until data arrives
@@ -162,7 +177,7 @@ Game rules live in `src/server/Logic/*` as pure functions over `PlayerData` (uni
 
 **Add an egg** — `EggConfig.Eggs`: new entry (`WorldId`, `Currency`, `Price`, `Drops`). Add its id to the world's `Eggs` list in `WorldConfig`.
 
-**World maps** — `src/server/World/WorldBuilder.luau` generates every enabled world at server start: ground, spawn pad, egg stands (one per `WorldConfig.Eggs`), rebirth altar, portal and themed decoration, all deterministic. Stations have ProximityPrompts (`E` / gamepad `Y` / tap) that open the matching panel; actions still go through remotes. Lighting per world lives in `Config/AmbientConfig.luau` and is applied client-side. To use a hand-made map, place a model named `<WorldId>` in `Workspace.Map.Worlds` plus a spawn part in `Workspace.Map.Spawns`; the builder then skips that world. Only use free models from verified creators, and delete every script inside them (backdoor risk).
+**World maps** — `src/server/World/WorldBuilder.luau` generates every enabled world at server start: ground, spawn pad, egg stands (one per `WorldConfig.Eggs`), rebirth altar, themed decoration and, in the starting world, the Caminho do Poder corridor, all deterministic. The world portal is only built when some world other than the starting one is enabled (`WorldRules.TravelAvailable`). In Studio, `GameConfig.Dev.EnableAllWorldsInStudio` is **off by default** so Studio shows the published game; turn it on only to test the dormant worlds. Stations have ProximityPrompts (`E` / gamepad `Y` / tap) that open the matching panel; actions still go through remotes. Lighting per world lives in `Config/AmbientConfig.luau` and is applied client-side. To use a hand-made map, place a model named `<WorldId>` in `Workspace.Map.Worlds` plus a spawn part in `Workspace.Map.Spawns`; the builder then skips that world. Only use free models from verified creators, and delete every script inside them (backdoor risk).
 
 **Add a world** — `WorldConfig.Worlds`: unique `Order`, `Multiplier`, `Requirement`, `SpawnName`, `Eggs`, plus `world.<Id>.name` strings. Build the map as `Workspace.Map.Worlds.<Id>` and a spawn part `Workspace.Map.Spawns.<SpawnName>` (otherwise a placeholder platform is generated). Keep `Enabled = false` until the map is ready; in Studio `GameConfig.Dev.EnableAllWorldsInStudio` lets you test disabled worlds.
 
@@ -217,7 +232,7 @@ NetService.On("OpenEgg", Guard.Args(Guard.KeyOf(EggConfig.Eggs)), function(playe
 | One `Click` event per click (no client batching) | A client-reported "N clicks" is exactly what must never be trusted; 20/s is cheap. |
 | Pure `Logic/` modules + thin services | Economy rules are testable without Players/DataStores. |
 | UI built in code (no Studio-authored GUI) | Everything reviewable in git; uniform `UIScale` from a 1280x720 reference, device safe area. |
-| UI text in English | Roblox auto-translation localizes English source strings (PT-BR included). |
+| UI text via Localization (PT-BR padrão) | Todo texto visível está em `Localization/Strings/ptBR.luau` e `en.luau`; `ForceLocale = "pt-br"` mostra PT-BR para todos. (A decisão original da Fase 1 era texto em inglês; foi substituída.) |
 | Combo/floating numbers predicted on the client | Instant feedback; server values (Power, combo) always win. |
 
 ---
@@ -242,7 +257,7 @@ NetService.On("OpenEgg", Guard.Args(Guard.KeyOf(EggConfig.Eggs)), function(playe
 | Core, DataStore (session lock, retries, migrations, no data loss on failure) | ✅ (Mock backend) · ⏳ real DataStore needs a published place |
 | Click, Combo, Overdrive, Upgrades, Rebirth, Gems | ✅ |
 | Pets, Eggs, Inventory, Equip | 🧪 |
-| Worlds | 🧪 (MVP ships Training only; others Studio-testable) |
+| Worlds | 🧪 (só o Treino está ativo; os outros ficam dormentes e são testáveis no Studio ligando `EnableAllWorldsInStudio`) |
 | Daily rewards, Quests, Achievements, Codes | 🧪 |
 | Leaderboards | 🧪 · ⏳ global boards need a published place |
 | Game passes, Developer products | 🧪 · ⏳ create products, paste ids in ProductConfig |

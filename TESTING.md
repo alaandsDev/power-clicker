@@ -93,6 +93,8 @@ Add a test: create `src/server/Tests/<Area>/<Name>.spec.luau` returning `functio
 
 ## Manual — Phases 4–5 checklist
 
+> Os itens 4.x exigem ligar `GameConfig.Dev.EnableAllWorldsInStudio = true` (desligado por padrão para o Studio mostrar o jogo publicado). Desligue de novo depois.
+
 | # | Scenario | How | Expected |
 |---|---|---|---|
 | 4.1 | Worlds panel | Mundos | 5 worlds; Treino "Você está aqui"; others "Bloqueado" (Studio: all enabled) |
@@ -142,8 +144,8 @@ Add a test: create `src/server/Tests/<Area>/<Name>.spec.luau` returning `functio
 |---|---|---|---|
 | W.1 | Training map | Play | grass island: trees, fence, flowers, dummies, sunny sky, no force-field bubble |
 | W.2 | Egg stands | walk to the 3 eggs, press E / tap | Ovos panel opens; stand shows name + price |
-| W.3 | Rebirth altar / portal | press E | Renascer / Mundos panel opens |
-| W.4 | Other worlds (Studio) | Debug Liberar mundos, travel to each | City at sunset with lit windows, Volcano with lava and a red sky, Space with stars and asteroids, Galaxy with crystals and rings |
+| W.3 | Rebirth altar | press E | Renascer panel opens. (O portal de Mundos só existe com algum mundo além do Treino habilitado — por padrão, não aparece.) |
+| W.4 | Other worlds (Studio, com `EnableAllWorldsInStudio = true`) | Debug Liberar mundos, travel to each | City at sunset with lit windows, Volcano with lava and a red sky, Space with stars and asteroids, Galaxy with crystals and rings |
 | W.5 | Fall off the island | walk off the edge | respawn at the current world's spawn |
 | W.6 | Performance | Studio MicroProfiler / Stats | stable FPS; each world is ~300 anchored parts |
 
@@ -155,7 +157,7 @@ Click (normal, spam, multiple players, reconnect) · Pets (add, equip, unequip, 
 
 ---
 
-## Lista de teste manual (reestruturação da Torre)
+## Lista de teste manual (reestruturação: Caminho do Poder)
 
 O que precisa ser verificado dentro do Roblox Studio ou no jogo publicado —
 nada disto é coberto pelos testes automáticos, porque depende de física,
@@ -180,6 +182,7 @@ câmera, toque e replicação.
 12. A faixa do corredor aparece ao chegar perto e some no lobby.
 13. O pad de voltar funciona em todas as áreas.
 14. A barreira 10 é visivelmente maior e o portal diz "em breve" (e não teleporta).
+14b. A praça final termina num maciço de rocha: não dá para andar além do portal nem cair do fim do mapa.
 
 ### Treino
 15. Subir em cada máquina: o aviso "Treinando" aparece com o ganho por segundo.
@@ -187,14 +190,14 @@ câmera, toque e replicação.
 17. Máquina com requisito de vitórias não paga antes do requisito.
 
 ### Economia
-18. Comprar corte nos pads da torre (E) — preço e requisito conferem.
+18. Comprar corte nos pads da entrada do Caminho do Poder (E) — preço e requisito conferem.
 19. Renascer: a tela mostra requisito, quanto falta, ganho e **o que fica**.
-20. Após renascer: Power zera, pets/gemas/vitórias/cortes/espadas/auras/torre permanecem.
-21. Ovo da Torre só abre depois do estágio 5; Ovo do Colosso depois do 10.
+20. Após renascer: Power zera, pets/gemas/vitórias/cortes/espadas/auras/progresso do Caminho permanecem.
+21. Ovo do Caminho (id `TowerEgg`) só abre depois do estágio 5; Ovo do Colosso depois do 10.
 
 ### Interface
 22. Moedas na horizontal no topo, sem sobrepor nada.
-23. Menu: cinco botões principais maiores; "Mais" abre e fecha os secundários.
+23. Menu: quatro botões principais maiores (Melhorias, Pets, Ovos, Renascer); "Mais" abre e fecha os secundários.
 24. Painel "Progresso" mostra os 10 estágios e marca o atual.
 25. Testar em celular (375x812), tablet e PC: nada cortado, botão de clique alcançável com o polegar.
 
