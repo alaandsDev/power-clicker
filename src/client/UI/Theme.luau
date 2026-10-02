@@ -158,14 +158,26 @@ local Theme = {
 				barra de nível → botão CLIQUE → ganho por clique
 			O botão continua sendo a ação principal, mas menor: era 300x90.
 		]]
-		ClickBottom = 18,
-		ClickHeight = 58,
-		ClickWidth = 192,
+		--[[
+			Polimento do HUD: botão ~17% menor (era 192x58) e o rodapé virou UM
+			bloco compacto. Acima do botão fica só uma faixa fina:
+				Nv. 12 · COMBO x8 · 🔥 55%
+				[========barra de nível========]
+			Ganho por clique e ganho automático NÃO têm texto fixo: aparecem
+			como números flutuantes temporários ACIMA dessa faixa.
+		]]
+		ClickBottom = 16,
+		ClickHeight = 48,
+		ClickWidth = 160,
 		ClickTouchExtra = Vector2.new(36, 12),
-		-- A barra é do COMPONENTE único: nível + overdrive + progresso.
-		LevelBar = Vector2.new(300, 14),
-		LevelGap = 4,
-		StatusRow = 20, -- linha "Nv. 50 | Overdrive 55%"
+		-- A barra é do COMPONENTE único: nível + combo + overdrive + progresso.
+		LevelBar = Vector2.new(270, 8),
+		LevelGap = 6,
+		StatusRow = 18, -- linha "Nv. 12 · COMBO x8 · 🔥 55%"
+		-- Faixa central logo abaixo das moedas: buffs, evento, chefe, treino e
+		-- a faixa do corredor entram AQUI, empilhados, em vez de cada um
+		-- escolher uma posição fixa e cair em cima das moedas ou do vizinho.
+		TopStackWidth = 560,
 		MenuCell = 54, -- ícone + legenda; era 72 (passada de UX: -25%)
 		MenuCaption = 11,
 		MenuColumns = 2,

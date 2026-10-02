@@ -20,12 +20,15 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local Build = require(script.Parent.Parent.UI.Build)
 local Anim = require(script.Parent.Parent.UI.Anim)
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
-local UIController = require(script.Parent.UIController)
 local DataController = require(script.Parent.DataController)
 local SoundController = require(script.Parent.SoundController)
 local NotificationController = require(script.Parent.NotificationController)
+local HudController = require(script.Parent.HudController)
 
-local BAR_SIZE = Vector2.new(520, 26)
+-- Compacta: título + tempo numa linha e a barra embaixo. Mora na coluna
+-- central ABAIXO das moedas (HudController.GetTopStack) — antes ficava em
+-- y = 76 e cobria Power/Gemas/Vitórias.
+local BAR_SIZE = Vector2.new(420, 14)
 
 local EventController = {}
 
@@ -59,28 +62,24 @@ local function setActive(active: boolean)
 end
 
 function EventController.Init()
-	local canvas = UIController.GetCanvas()
-	local hud = Theme.Hud
-
 	panel = Build.new("Frame", {
 		Name = "BossBar",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, hud.Margin + 58),
-		Size = UDim2.fromOffset(BAR_SIZE.X + 28, 92),
+		Size = UDim2.fromOffset(BAR_SIZE.X + 20, 52),
 		Visible = false,
 		ZIndex = 17,
-		Parent = canvas,
+		LayoutOrder = 3,
+		Parent = HudController.GetTopStack(),
 	})
-	Build.hudSurface(panel, UDim.new(0, 18), Theme.Colors.Bad)
-	Build.padding(panel, 12)
+	Build.hudSurface(panel, UDim.new(0, 14), Theme.Colors.Bad)
+	Build.padding(panel, 10)
 
 	titleLabel = Build.label({
 		Name = "Title",
 		Text = "",
 		Font = Theme.FontDisplay,
-		TextSize = 24,
+		TextSize = 17,
 		TextColor3 = Theme.Colors.Bad,
-		Size = UDim2.new(1, 0, 0, 26),
+		Size = UDim2.new(1, 0, 0, 18),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 18,
 		Parent = panel,
@@ -89,16 +88,16 @@ function EventController.Init()
 		Name = "Timer",
 		Text = "",
 		Font = Theme.FontMono,
-		TextSize = 18,
+		TextSize = 14,
 		TextColor3 = Theme.Colors.TextDim,
-		Size = UDim2.new(1, 0, 0, 26),
+		Size = UDim2.new(1, 0, 0, 18),
 		TextXAlignment = Enum.TextXAlignment.Right,
 		ZIndex = 18,
 		Parent = panel,
 	})
 	local bar, set = Build.progressBar({
 		Name = "Hp",
-		Position = UDim2.fromOffset(0, 34),
+		Position = UDim2.fromOffset(0, 22),
 		Size = UDim2.fromOffset(BAR_SIZE.X, BAR_SIZE.Y),
 		ZIndex = 18,
 		Parent = panel,
@@ -114,13 +113,12 @@ function EventController.Init()
 		TextColor3 = Theme.Colors.Power,
 		BackgroundColor3 = Theme.Hud.Surface,
 		BackgroundTransparency = 0.15,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, hud.Margin + 20),
-		Size = UDim2.fromOffset(0, 32),
+		Size = UDim2.fromOffset(0, 28),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Visible = false,
 		ZIndex = 17,
-		Parent = canvas,
+		LayoutOrder = 2,
+		Parent = HudController.GetTopStack(),
 	})
 	Build.corner(eventChip, UDim.new(1, 0))
 	Build.new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), Parent = eventChip })

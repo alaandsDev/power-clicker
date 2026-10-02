@@ -59,6 +59,9 @@ local skinRows: { SkinRow } = {}
 local tabs: { [string]: { Button: TextButton, List: ScrollingFrame } } = {}
 local menuButton: TextButton
 local busy = false
+-- Badge só para aura de Power que ficou acessível e o jogador ainda não viu
+-- com o painel aberto (mesma regra das Melhorias).
+local acknowledged: { [string]: boolean } = {}
 
 -- "1.2" for 1.2x (one decimal, no trailing ".0").
 local function multiplierText(multiplier: number): string
@@ -94,7 +97,13 @@ local function refresh()
 			local affordable = gems >= row.Aura.Price
 			row.Button.Text = Theme.Icons.Gems .. " " .. NumberFormat.Short(row.Aura.Price)
 			Build.paint(row.Button, "BackgroundColor3", if affordable then Theme.Colors.Good else Theme.Colors.Disabled)
-			anyAffordable = anyAffordable or affordable
+			if affordable then
+				if UIController.GetOpenPanel() == PANEL then
+					acknowledged[row.Aura.Id] = true
+				elseif not acknowledged[row.Aura.Id] then
+					anyAffordable = true
+				end
+			end
 		end
 	end
 	MenuController.SetBadge(menuButton, anyAffordable)
@@ -406,6 +415,11 @@ function AuraController.Init()
 		UIController.TogglePanel(PANEL)
 	end, "Auras")
 
+	UIController.PanelChanged:Connect(function(panelName: string?)
+		if panelName == PANEL then
+			refresh()
+		end
+	end)
 	DataController.Changed:Connect(function(key: string)
 		if key == "Auras" or key == "Currencies" then
 			refresh()

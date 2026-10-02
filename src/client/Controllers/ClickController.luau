@@ -47,10 +47,12 @@ local BUTTON_WIDTH = Theme.Hud.ClickWidth
 local BUTTON_HEIGHT = Theme.Hud.ClickHeight
 local TOUCH_EXTRA = Theme.Hud.ClickTouchExtra -- bigger target on phones/tablets
 local BOTTOM_MARGIN = Theme.Hud.ClickBottom
--- A barra de nível fica ABAIXO do botão agora, então o que vem acima dele
--- (overdrive, combo, números) começa logo acima do próprio botão.
+-- Acima do botão fica a faixa única do rodapé (HudController: nível, combo,
+-- overdrive e barra). Os números flutuantes nascem ACIMA dela.
 local STACK_BASE = 0
-local BUTTON_CORNER = UDim.new(0, 20)
+local BUTTON_CORNER = UDim.new(0, 16)
+local FLOAT_SPREAD_X = 100 -- quanto os números se espalham para os lados
+local FLOAT_LIFT = 26 -- folga entre a faixa e o centro do número
 -- Tap on the world counts as a click only if it's a quick, still tap.
 local TAP_MAX_SECONDS = 0.35
 local TAP_MAX_MOVE = 14 -- screen pixels
@@ -125,7 +127,9 @@ local function showFloat(text: string, color: Color3, tier: number?, at: Vector2
 	label.Rotation = random:NextNumber(-10, 10)
 	Anim.PopIn(label, 0.4, 0.22)
 	-- Numbers pop just above the button (or at the tap) and rise.
-	local origin = if at then UDim2.fromOffset(at.X, at.Y) else UDim2.new(0.5, random:NextNumber(-130, 130), 1, -buttonTop - random:NextNumber(10, 40))
+	local origin = if at
+		then UDim2.fromOffset(at.X, at.Y)
+		else UDim2.new(0.5, random:NextNumber(-FLOAT_SPREAD_X, FLOAT_SPREAD_X), 1, -buttonTop - HudController.DockHeight() - FLOAT_LIFT - random:NextNumber(0, 20))
 	label.Text = text
 	Build.paint(label, "TextColor3", color)
 	label.Position = origin
@@ -274,13 +278,13 @@ local function onRenderStep()
 	local tier = comboTier(stacks)
 	if stacks > 0 then
 		comboLabel.Visible = true
-		comboLabel.Text = Text.Get("combo.label", { stacks = stacks, mult = NumberFormat.Short(EconomyFormulas.ComboMultiplier(stacks)) })
+		comboLabel.Text = Text.Get("combo.short", { stacks = stacks })
 		Build.paint(comboLabel, "TextColor3", Theme.Colors.ComboTiers[tier + 1] or Theme.Colors.Text)
 	else
 		comboLabel.Visible = false
 	end
 	if stacks > lastStacks then
-		Anim.Pop(comboLabel, if tier > lastTier then 1.4 else 1.08, if tier > lastTier then 0.35 else 0.15)
+		Anim.Pop(comboLabel, if tier > lastTier then 1.2 else 1.06, if tier > lastTier then 0.35 else 0.15)
 	end
 	if tier > lastTier then
 		SoundController.Play("ComboTier")
@@ -335,14 +339,14 @@ function ClickController.Init()
 		-- replication can delay it a few seconds); clicks are ignored until then.
 		Text = Text.Get(if DataController.IsLoaded() then "click.button" else "click.loading"),
 		Font = Theme.FontDisplay,
-		TextSize = 44,
+		TextSize = 34,
 		TextColor3 = Theme.Colors.Text,
 		AutoButtonColor = false,
 		ZIndex = 10,
 		Parent = canvas,
 	})
 	Build.corner(button, BUTTON_CORNER)
-	Build.stroke(button, 5)
+	Build.stroke(button, 4)
 	Build.textStroke(button, 3)
 	buttonGradient = Build.gradient(button, Theme.Colors.ClickTop, Theme.Colors.ClickBottom)
 	button.Activated:Connect(function()
@@ -437,16 +441,17 @@ function ClickController.Init()
 		end)
 	end
 
-	-- Combo: só aparece quando existe, logo acima do botão.
+	-- Combo: só aparece quando existe, no centro da faixa do rodapé (entre o
+	-- nível e o overdrive), e não mais solto na mesma altura deles.
 	comboLabel = Build.label({
 		Name = "Combo",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -(buttonTop + 4)),
-		Size = UDim2.fromOffset(300, 24),
-		TextSize = 20,
+		Font = Theme.FontDisplay,
+		Size = UDim2.fromScale(1, 1),
+		TextSize = 15,
 		Visible = false,
-		Parent = canvas,
+		Parent = HudController.GetComboSlot(),
 	})
+	Build.textStroke(comboLabel, 2)
 
 	--[[
 		A barra e o texto do overdrive NÃO moram mais aqui: entraram no
@@ -467,7 +472,8 @@ function ClickController.Init()
 				Text.Get("click.auto", { amount = NumberFormat.Short(autoGain) }),
 				Theme.Colors.TextDim,
 				nil,
-				Vector2.new(canvasSize.X / 2 + 150, canvasSize.Y - buttonTop - 8)
+				-- À direita, acima da faixa: some sozinho e não disputa com o botão.
+				Vector2.new(canvasSize.X / 2 + 120, canvasSize.Y - buttonTop - HudController.DockHeight() - FLOAT_LIFT)
 			)
 		end
 	end)

@@ -14,6 +14,11 @@ return {
 	["overdrive.active"] = "OVERDRIVE x{mult}  {seconds}s",
 	["overdrive.cooldown"] = "Overdrive cooling down {seconds}s",
 	["overdrive.charge"] = "Overdrive {percent}%",
+	["hud.levelShort"] = "Lv. {level}",
+	["overdrive.shortCharge"] = "🔥 {percent}%",
+	["overdrive.shortCooldown"] = "🔥 {seconds}s",
+	["overdrive.shortActive"] = "🔥 x{mult} · {seconds}s",
+	["combo.short"] = "COMBO x{stacks}",
 
 	["hud.perClick"] = "+{amount} {icon} per click  (x{mult})",
 	["goal.upgradeReady"] = "{icon} Buy {name} — ready!",
@@ -541,6 +546,7 @@ return {
 	["corridor.reward"] = "Reward: {icon} {wins}",
 	["menu.more"] = "More",
 	["menu.less"] = "Less",
+	["menu.close"] = "Close",
 	-- Painel de progresso da torre (Fase I)
 	["menu.tower"] = "Path",
 	["tower.title"] = "{icon} Path of Power",

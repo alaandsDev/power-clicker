@@ -6,8 +6,15 @@
 
 		PRINCIPAIS  — Melhorias, Pets, Ovos, Renascer. Só esses quatro ficam
 		              sempre visíveis, mais o botão "Mais".
-		SECUNDÁRIOS — Progresso, Auras, Espadas, Missões, Prêmios, Ranking,
-		              Loja, Ajustes. Abrem no "Mais".
+		SECUNDÁRIOS — Progresso, Auras, Espadas, Runas, Passe, Missões,
+		              Prêmios, Ranking, Loja, Ajustes. Abrem no "Mais", num
+		              painel flutuante em grade AO LADO do menu (não numa
+		              coluna que desce até o fim da tela). Escolher um item
+		              fecha o painel; aberto, o "Mais" vira ✕.
+
+	Badge "!": cada controller decide quando a ação é relevante. Um item
+	secundário com badge acende também o "!" do botão "Mais", senão o aviso
+	ficaria escondido dentro do painel fechado.
 
 	O Progresso saiu da grade permanente: ele já aparece de forma contextual no
 	Caminho do Poder, e lá é onde o jogador quer vê-lo.
@@ -28,7 +35,7 @@ local MenuController = {}
 
 local TOOLTIP_HEIGHT = 30
 
--- Os cinco sistemas que o jogador usa o tempo todo.
+-- Os quatro sistemas que o jogador usa o tempo todo (+ o botão "Mais").
 local PRIMARY_IDS: { [string]: boolean } = {
 	Upgrades = true,
 	Pets = true,
@@ -37,6 +44,9 @@ local PRIMARY_IDS: { [string]: boolean } = {
 }
 local PRIMARY_SCALE = 1.15 -- tile principal é um pouco maior
 local MORE_ID = "MoreToggle"
+-- Painel do "Mais": grade de 4 colunas flutuando à esquerda do menu.
+local SECONDARY_COLUMNS = 4
+local SECONDARY_PADDING = 10
 
 local menu: Frame? = nil
 local secondaryMenu: Frame? = nil
@@ -44,6 +54,8 @@ local tooltip: TextLabel? = nil
 local buttonsById: { [string]: TextButton } = {}
 local badgePulses: { [Instance]: Tween } = {}
 local secondaryOpen = false
+local secondaryButtons: { TextButton } = {}
+local setSecondaryOpen: (boolean) -> () = function() end
 
 local function getMenu(): Frame
 	local existing = menu
@@ -71,17 +83,24 @@ local function getMenu(): Frame
 	})
 	menu = frame
 
-	-- Grade dos secundários: mesma coluna, logo abaixo, fechada por padrão.
+	--[[
+		Painel dos secundários: flutua À ESQUERDA do menu, centrado nele, com
+		fundo próprio. Antes era uma segunda coluna embaixo dos principais, que
+		com dez itens descia até o fim da tela.
+	]]
+	local secondaryWidth = SECONDARY_COLUMNS * hud.MenuCell + (SECONDARY_COLUMNS - 1) * hud.Gap + SECONDARY_PADDING * 2
 	local secondary: Frame = Build.new("Frame", {
 		Name = "MenuSecondary",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -hud.Margin, hud.MenuCenterY, height / 2 + hud.Gap),
-		Size = UDim2.fromOffset(width, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -(hud.Margin + width + hud.Gap * 2), hud.MenuCenterY, 0),
+		Size = UDim2.fromOffset(secondaryWidth, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Visible = false,
+		ZIndex = 6,
 		Parent = UIController.GetCanvas(),
 	})
+	Build.hudSurface(secondary, UDim.new(0, 18), Theme.Colors.TextDim)
+	Build.padding(secondary, SECONDARY_PADDING)
 	Build.new("UIGridLayout", {
 		CellSize = UDim2.fromOffset(hud.MenuCell, hud.MenuCell),
 		CellPadding = UDim2.fromOffset(hud.Gap, hud.Gap),
@@ -183,17 +202,49 @@ function MenuController.AddButton(name: string, icon: string, color: Color3, ord
 		Parent = button,
 	})
 	Build.corner(badge, UDim.new(1, 0))
-	button.Activated:Connect(onActivated)
-	button.MouseEnter:Connect(function()
-		showTooltip(button, name)
-	end)
-	button.MouseLeave:Connect(function()
-		showTooltip(button, nil)
-	end)
+	if primary then
+		button.Activated:Connect(onActivated)
+		-- Só os principais têm dica: os do painel já mostram o nome inteiro, e a
+		-- dica cairia em cima do próprio painel.
+		button.MouseEnter:Connect(function()
+			showTooltip(button, name)
+		end)
+		button.MouseLeave:Connect(function()
+			showTooltip(button, nil)
+		end)
+	else
+		table.insert(secondaryButtons, button)
+		button.Activated:Connect(function()
+			-- Escolher um item fecha o painel do "Mais".
+			setSecondaryOpen(false)
+			onActivated()
+		end)
+	end
 	if id then
 		buttonsById[id] = button
 	end
 	return button
+end
+
+-- O "!" do botão "Mais" acende quando algum item escondido nele tem badge.
+local function refreshMoreBadge()
+	local toggle = buttonsById[MORE_ID]
+	if not toggle then
+		return
+	end
+	local any = false
+	for _, button in secondaryButtons do
+		local badge = button:FindFirstChild("Badge")
+		if badge and badge:IsA("GuiObject") and badge.Visible then
+			any = true
+			break
+		end
+	end
+	local moreBadge = toggle:FindFirstChild("Badge")
+	if moreBadge and moreBadge:IsA("GuiObject") then
+		-- Com o painel aberto os próprios itens já mostram o aviso.
+		moreBadge.Visible = any and not secondaryOpen
+	end
 end
 
 --[[
@@ -218,7 +269,7 @@ function MenuController.GetSecondaryMenu(): Frame
 				child:Destroy()
 			end
 		end
-		Build.hudSurface(toggle, UDim.new(0, 18), Theme.Colors.TextDim)
+		local toggleStroke = Build.hudSurface(toggle, UDim.new(0, 18), Theme.Colors.TextDim)
 		local hud = Theme.Hud
 		Build.icon("⋯", {
 			Name = "Icon",
@@ -238,10 +289,44 @@ function MenuController.GetSecondaryMenu(): Frame
 			Size = UDim2.new(1, -6, 0, hud.MenuCaption),
 			Parent = toggle,
 		})
+		local moreBadge = Build.label({
+			Name = "Badge",
+			Text = "!",
+			TextSize = 18,
+			BackgroundColor3 = Theme.Colors.Bad,
+			BackgroundTransparency = 0,
+			Size = UDim2.fromOffset(24, 24),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.9, 0.1),
+			Visible = false,
+			Parent = toggle,
+		})
+		Build.corner(moreBadge, UDim.new(1, 0))
+		local icon = toggle:FindFirstChild("Icon")
+		local stroke = toggleStroke
+		local idleStrokeColor = stroke.Color
+		setSecondaryOpen = function(open: boolean)
+			secondaryOpen = open
+			secondary.Visible = open
+			if open then
+				Anim.PopIn(secondary, 0.85, 0.18)
+			end
+			-- Aberto: ✕ e borda acesa. Fechado: ⋯ e "Mais".
+			if icon and (icon:IsA("TextLabel") or icon:IsA("TextButton")) then
+				icon.Text = if open then Theme.Icons.Close else "⋯"
+			end
+			caption.Text = Text.Get(if open then "menu.close" else "menu.more")
+			stroke.Color = if open then Theme.Colors.Power else idleStrokeColor
+			refreshMoreBadge()
+		end
 		toggle.Activated:Connect(function()
-			secondaryOpen = not secondaryOpen
-			secondary.Visible = secondaryOpen
-			caption.Text = Text.Get(if secondaryOpen then "menu.less" else "menu.more")
+			setSecondaryOpen(not secondaryOpen)
+		end)
+		-- Abrir qualquer painel (por um quiosque, por exemplo) fecha o "Mais".
+		UIController.PanelChanged:Connect(function(panelName: string?)
+			if panelName and secondaryOpen then
+				setSecondaryOpen(false)
+			end
 		end)
 		buttonsById[MORE_ID] = toggle
 	end
@@ -269,6 +354,7 @@ function MenuController.SetBadge(button: TextButton, visible: boolean)
 		end
 	end
 	badge.Visible = visible
+	refreshMoreBadge()
 end
 
 return MenuController

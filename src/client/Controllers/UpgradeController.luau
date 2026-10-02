@@ -45,6 +45,14 @@ local busy = false
 -- How many levels the buy buttons purchase: 1, 10 or 0 (as many as affordable).
 local bulkAmount = UpgradeConfig.BulkOptions[1]
 local bulkButtons: { [number]: TextButton } = {}
+--[[
+	Badge só para melhoria NOVA ao alcance: "id:nível" que o jogador ainda não
+	viu acessível com o painel aberto. Antes o "!" ficava aceso quase o tempo
+	todo, porque num clicker sempre há alguma melhoria barata — e um aviso
+	sempre aceso deixa de avisar.
+]]
+local acknowledged: { [string]: boolean } = {}
+local affordableNow: { [string]: boolean } = {}
 
 local function iconFor(currency: string): string
 	return if currency == "Gems" then Theme.Icons.Gems else Theme.Icons.Power
@@ -55,6 +63,7 @@ local function refresh()
 	local temporary = DataController.Get("Upgrades") or {}
 	local permanent = DataController.Get("PermanentUpgrades") or {}
 	local anyAffordable = false
+	table.clear(affordableNow)
 
 	for _, row in rows do
 		local levels = if row.Group == "Temporary" then temporary else permanent
@@ -90,8 +99,19 @@ local function refresh()
 			else iconFor(row.Upgrade.Currency) .. " " .. NumberFormat.Short(if shownLevels == 0 then EconomyFormulas.UpgradeCost(row.Upgrade, level) else shownCost)
 		Build.paint(row.Buy, "BackgroundColor3", if affordable then Theme.Colors.Good else Theme.Colors.Disabled)
 		if affordable and row.Group == "Temporary" then
-			anyAffordable = true
+			local key = row.Upgrade.Id .. ":" .. tostring(level)
+			affordableNow[key] = true
+			if not acknowledged[key] then
+				anyAffordable = true
+			end
 		end
+	end
+	if UIController.GetOpenPanel() == PANEL then
+		-- Com o painel aberto o jogador está vendo tudo: nada é novidade.
+		for key in affordableNow do
+			acknowledged[key] = true
+		end
+		anyAffordable = false
 	end
 	MenuController.SetBadge(menuButton, anyAffordable)
 end
@@ -265,6 +285,11 @@ function UpgradeController.Init()
 
 	DataController.Changed:Connect(function(key: string)
 		if key == "Currencies" or key == "Upgrades" or key == "PermanentUpgrades" then
+			refresh()
+		end
+	end)
+	UIController.PanelChanged:Connect(function(panelName: string?)
+		if panelName == PANEL then
 			refresh()
 		end
 	end)

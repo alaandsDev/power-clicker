@@ -18,6 +18,11 @@ return {
 	["overdrive.active"] = "OVERDRIVE x{mult}  {seconds}s",
 	["overdrive.cooldown"] = "Overdrive recarregando {seconds}s",
 	["overdrive.charge"] = "Overdrive {percent}%",
+	["hud.levelShort"] = "Nv. {level}",
+	["overdrive.shortCharge"] = "🔥 {percent}%",
+	["overdrive.shortCooldown"] = "🔥 {seconds}s",
+	["overdrive.shortActive"] = "🔥 x{mult} · {seconds}s",
+	["combo.short"] = "COMBO x{stacks}",
 
 	-- HUD
 	["hud.perClick"] = "+{amount} {icon} por clique  (x{mult})",
@@ -553,6 +558,7 @@ return {
 	["corridor.reward"] = "Prêmio: {icon} {wins}",
 	["menu.more"] = "Mais",
 	["menu.less"] = "Menos",
+	["menu.close"] = "Fechar",
 	-- Painel de progresso da torre (Fase I)
 	["menu.tower"] = "Caminho",
 	["tower.title"] = "{icon} Caminho do Poder",

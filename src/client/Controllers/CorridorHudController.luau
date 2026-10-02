@@ -29,6 +29,7 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local Build = require(script.Parent.Parent.UI.Build)
 local UIController = require(script.Parent.UIController)
 local GameStateController = require(script.Parent.GameStateController)
+local HudController = require(script.Parent.HudController)
 
 -- A que distância da barreira a faixa aparece. Um pouco além do alcance do
 -- golpe, para o jogador já chegar lendo o que tem pela frente.
@@ -136,15 +137,14 @@ function CorridorHudController.Init()
 	panel = Build.button({
 		Name = "CorridorHud",
 		Text = "",
-		AnchorPoint = Vector2.new(0.5, 0),
-		-- Abaixo da fileira de moedas e acima do meio da tela: não cobre a
-		-- barreira, que é o que o jogador precisa ver.
-		Position = UDim2.new(0.5, 0, 0, hud.TopBarY + hud.PillSize.Y + hud.Gap * 2),
+		-- Na coluna central abaixo das moedas (HudController.GetTopStack): não
+		-- cobre a barreira, que é o que o jogador precisa ver.
 		Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
 		BackgroundColor3 = hud.Surface,
 		BackgroundTransparency = 0.25,
 		Visible = false,
-		Parent = UIController.GetCanvas(),
+		LayoutOrder = 5,
+		Parent = HudController.GetTopStack(),
 	})
 	for _, child in panel:GetChildren() do
 		if child:IsA("UICorner") or (child:IsA("UIStroke") and child.ApplyStrokeMode == Enum.ApplyStrokeMode.Border) then

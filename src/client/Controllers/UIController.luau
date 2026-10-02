@@ -147,6 +147,11 @@ function UIController.ClosePanel()
 	UIController.PanelChanged:Fire(nil)
 end
 
+-- Nome do painel aberto agora (nil = nenhum).
+function UIController.GetOpenPanel(): string?
+	return openPanel
+end
+
 function UIController.TogglePanel(name: string)
 	if openPanel == name then
 		UIController.ClosePanel()

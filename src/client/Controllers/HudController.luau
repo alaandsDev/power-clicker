@@ -41,7 +41,9 @@ local gemsLabel: TextLabel
 local winsLabel: TextLabel
 local levelFrame: Frame
 local levelLabel: TextLabel -- "Nv. 50"
-local overdriveLabel: TextLabel -- "Overdrive 55%" / contagem quando ativo
+local overdriveLabel: TextLabel -- "🔥 55%" / contagem quando ativo
+local comboSlot: Frame -- centro da faixa: o ClickController põe o combo aqui
+local topStack: Frame -- coluna central abaixo das moedas (ver Theme.Hud.TopStackWidth)
 local setLevelBar: (number) -> ()
 local lastLevel = -1
 local boostLabel: TextLabel
@@ -131,10 +133,10 @@ local function refresh()
 
 	-- Nível (derivado do Power em mãos) + estado do overdrive, numa linha só.
 	local level, into, cost = LevelFormula.LevelOf(power)
-	levelLabel.Text = Text.Get("hud.level", { level = NumberFormat.Short(level) })
+	levelLabel.Text = Text.Get("hud.levelShort", { level = NumberFormat.Short(level) })
 	setLevelBar(if cost > 0 then into / cost else 0)
 	if GameStateController.IsOverdriveActive() then
-		overdriveLabel.Text = Text.Get("overdrive.active", {
+		overdriveLabel.Text = Text.Get("overdrive.shortActive", {
 			mult = NumberFormat.Short(OverdriveConfig.Multiplier),
 			seconds = math.ceil(GameStateController.GetOverdriveRemaining()),
 		})
@@ -143,8 +145,8 @@ local function refresh()
 		local cooldown = GameStateController.GetCooldownRemaining()
 		local charge = (DataController.Get("Overdrive") or {}).Charge or 0
 		overdriveLabel.Text = if cooldown > 0
-			then Text.Get("overdrive.cooldown", { seconds = math.ceil(cooldown) })
-			else Text.Get("overdrive.charge", { percent = math.floor(charge / OverdriveConfig.ChargeMax * 100) })
+			then Text.Get("overdrive.shortCooldown", { seconds = math.ceil(cooldown) })
+			else Text.Get("overdrive.shortCharge", { percent = math.floor(charge / OverdriveConfig.ChargeMax * 100) })
 		Build.paint(overdriveLabel, "TextColor3", Theme.Colors.TextDim)
 	end
 	if lastLevel >= 0 and level > lastLevel then
@@ -212,6 +214,27 @@ local function refreshBoosts()
 	boostLabel.Visible = #parts > 0
 end
 
+--[[
+	Coluna central logo abaixo das moedas. Quem precisa de espaço no topo
+	(buffs, evento, chefe, treino, faixa do corredor) entra aqui com um
+	LayoutOrder; o UIListLayout empilha e ignora o que está invisível. Assim
+	nada cai em cima das moedas nem do vizinho.
+]]
+function HudController.GetTopStack(): Frame
+	return topStack
+end
+
+-- Centro da faixa do rodapé, reservado para o combo (ClickController).
+function HudController.GetComboSlot(): Frame
+	return comboSlot
+end
+
+-- Altura total do bloco acima do botão (faixa + barra), em pixels de referência.
+function HudController.DockHeight(): number
+	local hud = Theme.Hud
+	return hud.LevelGap + hud.StatusRow + hud.LevelBar.Y
+end
+
 -- Pills (frames) so other controllers can aim effects at them.
 function HudController.GetPowerPill(): GuiObject?
 	local pill = if powerLabel then powerLabel.Parent else nil
@@ -258,6 +281,23 @@ function HudController.Init()
 		era justamente o que disputava espaço com tudo no rodapé.
 	]]
 
+	topStack = Build.new("Frame", {
+		Name = "HudTopStack",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, hud.TopBarY + hud.PillSize.Y + 6),
+		Size = UDim2.fromOffset(hud.TopStackWidth, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = canvas,
+	})
+	Build.new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Vertical,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 6),
+		Parent = topStack,
+	})
+
 	-- Buffs temporários: chip pequeno sob a fileira de moedas, não texto solto.
 	boostLabel = Build.label({
 		Name = "Boosts",
@@ -266,12 +306,11 @@ function HudController.Init()
 		BackgroundColor3 = hud.Surface,
 		BackgroundTransparency = 0.25,
 		Text = "",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, hud.TopBarY + hud.PillSize.Y + 4),
 		Size = UDim2.fromOffset(0, 24),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Visible = false,
-		Parent = canvas,
+		LayoutOrder = 1,
+		Parent = topStack,
 	})
 	Build.corner(boostLabel, UDim.new(1, 0))
 	Build.new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = boostLabel })
@@ -305,45 +344,50 @@ function HudController.Init()
 		and stacks the overdrive bar and the combo above it.
 	]]
 	--[[
-		COMPONENTE ÚNICO do rodapé:
+		COMPONENTE ÚNICO do rodapé, logo acima do botão:
 
-			Nv. 50          Overdrive 55%
-			[==========barra==========]
-			        [ CLIQUE! ]
+			Nv. 12      COMBO x8      🔥 55%
+			[==========barra de nível==========]
+			            [ CLIQUE! ]
 
-		Antes isto eram quatro elementos soltos (nível, progresso, barra de
-		overdrive e texto de overdrive) empilhados no mesmo espaço, e eles se
-		sobrepunham. Agora é um quadro só, com duas linhas e uma barra.
+		Três colunas fixas numa linha só: nível à esquerda, combo no centro
+		(só quando existe) e Overdrive à direita. Nada mais mora aqui — os
+		ganhos são números flutuantes que nascem ACIMA desta faixa e somem.
+		Antes, combo e números nasciam na mesma altura do nível e se
+		atropelavam.
 	]]
 	levelFrame = Build.new("Frame", {
 		Name = "ClickStatus",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -levelBottom()),
-		Size = UDim2.fromOffset(hud.LevelBar.X, hud.StatusRow + hud.LevelBar.Y),
+		Size = UDim2.fromOffset(hud.LevelBar.X, hud.StatusRow + hud.LevelBar.Y + 2),
 		Parent = canvas,
 	})
-	levelLabel = Build.label({
-		Name = "Level",
-		Font = Theme.FontDisplay,
-		TextSize = 17,
-		Size = UDim2.new(0.5, 0, 0, hud.StatusRow),
-		TextXAlignment = Enum.TextXAlignment.Left,
+	local function slot(name: string, x: number, width: number, align: Enum.TextXAlignment): TextLabel
+		local label = Build.label({
+			Name = name,
+			Font = Theme.FontDisplay,
+			TextSize = 15,
+			Position = UDim2.fromScale(x, 0),
+			Size = UDim2.new(width, 0, 0, hud.StatusRow),
+			TextXAlignment = align,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Parent = levelFrame,
+		})
+		Build.textStroke(label, 2)
+		return label
+	end
+	levelLabel = slot("Level", 0, 0.26, Enum.TextXAlignment.Left)
+	overdriveLabel = slot("Overdrive", 0.66, 0.34, Enum.TextXAlignment.Right)
+	overdriveLabel.TextColor3 = Theme.Colors.TextDim
+	comboSlot = Build.new("Frame", {
+		Name = "ComboSlot",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.26, 0),
+		Size = UDim2.new(0.4, 0, 0, hud.StatusRow),
 		Parent = levelFrame,
 	})
-	Build.textStroke(levelLabel, 2)
-	overdriveLabel = Build.label({
-		Name = "Overdrive",
-		Font = Theme.FontDisplay,
-		TextSize = 17,
-		TextColor3 = Theme.Colors.TextDim,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.new(0.5, 0, 0, hud.StatusRow),
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Parent = levelFrame,
-	})
-	Build.textStroke(overdriveLabel, 2)
 	local bar, setBar = Build.progressBar({
 		Name = "Fill",
 		AnchorPoint = Vector2.new(0.5, 1),
@@ -352,7 +396,7 @@ function HudController.Init()
 		Parent = levelFrame,
 	}, Theme.Colors.Power)
 	setLevelBar = setBar
-	Build.stroke(bar, 2)
+	Build.stroke(bar, 1.5)
 
 	DataController.Changed:Connect(function(key: string)
 		if key == "Currencies" or key == "Stats" or key == "Quests" then
