@@ -226,6 +226,15 @@ CAMINHO DO PODER. Ids internos e DataStore ficaram como estavam de propósito.
 Ocupação vertical no canvas de referência (1280×720): topo 12%, rodapé 21%,
 menu 25%, **67% da altura livre no meio** para mapa e personagem.
 
+## Polimento final — HUD, lobby e Caminho do Poder ✅ FEITO (falta validar no Studio)
+
+Só apresentação e estrutura; economia, dados (DataVersion 8), ids e DataStore intocados.
+
+- **Studio = produção**: `EnableAllWorldsInStudio` desligado por padrão; portal de Mundos só existe com mundo habilitado.
+- **Fim do Caminho fechado**: maciço de rocha atrás do portal "em breve" (antes dava para cair).
+- **HUD**: "Mais" como painel flutuante em grade; rodapé numa faixa só (nível · combo · Overdrive); CLIQUE 160x48; chefe, buffs, evento, treino e faixa do corredor numa coluna abaixo das moedas.
+- **Lobby**: portão monumental do Caminho do Poder como marco (o jogador nasce olhando para ele), áreas com piso discreto e estandartes, calçadas, academia e mercado com arquitetura própria, textos de detalhe só de perto, paredões de rocha no lugar da muralha em degraus. Mapa inicial de 2.315 para 1.635 instâncias.
+
 ## Fase 14 — Lançamento
 
 - Revisão de economia com simulação (jogador casual, dedicado, pagante).

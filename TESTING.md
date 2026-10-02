@@ -197,11 +197,67 @@ câmera, toque e replicação.
 
 ### Interface
 22. Moedas na horizontal no topo, sem sobrepor nada.
-23. Menu: quatro botões principais maiores (Melhorias, Pets, Ovos, Renascer); "Mais" abre e fecha os secundários.
+23. Menu: quatro botões principais maiores (Melhorias, Pets, Ovos, Renascer); "Mais" abre um painel flutuante em grade com os secundários e vira ✕.
 24. Painel "Progresso" mostra os 10 estágios e marca o atual.
 25. Testar em celular (375x812), tablet e PC: nada cortado, botão de clique alcançável com o polegar.
 
 ### Limites e segurança
-26. Tentar atravessar a muralha da ilha pulando: não pode subir (degrau de 14 studs).
+26. Tentar sair da ilha pulando nos paredões de rocha: não dá para subir (face vertical, no mínimo 58 studs).
 27. Cair do corredor: não existe vão entre a ilha e a entrada.
 28. Dois jogadores no mesmo servidor quebrando a mesma barreira: ambos recebem o pad, uma vez cada.
+
+---
+
+## Testes automáticos: falhas que já existiam
+
+Rodando os 225 testes fora do Studio (Lune), 3 falham **também na `main`**
+(nada a ver com o polimento). Ao dar Play no Studio você deve ver
+`[TESTS] 222 passed, 3 failed`:
+
+| Spec | Causa |
+|---|---|
+| EconomyFormulas › RebirthMultiplier | o teste ainda espera o multiplicador linear `1 + 0,5R`; a Fase H mudou para `1,75^R` |
+| AuraRuneLogic › "drops nothing..." | o teste espera que um sorteio de 0,999999 não dê runa, mas `RuneConfig.Drop.MaxChance = 1` |
+| LevelFormula › "levels up exactly on the step cost" | arredondamento: `TotalFor(2)` dá 117,50000000000004 e o nível 2 vira 1 Power "atrasado" |
+
+Não foram corrigidos (economia/fórmulas fora do escopo do polimento).
+
+## Lista de teste manual — polimento (HUD + lobby + Caminho)
+
+Nada disto foi testado no Roblox Studio: foi validado por compilação, testes
+unitários, auditoria e simulação geométrica/de layout fora do Roblox. **Precisa
+de Play no Studio.**
+
+### Antes de começar
+P.1. Conferir que `GameConfig.Dev.EnableAllWorldsInStudio = false` (padrão novo): só o mundo inicial é construído, sem os mundos 2–5.
+P.2. Output sem erros vermelhos no boot; `[TESTS] 222 passed, 3 failed` (ver tabela acima).
+
+### Lobby
+L.1. Ao nascer, a câmera fica atrás do personagem **olhando para o portão do Caminho do Poder** (espada de energia no alto, placa CAMINHO DO PODER na verga).
+L.2. Não existe portal "🌍 Mundos" atrás do spawn.
+L.3. Áreas sem discos coloridos saturados; cada uma tem estandarte pequeno. Treino e Loja mostram só o ícone.
+L.4. Calçadas de pedra ligam a praça a Ovos, Pets, Loja, Renascer, Treino e Spawn.
+L.5. Academia: piso escuro, pórtico com anilhas atrás, rack de halteres; as 4 máquinas pagam como antes (aviso "Treinando").
+L.6. Loja: barracas com toldo listrado e gema na vitrine; os quiosques Melhorias e Loja abrem os painéis.
+L.7. Pads de corte: de longe só "Corte N"; chegando perto aparecem dano, preço e vitórias. Comprar com E continua funcionando.
+L.8. Quadro de recordes no lado oeste da praça, **com o ranking visível na face virada para a praça** (foi girado 180°; se aparecer em branco, a face ficou do lado errado).
+L.9. Paredões: andar em volta da ilha inteira; não há fresta para cair, e pular não sobe. Testar também perto dos pilares do portão (lados do corredor).
+L.10. Cascata no paredão sudoeste e lago a oeste não ficam em cima de nenhuma área.
+L.11. Performance: Stats/MicroProfiler no celular emulado; o mapa inicial tem ~1.635 instâncias (antes ~2.315).
+
+### Caminho do Poder
+C.1. Atravessar o portão: a primeira área e a barreira 1 continuam lá, em linha reta.
+C.2. Quebrar a barreira 1, pegar o pad e voltar: tudo igual a antes.
+C.3. Ir até depois da barreira 10: a praça final termina num maciço de rocha; o portal "em breve" fica de frente, com moldura, e não teleporta. Não dá para cair do fim.
+
+### HUD
+H.1. Topo: Power, Gemas e Vitórias numa linha; nada cobre essas três pílulas.
+H.2. "Mais": abre um painel em grade **ao lado** do menu (não uma coluna até o fim da tela); o botão vira ✕ / "Fechar"; tocar num item abre o painel e fecha o "Mais".
+H.3. Badge: um item secundário com "!" (ex.: missão para resgatar) acende o "!" do "Mais".
+H.4. Melhorias: o "!" só aparece quando surge uma melhoria nova ao alcance; abrir o painel apaga.
+H.5. Rodapé: botão CLIQUE menor; acima dele uma faixa "Nv. X · COMBO xN · 🔥 %" e a barra de nível. Clicar rápido: números sobem **acima** da faixa e nada se sobrepõe.
+H.6. Auto Click (Debug): o ganho automático aparece como número flutuante à direita, sem texto fixo.
+H.7. Overdrive: a faixa mostra "🔥 x3 · 20s" e depois a recarga.
+H.8. Chefe (esperar ou forçar pelo Debug): barra compacta **abaixo** das moedas, só no mundo onde ele está.
+H.9. Perto de uma barreira, a faixa do corredor aparece embaixo das moedas sem sobrepor buffs/treino/chefe.
+H.10. Celular (375x812 em paisagem), tablet e PC: nada cortado, CLIQUE alcançável.
