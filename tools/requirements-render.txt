@@ -1,0 +1,3 @@
+# Só para tools/render_map3d.py (render aproximado). Não entra no jogo.
+pillow
+numpy

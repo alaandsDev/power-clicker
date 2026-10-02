@@ -1,3 +1,5 @@
 # Toolchain pinned for reproducible builds. Install with: rokit install
 [tools]
 rojo = "rojo-rbx/rojo@7.4.4"
+# Só para as validações fora do Studio (tools/lune). Não entra no jogo.
+lune = "lune-org/lune@0.8.9"

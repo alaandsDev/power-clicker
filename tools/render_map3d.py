@@ -1,0 +1,198 @@
+"""
+render_map3d.py — render 3D APROXIMADO do mundo inicial, a partir do JSON do
+tools/lune/export_map.luau.
+
+Não é o renderizador do Roblox: primitivas com sombreamento chapado, sem
+textura, sombra nem pós-processamento. Serve para julgar composição, peso de
+cor, silhuetas, linha de visão e poluição de texto (os BillboardGui só
+aparecem dentro do MaxDistance, como no jogo). O render_map.py continua sendo
+a PLANTA 2D com as validações de layout; este arquivo é complementar.
+
+Uso (da raiz do repositório):
+    lune run tools/lune/export_map.luau
+    python tools/render_map3d.py [build/map_parts.json] [build/render/mapa] [rótulo]
+
+Gera <prefixo>_spawn.png (vista ao nascer), _overview.png (visão geral),
+_gate.png (chegando na entrada do Caminho) e _top.png (vista de cima).
+Requer: pip install pillow numpy
+"""
+from __future__ import annotations
+import json, math, sys, re
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+W, H = 1280, 720
+
+def unit_mesh(shape):
+    """Triangles in unit local space (-0.5..0.5)."""
+    tris = []
+    if shape in ("Block",):
+        c = [(x, y, z) for x in (-.5, .5) for y in (-.5, .5) for z in (-.5, .5)]
+        def v(i): return c[i]
+        faces = [(0,1,3,2),(4,6,7,5),(0,4,5,1),(2,3,7,6),(0,2,6,4),(1,5,7,3)]
+        for a,b,cc,d in faces:
+            tris += [(v(a),v(b),v(cc)),(v(a),v(cc),v(d))]
+    elif shape == "Wedge":
+        # high edge at +z (back), slope down to -z front
+        A=(-.5,-.5,-.5);B=(.5,-.5,-.5);C=(.5,-.5,.5);D=(-.5,-.5,.5);E=(-.5,.5,.5);F=(.5,.5,.5)
+        tris += [(A,B,C),(A,C,D),(D,C,F),(D,F,E),(A,E,F),(A,F,B),(A,D,E),(B,F,C)]
+    elif shape == "Cylinder":
+        n = 16
+        for i in range(n):
+            a0, a1 = 2*math.pi*i/n, 2*math.pi*(i+1)/n
+            p0 = (math.cos(a0)*.5, math.sin(a0)*.5); p1 = (math.cos(a1)*.5, math.sin(a1)*.5)
+            tris += [((-.5,p0[0],p0[1]),(.5,p0[0],p0[1]),(.5,p1[0],p1[1])),((-.5,p0[0],p0[1]),(.5,p1[0],p1[1]),(-.5,p1[0],p1[1]))]
+            tris += [((.5,0,0),(.5,p0[0],p0[1]),(.5,p1[0],p1[1])),((-.5,0,0),(-.5,p1[0],p1[1]),(-.5,p0[0],p0[1]))]
+    elif shape in ("Ball", "Egg"):
+        nu, nv = 12, 8
+        def sp(u, v):
+            th, ph = 2*math.pi*u/nu, math.pi*v/nv
+            return (math.sin(ph)*math.cos(th)*.5, math.cos(ph)*.5, math.sin(ph)*math.sin(th)*.5)
+        for i in range(nu):
+            for j in range(nv):
+                a,b,c,d = sp(i,j),sp(i+1,j),sp(i+1,j+1),sp(i,j+1)
+                tris += [(a,b,c),(a,c,d)]
+    return np.array(tris, dtype=np.float64)
+
+MESHES = {s: unit_mesh(s) for s in ("Block","Wedge","Cylinder","Ball","Egg")}
+
+def load(path):
+    data = json.load(open(path))
+    return data["parts"], data["meta"]
+
+class Cam:
+    def __init__(self, eye, target, fov=70):
+        self.eye = np.array(eye, float)
+        f = np.array(target, float) - self.eye; f /= np.linalg.norm(f)
+        r = np.cross(f, [0,1,0]); r /= np.linalg.norm(r)
+        u = np.cross(r, f)
+        self.f, self.r, self.u = f, r, u
+        self.k = (H/2) / math.tan(math.radians(fov)/2)
+    def project(self, pts):
+        d = pts - self.eye
+        x = d @ self.r; y = d @ self.u; z = d @ self.f
+        return x, y, z
+
+def render(parts, cam: Cam, out, title=None, show_text=True, ortho=None):
+    img = np.zeros((H, W, 3))
+    # sky gradient
+    sky_top, sky_bot = np.array([0.42,0.66,0.95]), np.array([0.80,0.90,1.0])
+    t = np.linspace(0,1,H)[:,None]
+    img[:] = (sky_top*(1-t) + sky_bot*t)[:,None,:]
+    zbuf = np.full((H, W), np.inf)
+    sun = np.array([0.4, 0.85, 0.3]); sun /= np.linalg.norm(sun)
+    labels = []
+    for part in parts:
+        if part.get("b") and show_text:
+            labels.append(part)
+        if part["s"] == "None" or part["t"] >= 0.6:
+            continue
+        mesh = MESHES.get(part["s"], MESHES["Block"])
+        size = np.array(part["z"]); 
+        if part["s"] == "Egg": size = size*np.array([1,1.3,1])
+        R = np.array(part["r"]).reshape(3,3)  # rows: right, up, back(-look)
+        pos = np.array(part["p"])
+        verts = (mesh*size) @ R + pos   # (T,3,3)
+        col = np.array(part["c"])
+        neon = part["m"] == "Neon"
+        e1 = verts[:,1]-verts[:,0]; e2 = verts[:,2]-verts[:,0]
+        nrm = np.cross(e1, e2); ln = np.linalg.norm(nrm,axis=1,keepdims=True); ln[ln==0]=1; nrm/=ln
+        flat = verts.reshape(-1,3)
+        if ortho is None:
+            x,y,z = cam.project(flat)
+            z = z.reshape(-1,3)
+            if np.all(z < 0.5): continue
+            sx = (W/2 + cam.k*x/np.maximum(z.ravel(),0.5)).reshape(-1,3)
+            sy = (H/2 - cam.k*y/np.maximum(z.ravel(),0.5)).reshape(-1,3)
+        else:
+            cx, cz, scale = ortho
+            sx = (W/2 + (flat[:,0]-cx)*scale).reshape(-1,3)
+            sy = (H/2 + (flat[:,2]-cz)*scale).reshape(-1,3)
+            z = (1000 - flat[:,1]).reshape(-1,3)
+        for i in range(len(verts)):
+            zi = z[i]
+            if ortho is None and np.any(zi < 0.5): continue
+            xs, ys = sx[i], sy[i]
+            minx, maxx = int(max(math.floor(xs.min()),0)), int(min(math.ceil(xs.max()),W-1))
+            miny, maxy = int(max(math.floor(ys.min()),0)), int(min(math.ceil(ys.max()),H-1))
+            if minx > maxx or miny > maxy: continue
+            if (maxx-minx)*(maxy-miny) > 4_000_000: continue
+            n = nrm[i]
+            if ortho is None:
+                if np.dot(n, verts[i].mean(0)-cam.eye) > 0: n = -n
+            shade = 1.0 if neon else 0.55 + 0.45*max(0.0, float(np.dot(n, sun)))
+            c = np.clip(col*shade*(1.25 if neon else 1.0), 0, 1)
+            gx, gy = np.meshgrid(np.arange(minx, maxx+1)+0.5, np.arange(miny, maxy+1)+0.5)
+            x0,x1,x2 = xs; y0,y1,y2 = ys
+            den = (y1-y2)*(x0-x2)+(x2-x1)*(y0-y2)
+            if abs(den) < 1e-9: continue
+            a = ((y1-y2)*(gx-x2)+(x2-x1)*(gy-y2))/den
+            b = ((y2-y0)*(gx-x2)+(x0-x2)*(gy-y2))/den
+            g = 1-a-b
+            m = (a>=0)&(b>=0)&(g>=0)
+            if not m.any(): continue
+            if ortho is None:
+                inv = a/zi[0]+b/zi[1]+g/zi[2]
+                depth = 1/np.where(inv>0, inv, 1e-9)
+            else:
+                depth = a*zi[0]+b*zi[1]+g*zi[2]
+            sub = zbuf[miny:maxy+1, minx:maxx+1]
+            m &= depth < sub
+            if not m.any(): continue
+            sub[m] = depth[m]
+            if ortho is None:
+                fog = np.clip((depth[m]-120)/700, 0, 0.75)[:,None]
+                img[miny:maxy+1, minx:maxx+1][m] = c*(1-fog) + sky_bot*fog
+            else:
+                img[miny:maxy+1, minx:maxx+1][m] = c
+    out_img = Image.fromarray((np.clip(img,0,1)*255).astype(np.uint8))
+    draw = ImageDraw.Draw(out_img)
+    if show_text and ortho is None:
+        try:
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            ImageFont.truetype(font_path, 12)
+        except Exception:
+            font_path = None
+        for part in labels:
+            text, offy, maxd, sx_, sy_ = part["b"]
+            pos = np.array(part["p"]) + np.array([0, offy, 0])
+            dist = np.linalg.norm(pos - cam.eye)
+            if dist > maxd: continue
+            x,y,z = cam.project(pos[None,:])
+            if z[0] < 1: continue
+            px = W/2 + cam.k*x[0]/z[0]; py = H/2 - cam.k*y[0]/z[0]
+            # occlusion test vs zbuffer
+            ix, iy = int(px), int(py)
+            if 0 <= ix < W and 0 <= iy < H and zbuf[iy, ix] < z[0] - 2: continue
+            text = re.sub(r"[^\x00-ɏ\n ·—+%/()]", "", text).strip()
+            if not text: continue
+            lines = text.split("\n")
+            box_h = cam.k*sy_/z[0]
+            fs = max(6, min(64, int(box_h/len(lines)*0.8)))
+            font = ImageFont.truetype(font_path, fs) if font_path else ImageFont.load_default()
+            col = tuple(int(v*255) for v in part["c"])
+            for li, line in enumerate(lines):
+                ty = py - box_h/2 + li*box_h/len(lines)
+                draw.text((px, ty), line, fill=col, font=font, anchor="mt", stroke_width=max(1, fs//8), stroke_fill=(0,0,0))
+    if title:
+        draw.rectangle([0,0,W,26], fill=(0,0,0))
+        draw.text((10,5), title, fill=(255,255,255))
+    out_img.save(out)
+
+if __name__ == "__main__":
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "build", "map_parts.json")
+    out_prefix = sys.argv[2] if len(sys.argv) > 2 else os.path.join(root, "build", "render", "mapa")
+    label = sys.argv[3] if len(sys.argv) > 3 else "Power Clicker"
+    os.makedirs(os.path.dirname(out_prefix) or ".", exist_ok=True)
+    parts, meta = load(src)
+    sx, sy, sz, lx, ly, lz = meta["spawn"]
+    look = np.array([lx, 0, lz], float); look /= np.linalg.norm(look)
+    char = np.array([sx, sy, sz])
+    eye = char - look*16 + np.array([0, 7, 0])
+    render(parts, Cam(eye, char + look*40 + np.array([0, 2, 0])), out_prefix + "_spawn.png", f"{label} - vista ao nascer (camera atras do personagem)")
+    render(parts, Cam([-105, 95, 105], [70, 0, -25], fov=62), out_prefix + "_overview.png", f"{label} - visao geral do lobby")
+    render(parts, Cam([60, 12, 10], [200, 14, 0], fov=70), out_prefix + "_gate.png", f"{label} - chegando na entrada do Caminho")
+    render(parts, None, out_prefix + "_top.png", f"{label} - planta (vista de cima)", show_text=False, ortho=(60, 0, 2.0))
+    print("renders em " + out_prefix + "_{spawn,overview,gate,top}.png")
