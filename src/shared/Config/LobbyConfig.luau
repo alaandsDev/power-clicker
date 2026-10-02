@@ -22,8 +22,18 @@ export type Area = {
 	Icon: string,
 	Offset: Vector3, -- centro da área, relativo à origem
 	Radius: number,
-	Color: Color3,
+	Color: Color3, -- cor de DETALHE (estandarte, friso, cristal), não do piso
 	SignHeight: number,
+	--[[
+		Redesign do lobby: as áreas deixaram de ser discos saturados com placa
+		gigante. A identidade vem de detalhe, material e arquitetura:
+		- Label: "Name" (estandarte pequeno com ícone + nome), "Icon" (só o
+		  ícone: a estrutura já diz o que é — Treino, Loja) ou "None".
+		- Floor: "Stone" (pedra clara da praça), "Mat" (piso de academia),
+		  "Forecourt" (adro escuro diante do portão) ou "None".
+	]]
+	Label: string,
+	Floor: string,
 }
 
 export type Station = {
@@ -45,6 +55,8 @@ local Areas: { [string]: Area } = {
 		Radius = 26,
 		Color = Color3.fromRGB(255, 226, 120),
 		SignHeight = 18,
+		Label = "None",
+		Floor = "Stone",
 	},
 	Eggs = {
 		Id = "Eggs",
@@ -54,6 +66,8 @@ local Areas: { [string]: Area } = {
 		Radius = 44,
 		Color = Color3.fromRGB(255, 196, 45),
 		SignHeight = 26,
+		Label = "Name",
+		Floor = "Stone",
 	},
 	Pets = {
 		Id = "Pets",
@@ -63,6 +77,8 @@ local Areas: { [string]: Area } = {
 		Radius = 26,
 		Color = Color3.fromRGB(80, 220, 255),
 		SignHeight = 22,
+		Label = "Name",
+		Floor = "Stone",
 	},
 	Shop = {
 		Id = "Shop",
@@ -72,6 +88,8 @@ local Areas: { [string]: Area } = {
 		Radius = 30,
 		Color = Color3.fromRGB(255, 150, 80),
 		SignHeight = 22,
+		Label = "Icon",
+		Floor = "Stone",
 	},
 	Rebirth = {
 		Id = "Rebirth",
@@ -81,6 +99,8 @@ local Areas: { [string]: Area } = {
 		Radius = 26,
 		Color = Color3.fromRGB(170, 120, 255),
 		SignHeight = 22,
+		Label = "Name",
+		Floor = "Stone",
 	},
 	Training = {
 		Id = "Training",
@@ -93,6 +113,8 @@ local Areas: { [string]: Area } = {
 		Radius = 30,
 		Color = Color3.fromRGB(104, 230, 140),
 		SignHeight = 24,
+		Label = "Icon",
+		Floor = "Mat",
 	},
 	Tower = {
 		Id = "Tower",
@@ -103,6 +125,8 @@ local Areas: { [string]: Area } = {
 		Radius = 34,
 		Color = Color3.fromRGB(255, 120, 230),
 		SignHeight = 30,
+		Label = "None",
+		Floor = "Forecourt",
 	},
 }
 
@@ -119,14 +143,58 @@ return {
 	Areas = Areas,
 	Stations = Stations,
 
-	-- Caminho de pedra da praça até a boca da torre.
+	-- Caminho de pedra da praça até a boca do Caminho do Poder.
 	Path = {
 		Width = 24,
 		TileLength = 20,
+		-- Pequenos pilares com cristal dos dois lados do caminho, conduzindo o
+		-- olhar até o portão (distância da praça, em X).
+		Pylons = { 60, 86 },
+		PylonOffsetZ = 15,
 	},
 
-	-- Quadro de recordes, de frente para a praça.
-	Scoreboard = Vector3.new(44, 0, 74),
+	--[[
+		PORTÃO DO CAMINHO DO PODER — o marco principal do lobby. Fica na boca do
+		corredor (WallConfig.Layout.StartX), com dois pilares que também fecham
+		o vão entre o corredor e o paredão da ilha, uma verga com a placa e uma
+		espada gigante de energia em cima. NÃO é uma torre nem um portal para
+		outro mapa: é a entrada do corredor reto.
+	]]
+	Gate = {
+		PillarWidth = 22, -- pilar quadrado
+		PillarHeight = 52,
+		PlinthHeight = 6,
+		LintelHeight = 10,
+		LintelDepth = 24,
+		SwordHeight = 34, -- lâmina + empunhadura acima da verga
+		Energy = Color3.fromRGB(110, 210, 255), -- cor da identidade do Caminho
+		Trim = Color3.fromRGB(255, 200, 90),
+		Stone = Color3.fromRGB(150, 146, 160),
+	},
+
+	--[[
+		PAREDÕES. A ilha é fechada por paredões de rocha (não por degraus de
+		bloco): segmentos em volta da borda, com altura e profundidade variadas,
+		todos mais altos que qualquer pulo. Muito mais barato que os ~800
+		blocos da muralha em degraus.
+	]]
+	Cliffs = {
+		Segments = 26,
+		MinHeight = 58, -- nenhum trecho fica abaixo disso (pulo do Roblox: ~7,2)
+		MaxHeight = 86,
+		Depth = 26,
+		BackDepth = 30,
+	},
+
+	--[[
+		Quadro de recordes: na borda OESTE da praça, virado para ela. Antes
+		ficava em (44, 74), exatamente na linha de visão de quem nasce olhando
+		para o portão do Caminho do Poder.
+		ScoreboardYaw gira o quadro inteiro (graus): o cliente desenha na face
+		Left da peça, então 180° faz essa face olhar para +X (a praça).
+	]]
+	Scoreboard = Vector3.new(-62, 0, 0),
+	ScoreboardYaw = 180,
 
 	-- Enfeite: ilhotas flutuando em volta, nuvens e a cachoeira na borda.
 	Decoration = {
@@ -137,10 +205,13 @@ return {
 		Clouds = 14,
 		CloudHeight = 150,
 		Waterfall = {
-			-- Borda sul da ilha: a água cai e desaparece no vazio.
-			Offset = Vector3.new(-40, 0, 128),
-			Width = 34,
-			Drop = 140,
+			-- Cascata que desce pela face do paredão sul até um lago raso.
+			Offset = Vector3.new(-40, 0, 128), -- só a DIREÇÃO importa: fica no paredão
+			Width = 22,
+			Drop = 140, -- (legado: a cascata agora cai do topo do paredão)
 		},
+		-- Lago com pedras (antes ficava em cima da área de Pets).
+		Pond = Vector3.new(-122, 0, 0),
+		PondRadius = 16,
 	},
 }

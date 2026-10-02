@@ -50,17 +50,13 @@ local TILE_STUDS = 20
 local TILE_DARKEN = 0.87 -- every other tile is this much darker
 local PLAZA_HALF = 46 -- the pale square in the middle (same reach as before)
 --[[
-	MURALHA. A ilha é fechada por montanhas em degraus, não por cerca: cerca de
-	madeira é decoração, e o jogador passa por cima dela.
-
-	Cada degrau tem HILL_STEP_HEIGHT studs de altura. O pulo do Roblox sobe
-	~7,2 studs, então um degrau de 14 não é escalável — e são três, somando
-	HILL_STEPS × HILL_STEP_HEIGHT de parede. A única abertura é a boca do
-	corredor (inCorridor).
+	PAREDÕES. A ilha é fechada por paredões de rocha (LobbyConfig.Cliffs), não
+	por degraus de bloco: cada segmento tem a face interna VERTICAL e mais de
+	58 studs de altura — o pulo do Roblox sobe ~7,2 —, então não há como
+	escalar. A única abertura é a boca do Caminho do Poder, fechada dos lados
+	pelos pilares do portão (buildPathGate).
+	A muralha antiga em degraus custava ~840 peças; os paredões, ~100.
 ]]
-local HILL_STEPS = 3
-local HILL_STEP_HEIGHT = 14
-local HILL_CAP = 2 -- topo de grama em cada degrau
 local EGG_SPACING = 32
 
 --[[
@@ -181,15 +177,46 @@ local function light(part: BasePart, color: Color3, range: number, brightness: n
 	pointLight.Parent = part
 end
 
--- Random point on the island ring between minRadius and maxRadius, avoiding
--- the central plaza (|x| < clearX and |z| < clearZ).
+-- True when (x, z) is outside every lobby area, the main path and the pond,
+-- with `margin` studs to spare.
+local function clearOfLayout(x: number, z: number, margin: number): boolean
+	for _, area in LobbyConfig.Areas do
+		local dx, dz = x - area.Offset.X, z - area.Offset.Z
+		if dx * dx + dz * dz < (area.Radius + margin) ^ 2 then
+			return false
+		end
+	end
+	if x > 0 and math.abs(z) < LobbyConfig.Path.Width / 2 + margin + 6 then
+		return false
+	end
+	-- Linha de visão de quem nasce até o portão: nada alto no meio dela.
+	local spawnArea = LobbyConfig.Areas.Spawn.Offset
+	local gateX = WallConfig.Layout.StartX
+	local sx, sz = gateX - spawnArea.X, -spawnArea.Z
+	local t = math.clamp(((x - spawnArea.X) * sx + (z - spawnArea.Z) * sz) / (sx * sx + sz * sz), 0, 1)
+	local cx, cz = spawnArea.X + sx * t - x, spawnArea.Z + sz * t - z
+	if cx * cx + cz * cz < (14 + margin) ^ 2 then
+		return false
+	end
+	local pond = LobbyConfig.Decoration.Pond
+	local px, pz = x - pond.X, z - pond.Z
+	if px * px + pz * pz < (LobbyConfig.Decoration.PondRadius + margin + 4) ^ 2 then
+		return false
+	end
+	-- a praça clara do meio fica livre
+	return not (math.abs(x) < 52 and math.abs(z) < 52)
+end
+
+-- Random point on the island ring between minRadius and maxRadius, clear of
+-- the lobby layout (clearOfLayout).
 local function ringPoint(rng: Random, minRadius: number, maxRadius: number): Vector3
 	for _ = 1, 20 do
 		local angle = rng:NextNumber(0, math.pi * 2)
 		local radius = rng:NextNumber(minRadius, maxRadius)
 		local x, z = math.cos(angle) * radius, math.sin(angle) * radius
-		-- keep the station lanes clear
-		if not (math.abs(x) < 40 and z > 30) and not (math.abs(z + 70) < 25 and math.abs(x) < 70) then
+		-- Fora de qualquer área do lobby, do caminho principal e do lago: antes
+		-- árvores e pedras caíam dentro das áreas e no meio do caminho.
+		if clearOfLayout(x, z, 4) then
 			return Vector3.new(x, 0, z)
 		end
 	end
@@ -217,11 +244,18 @@ end
 -- with distance instead of covering the screen like a pixel-sized billboard.
 local SIGN_STUDS = Vector2.new(16, 3.4)
 
-local function billboard(parent: BasePart, text: string, color: Color3, offsetY: number)
+--[[
+	`maxDistance` decide quando o texto aparece: letreiro de identificação
+	(curto) pode ser visto de longe; detalhe (preço, requisito, rendimento)
+	só aparece de perto. É isso que tira a "massa de texto" do lobby sem
+	precisar de script no cliente.
+]]
+local function billboard(parent: BasePart, text: string, color: Color3, offsetY: number, maxDistance: number?, scale: number?)
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromScale(SIGN_STUDS.X, SIGN_STUDS.Y)
+	local factor = scale or 1
+	gui.Size = UDim2.fromScale(SIGN_STUDS.X * factor, SIGN_STUDS.Y * factor)
 	gui.StudsOffset = Vector3.new(0, offsetY, 0)
-	gui.MaxDistance = 120
+	gui.MaxDistance = maxDistance or 120
 	gui.AlwaysOnTop = false
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
@@ -243,24 +277,16 @@ end
 	Tiles whose centre falls outside the radius are simply not placed, which is
 	what gives the edge its blocky silhouette.
 ]]
--- The win corridor leaves the island going east; the hills open up for it.
-local function inCorridor(offset: Vector3): boolean
-	return offset.X > 0 and math.abs(offset.Z) <= WallConfig.Layout.Width / 2 + TILE_STUDS
-end
-
 local function buildGround(model: Model, origin: Vector3, palette: Palette)
-	-- +1 tile de folga: sem ela, os cantos do anel ficavam com fresta.
-	local reach = math.ceil((GROUND_RADIUS + HILL_STEPS * TILE_STUDS) / TILE_STUDS) + 1
+	local reach = math.ceil(GROUND_RADIUS / TILE_STUDS) + 1
 	local groundDark = shade(palette.Ground, TILE_DARKEN)
 	local plazaDark = shade(palette.Pad, TILE_DARKEN)
-	local hillBody = shade(palette.Rim, 1)
 
 	for ix = -reach, reach do
 		for iz = -reach, reach do
 			local offset = Vector3.new(ix * TILE_STUDS, 0, iz * TILE_STUDS)
-			local distance = offset.Magnitude
 			local checker = (ix + iz) % 2 == 0
-			if distance <= GROUND_RADIUS then
+			if offset.Magnitude <= GROUND_RADIUS then
 				local onPlaza = math.abs(offset.X) <= PLAZA_HALF and math.abs(offset.Z) <= PLAZA_HALF
 				local color = if onPlaza
 					then (if checker then palette.Pad else plazaDark)
@@ -272,38 +298,81 @@ local function buildGround(model: Model, origin: Vector3, palette: Palette)
 					color,
 					if onPlaza then Enum.Material.Concrete else palette.GroundMaterial
 				)
-			elseif not inCorridor(offset) then
-				local step = math.clamp(math.ceil((distance - GROUND_RADIUS) / TILE_STUDS), 1, HILL_STEPS)
-				local top = step * HILL_STEP_HEIGHT
-				local height = GROUND_HEIGHT + top
-				block(
-					model,
-					CFrame.new(origin + offset + Vector3.new(0, top - height / 2, 0)),
-					Vector3.new(TILE_STUDS, height, TILE_STUDS),
-					hillBody,
-					palette.RimMaterial
-				)
-				-- Grass cap, so the hills read as terraces and not as dirt walls.
-				block(
-					model,
-					CFrame.new(origin + offset + Vector3.new(0, top + HILL_CAP / 2, 0)),
-					Vector3.new(TILE_STUDS, HILL_CAP, TILE_STUDS),
-					if checker then palette.Ground else groundDark,
-					palette.GroundMaterial
-				)
 			end
 		end
 	end
 
+	--[[
+		Chapa contínua logo abaixo dos ladrilhos, até debaixo dos paredões. Os
+		ladrilhos são quadrados num círculo, então a borda deles é serrilhada;
+		sem esta chapa sobravam frestas entre o último ladrilho e o paredão.
+		Fica 0,05 abaixo do topo para não brigar (z-fighting) com os ladrilhos.
+	]]
+	local plateRadius = GROUND_RADIUS + LobbyConfig.Cliffs.Depth
+	local plate = disc(model, origin - Vector3.new(0, 0.05, 0), plateRadius, GROUND_HEIGHT, groundDark, palette.GroundMaterial)
+	plate.Name = "GroundPlate"
 	-- Skirt under the tiles: from below the island still reads as one plate.
-	disc(model, origin - Vector3.new(0, GROUND_HEIGHT - 1, 0), GROUND_RADIUS + 8, 10, palette.Rim, palette.RimMaterial)
+	disc(model, origin - Vector3.new(0, GROUND_HEIGHT - 1, 0), plateRadius + 12, 10, palette.Rim, palette.RimMaterial)
+end
+
+--[[
+	Paredões em volta da ilha. Cada segmento: uma parede de rocha com a face
+	interna vertical, um topo de grama e, atrás dela, um segundo maciço mais
+	alto (profundidade). Alturas variam por segmento (rng do mundo), então a
+	silhueta parece montanha e não muro. A abertura de +X é a boca do
+	corredor; o portão fecha os lados dela.
+]]
+local function buildCliffs(model: Model, origin: Vector3, palette: Palette, rng: Random, hasCorridor: boolean)
+	local cliffs = LobbyConfig.Cliffs
+	local gate = LobbyConfig.Gate
+	local layout = WallConfig.Layout
+	-- Metade da abertura: até o MEIO dos pilares do portão, para o primeiro
+	-- segmento de cada lado se cruzar com o pilar (sem fresta para cair).
+	-- Mundo sem corredor: paredão fechado, sem abertura.
+	local openingZ = layout.Width / 2 + 2 + gate.PillarWidth / 2
+	local openingAngle = if hasCorridor then math.asin(math.clamp(openingZ / GROUND_RADIUS, 0, 1)) else 0
+	local span = math.pi * 2 - openingAngle * 2
+	local step = span / cliffs.Segments
+	local rock = shade(palette.Rim, 1.05)
+	for index = 0, cliffs.Segments - 1 do
+		local angle = openingAngle + (index + 0.5) * step
+		local direction = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		-- Largura com sobra: segmentos vizinhos se cruzam, sem fresta.
+		local width = 2 * (GROUND_RADIUS + cliffs.Depth) * math.tan(step / 2) * 1.12
+		local height = rng:NextNumber(cliffs.MinHeight, cliffs.MaxHeight)
+		local tint = rng:NextNumber(0.86, 1.08)
+		local centre = origin + direction * (GROUND_RADIUS + cliffs.Depth / 2)
+		local facing = CFrame.lookAt(centre, centre - direction)
+		local wall = block(model, facing + Vector3.new(0, height / 2 - GROUND_HEIGHT / 2, 0), Vector3.new(width, height + GROUND_HEIGHT, cliffs.Depth), shade(rock, tint), Enum.Material.Slate)
+		wall.Name = "Cliff"
+		-- Topo de grama, levemente maior: o paredão lê como montanha estilizada.
+		block(model, facing + Vector3.new(0, height + 1, 0), Vector3.new(width + 1, 2, cliffs.Depth + 1), shade(palette.Ground, tint * 0.92), palette.GroundMaterial)
+		-- Maciço de trás, mais alto e recuado, um pouco girado: profundidade.
+		local backHeight = height + rng:NextNumber(14, 38)
+		local backCentre = origin + direction * (GROUND_RADIUS + cliffs.Depth + cliffs.BackDepth / 2 - 4)
+		local back = CFrame.lookAt(backCentre, backCentre - direction) * CFrame.Angles(0, rng:NextNumber(-0.18, 0.18), 0)
+		block(model, back + Vector3.new(0, backHeight / 2 - GROUND_HEIGHT / 2, 0), Vector3.new(width * 1.05, backHeight + GROUND_HEIGHT, cliffs.BackDepth), shade(rock, tint * 0.82), Enum.Material.Rock)
+		if index % 2 == 0 then
+			block(model, back + Vector3.new(0, backHeight + 1, 0), Vector3.new(width * 1.05 + 1, 2, cliffs.BackDepth + 1), shade(palette.Ground, tint * 0.8), palette.GroundMaterial)
+		end
+	end
 end
 
 local function buildSpawn(model: Model, origin: Vector3, palette: Palette, world: WorldData, spawns: Folder, withSpawnLocation: boolean)
 	local spawnArea = areaOf("Spawn")
 	local padCenter = origin + spawnArea.Offset + Vector3.new(0, 0.3, 0)
-	disc(model, padCenter, 12, 0.6, palette.Accent, Enum.Material.Neon)
-	disc(model, padCenter + Vector3.new(0, 0.1, 0), 10, 0.6, palette.Pad, Enum.Material.SmoothPlastic)
+	-- Tablado de pedra com friso dourado fino (antes: disco neon amarelo inteiro).
+	disc(model, padCenter, 12, 0.6, shade(LobbyConfig.Gate.Trim, 0.8), Enum.Material.SmoothPlastic)
+	disc(model, padCenter + Vector3.new(0, 0.1, 0), 11, 0.6, palette.Pad, Enum.Material.Marble)
+	local glow = disc(model, padCenter + Vector3.new(0, 0.18, 0), 3, 0.2, LobbyConfig.Gate.Energy, Enum.Material.Neon, false)
+	glow.Transparency = 0.45
+	--[[
+		O jogador nasce OLHANDO para a entrada do Caminho do Poder. Antes o
+		marcador girava 180° e o personagem nascia de frente para o paredão
+		sul, de costas para tudo.
+	]]
+	local gateTarget = origin + Vector3.new(WallConfig.Layout.StartX, padCenter.Y - origin.Y + 3, 0)
+	local spawnFrame = CFrame.lookAt(padCenter + Vector3.new(0, 3, 0), gateTarget)
 
 	local marker = Instance.new("Part")
 	marker.Name = world.SpawnName
@@ -314,7 +383,7 @@ local function buildSpawn(model: Model, origin: Vector3, palette: Palette, world
 	marker.CanTouch = false
 	marker.Transparency = 1
 	marker.Size = Vector3.new(4, 1, 4)
-	marker.CFrame = CFrame.new(padCenter + Vector3.new(0, 3, 0)) * CFrame.Angles(0, math.pi, 0) -- facing north (eggs)
+	marker.CFrame = spawnFrame
 	marker.Parent = spawns
 
 	if withSpawnLocation then
@@ -323,7 +392,7 @@ local function buildSpawn(model: Model, origin: Vector3, palette: Palette, world
 		spawnLocation.Name = "SpawnLocation"
 		spawnLocation.Anchored = true
 		spawnLocation.Size = Vector3.new(8, 0.4, 8)
-		spawnLocation.CFrame = CFrame.new(padCenter + Vector3.new(0, 0.5, 0))
+		spawnLocation.CFrame = spawnFrame - Vector3.new(0, 2.5, 0)
 		spawnLocation.Transparency = 1
 		spawnLocation.CanCollide = false
 		spawnLocation.Duration = 0 -- no force field bubble
@@ -355,7 +424,8 @@ local function buildEggStands(model: Model, origin: Vector3, palette: Palette, w
 			local base = origin + area.Offset + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
 			disc(model, base + Vector3.new(0, 1.5, 0), 9, 1.5, palette.Rim, Enum.Material.Marble)
 			disc(model, base + Vector3.new(0, 4.5, 0), 6, 3, palette.Pad, Enum.Material.Marble)
-			local ring = disc(model, base + Vector3.new(0, 4.8, 0), 6.4, 0.3, palette.Accent, Enum.Material.Neon, false)
+			-- Friso dourado discreto (antes: anel neon amarelo em cada bancada).
+			local ring = disc(model, base + Vector3.new(0, 4.8, 0), 6.4, 0.3, shade(LobbyConfig.Gate.Trim, 0.9), Enum.Material.SmoothPlastic, false)
 			ring.Name = "Glow"
 			local eggPart = makePart(model, {
 				Name = "Egg_" .. eggId,
@@ -371,7 +441,7 @@ local function buildEggStands(model: Model, origin: Vector3, palette: Palette, w
 			mesh.Scale = Vector3.new(1, 1.3, 1)
 			mesh.Parent = eggPart
 			local icon = if egg.Currency == "Gems" then "💎" else "⚡"
-			billboard(eggPart, string.format("%s\n%s %s", Text.GetFor(nil, "egg." .. eggId .. ".name"), icon, NumberFormat.Short(egg.Price)), Color3.new(1, 1, 1), 7)
+			billboard(eggPart, string.format("%s\n%s %s", Text.GetFor(nil, "egg." .. eggId .. ".name"), icon, NumberFormat.Short(egg.Price)), Color3.new(1, 1, 1), 7, 60, 0.8)
 			prompt(eggPart, "Eggs", "world.prompt.hatch", "egg." .. eggId .. ".name")
 		end
 	end
@@ -386,7 +456,7 @@ local function buildAltar(model: Model, origin: Vector3, palette: Palette)
 	local orb = ball(model, base + Vector3.new(0, 10, 0), 5, Color3.fromRGB(140, 90, 255), Enum.Material.Neon, false)
 	orb.Name = "RebirthOrb"
 	light(orb, Color3.fromRGB(140, 90, 255), 18, 2)
-	billboard(orb, "🔁 " .. Text.GetFor(nil, "menu.rebirth"), Color3.fromRGB(200, 170, 255), 5)
+	billboard(orb, "🔁 " .. Text.GetFor(nil, "menu.rebirth"), Color3.fromRGB(200, 170, 255), 5, 60, 0.8)
 	prompt(orb, "Rebirth", "world.prompt.rebirth")
 end
 
@@ -406,33 +476,60 @@ local function buildPortal(model: Model, origin: Vector3, palette: Palette)
 	prompt(field, "Worlds", "world.prompt.travel")
 end
 
--- Kiosk: counter + canopy + floating sign, with a prompt that opens `Panel`.
+--[[
+	Quiosque: balcão + toldo + letreiro curto, com o prompt que abre `Panel`.
+	Na área da LOJA o quiosque vira barraca de mercado — toldo listrado,
+	caixotes e uma vitrine com uma gema gigante —, então a estrutura diz
+	"loja" sem precisar de uma palavra enorme no céu.
+]]
 local function buildStations(model: Model, origin: Vector3, palette: Palette)
 	for _, station in LobbyConfig.Stations do
 		local base = origin + areaOf(station.Area).Offset + station.Local
 		local facing = CFrame.lookAt(base, origin + Vector3.new(0, 0, 0)) -- always faces the plaza
 		local yaw = facing - facing.Position
-		disc(model, base + Vector3.new(0, 0.5, 0), 9, 0.5, palette.Pad, Enum.Material.Concrete)
+		local market = station.Area == "Shop"
 		local counter = block(model, CFrame.new(base + Vector3.new(0, 2.5, 0)) * yaw, Vector3.new(12, 5, 5), palette.Rim, Enum.Material.WoodPlanks)
 		counter.Name = "Station_" .. station.Panel
-		block(model, CFrame.new(base + Vector3.new(0, 5.4, 0)) * yaw, Vector3.new(13, 0.8, 6), station.Color, Enum.Material.SmoothPlastic)
+		block(model, CFrame.new(base + Vector3.new(0, 5.4, 0)) * yaw, Vector3.new(13, 0.8, 6), shade(station.Color, 0.85), Enum.Material.WoodPlanks)
 		for side = -1, 1, 2 do
 			block(model, CFrame.new(base + Vector3.new(0, 8, 0)) * yaw * CFrame.new(side * 5.6, 0, -2), Vector3.new(0.8, 6, 0.8), palette.Rim, Enum.Material.Wood)
 		end
-		local canopy = block(model, CFrame.new(base + Vector3.new(0, 11.4, 0)) * yaw, Vector3.new(14, 0.8, 8), station.Color, Enum.Material.SmoothPlastic, false)
-		canopy.Name = "Canopy"
-		light(canopy, station.Color, 16, 1)
+		if market then
+			-- Toldo listrado inclinado (cor da estação + creme).
+			for stripe = -2, 2 do
+				local color = if stripe % 2 == 0 then station.Color else Color3.fromRGB(250, 240, 220)
+				local strip = block(model, CFrame.new(base + Vector3.new(0, 11.4, 0)) * yaw * CFrame.new(stripe * 2.8, 0, 0) * CFrame.Angles(math.rad(-14), 0, 0), Vector3.new(2.8, 0.6, 9), color, Enum.Material.Fabric, false)
+				strip.Name = "Canopy"
+			end
+			-- Caixotes e um saco ao lado do balcão.
+			block(model, CFrame.new(base + Vector3.new(0, 1.6, 0)) * yaw * CFrame.new(8.5, 0, 1), Vector3.new(3.2, 3.2, 3.2), Color3.fromRGB(176, 128, 78), Enum.Material.WoodPlanks)
+			block(model, CFrame.new(base + Vector3.new(0, 1.2, 0)) * yaw * CFrame.new(-8.2, 0, 0.5) * CFrame.Angles(0, 0.4, 0), Vector3.new(2.4, 2.4, 2.4), Color3.fromRGB(150, 108, 66), Enum.Material.WoodPlanks)
+		else
+			local canopy = block(model, CFrame.new(base + Vector3.new(0, 11.4, 0)) * yaw, Vector3.new(14, 0.8, 8), station.Color, Enum.Material.Fabric, false)
+			canopy.Name = "Canopy"
+		end
 		-- Above the canopy (which sits at y = 11.4): at 9 the sign was inside it.
-		billboard(counter, string.format("%s %s", station.Icon, Text.GetFor(nil, station.NameKey)), Color3.new(1, 1, 1), 15)
+		billboard(counter, string.format("%s %s", station.Icon, Text.GetFor(nil, station.NameKey)), Color3.new(1, 1, 1), 14, 60, 0.7)
 		prompt(counter, station.Panel, station.TextKey, station.NameKey)
 	end
+
+	-- Vitrine da loja: pedestal com uma gema gigante girada (o símbolo de loja
+	-- de gemas que todo jogador de simulator reconhece).
+	local shop = areaOf("Shop")
+	local showcase = origin + shop.Offset
+	block(model, CFrame.new(showcase + Vector3.new(0, 1.5, 0)), Vector3.new(6, 3, 6), palette.Pad, Enum.Material.Marble)
+	local gem = block(model, CFrame.new(showcase + Vector3.new(0, 8, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)), Vector3.new(4.6, 4.6, 4.6), Color3.fromRGB(90, 210, 255), Enum.Material.Neon, false)
+	gem.Name = "ShopGem"
+	gem.Transparency = 0.1
+	light(gem, Color3.fromRGB(90, 210, 255), 16, 1.2)
 end
 
 -- Board frame; the live ranking is drawn by the client (ScoreboardController),
 -- which finds it by the "Scoreboard" attribute. Server-side it stays empty.
 local function buildScoreboard(model: Model, origin: Vector3, palette: Palette)
 	local base = origin + LobbyConfig.Scoreboard
-	local yaw = CFrame.Angles(0, -math.pi / 2, 0) -- face the plaza (west)
+	local turn = CFrame.Angles(0, math.rad(LobbyConfig.ScoreboardYaw or 0), 0)
+	local yaw = turn * CFrame.Angles(0, -math.pi / 2, 0) -- light bar faces the plaza
 	disc(model, base + Vector3.new(0, 0.5, 0), 16, 0.5, palette.Pad, Enum.Material.Concrete)
 	for side = -1, 1, 2 do
 		block(model, CFrame.new(base + Vector3.new(0, 9, side * 14)), Vector3.new(3, 18, 3), palette.Rim, Enum.Material.Metal)
@@ -440,7 +537,7 @@ local function buildScoreboard(model: Model, origin: Vector3, palette: Palette)
 	local panel = makePart(model, {
 		Name = "Scoreboard",
 		Size = Vector3.new(1, 22, 34),
-		CFrame = CFrame.new(base + Vector3.new(0, 20, 0)),
+		CFrame = CFrame.new(base + Vector3.new(0, 20, 0)) * turn,
 		Color = Color3.fromRGB(18, 20, 32),
 		Material = Enum.Material.SmoothPlastic,
 	})
@@ -645,6 +742,49 @@ end
 ]]
 local function buildTrainingMachines(model: Model, origin: Vector3, palette: Palette)
 	local area = areaOf(TrainingConfig.Area)
+
+	--[[
+		Academia ao ar livre: um pórtico de vigas de metal sobre o piso de
+		borracha, com anilhas penduradas e um rack de halteres. É a arquitetura
+		que diz "treino" — antes era a palavra TREINO enorme num poste.
+	]]
+	local gymCentre = origin + area.Offset
+	local reach = area.Radius - 6
+	local beamHeight = 15
+	local steel = Color3.fromRGB(70, 76, 92)
+	--[[
+		Só a metade de TRÁS do pórtico (o lado de fora da ilha): a academia
+		ganha um "fundo" de vigas e anilhas sem ficar na frente do portão do
+		Caminho do Poder para quem nasce na praça.
+	]]
+	local outwardDir = Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit
+	local backFrame = CFrame.lookAt(gymCentre, gymCentre - outwardDir) -- olha para a praça
+	for _, side in { -1, 1 } do
+		local post = (backFrame * CFrame.new(side * reach * 0.8, 0, reach * 0.62)).Position
+		block(model, CFrame.new(post + Vector3.new(0, beamHeight / 2, 0)), Vector3.new(1.6, beamHeight, 1.6), steel, Enum.Material.Metal)
+	end
+	block(model, backFrame * CFrame.new(0, beamHeight, reach * 0.62), Vector3.new(reach * 1.6 + 1.6, 1.4, 1.4), steel, Enum.Material.Metal, false)
+	for _, offset in { -0.45, 0, 0.45 } do
+		local plate = makePart(model, {
+			Name = "GymPlate",
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(0.8, if offset == 0 then 5 else 3.6, if offset == 0 then 5 else 3.6),
+			CFrame = (backFrame * CFrame.new(offset * reach, beamHeight - 3.2, reach * 0.62)) * CFrame.Angles(0, math.rad(90), 0),
+			Color = if offset == 0 then area.Color else Color3.fromRGB(44, 46, 56),
+			Material = Enum.Material.Metal,
+			CanCollide = false,
+		})
+		plate.Name = "GymPlate"
+	end
+	-- Rack de halteres no fundo (lado de fora, de frente para a praça).
+	local outward = Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit
+	local rackBase = gymCentre + outward * (reach - 1)
+	local rackFrame = CFrame.lookAt(rackBase, rackBase - outward)
+	block(model, rackFrame + Vector3.new(0, 1.6, 0), Vector3.new(14, 0.6, 3), steel, Enum.Material.Metal)
+	for index = -2, 2 do
+		ball(model, (rackFrame * CFrame.new(index * 2.6, 0, 0)).Position + Vector3.new(0, 2.6, 0), 1.6, Color3.fromRGB(40, 42, 50), Enum.Material.Metal, false)
+	end
+
 	for _, station in TrainingConfig.Stations do
 		local centre = origin + area.Offset + station.Local
 
@@ -725,15 +865,21 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 		if station.RequiredWins > 0 then
 			label = label .. Text.GetFor(nil, "training.signWins", { wins = NumberFormat.Short(station.RequiredWins) })
 		end
-		billboard(sign, label, station.Color, 3)
+		-- Detalhe (rendimento e requisito) só de perto: de longe, as próprias
+		-- máquinas já dizem o que são.
+		billboard(sign, label, station.Color, 3, 32, 0.8)
 	end
 end
 
 --[[
-	Cut pads: a row of plates in front of the spawn, each selling one cut.
-	CutService answers the prompt (PromptTriggered is a server event), so the
-	price and the wins requirement are never checked on the client.
-	The sign shows what it gives, what it costs and what it asks for.
+	Pads de corte, em grade no adro diante do portão. CutService answers the
+	prompt (PromptTriggered is a server event), so the price and the wins
+	requirement are never checked on the client.
+
+	Texto em DOIS níveis (antes eram oito placas com três linhas cada, todas
+	legíveis de 120 studs — uma parede de texto na entrada do Caminho):
+	- de longe (até 55 studs) só o nome curto: "Corte 3";
+	- de perto (até 20 studs) o detalhe: dano, preço e vitórias.
 ]]
 local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 	local layout = CutConfig.Layout
@@ -741,8 +887,9 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 	local area = areaOf(layout.Area)
 	local columns = layout.Columns
 	local rows = math.ceil(#cuts / columns)
+	local steel = Color3.fromRGB(104, 112, 134)
 	for index, cut in cuts do
-		-- Grid at the foot of the tower: cheapest at the front-left.
+		-- Grid at the foot of the gate: cheapest at the front-left.
 		local column = (index - 1) % columns
 		local row = math.floor((index - 1) / columns)
 		local offsetX = (column - (columns - 1) / 2) * layout.Spacing.X
@@ -751,21 +898,35 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 			Name = "CutPad_" .. cut.Id,
 			Size = Vector3.new(layout.PadSize, 1, layout.PadSize),
 			CFrame = CFrame.new(origin + area.Offset + Vector3.new(offsetX, 0.5, offsetZ)),
-			Color = if cut.Price == 0 then palette.Pad else palette.Accent,
-			Material = Enum.Material.Neon,
+			Color = if cut.Price == 0 then palette.Pad else steel,
+			Material = Enum.Material.Metal,
 			CanCollide = false,
 		})
 		pad:SetAttribute("CutPad", true)
 		pad:SetAttribute("CutId", cut.Id)
+		-- Inserto de energia fino no meio do pad (um lado do "fio da lâmina").
+		local inset = block(model, CFrame.new(pad.CFrame.Position + Vector3.new(0, 0.55, 0)), Vector3.new(layout.PadSize - 4, 0.12, 1.2), LobbyConfig.Gate.Energy, Enum.Material.Neon, false)
+		inset.Transparency = 0.2
 
-		local text = if cut.Price == 0
+		billboard(pad, Text.GetFor(nil, "cut." .. cut.Id .. ".name"), Color3.new(1, 1, 1), layout.SignHeight, 55, 0.6)
+		local detail = if cut.Price == 0
 			then Text.GetFor(nil, "cut.starter", { flat = NumberFormat.Short(cut.Flat) })
 			else Text.GetFor(nil, "cut.sign", {
 				flat = NumberFormat.Short(cut.Flat),
 				price = NumberFormat.Short(cut.Price),
 				wins = NumberFormat.Short(cut.RequiredWins),
 			})
-		billboard(pad, text, palette.Accent, layout.SignHeight)
+		local detailAnchor = makePart(model, {
+			Name = "CutDetail_" .. cut.Id,
+			Size = Vector3.new(1, 1, 1),
+			CFrame = CFrame.new(pad.CFrame.Position + Vector3.new(0, 1, 0)),
+			Color = steel,
+			CanCollide = false,
+			Transparency = 1,
+		})
+		detailAnchor.CanQuery = false
+		detailAnchor.CanTouch = false
+		billboard(detailAnchor, detail, LobbyConfig.Gate.Trim, layout.SignHeight - 2.6, 20, 0.8)
 
 		if cut.Price > 0 then
 			local proximity = Instance.new("ProximityPrompt")
@@ -785,58 +946,210 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 end
 
 --[[
-	Area floor + sign: a round plate in the area's colour, a ring of accent and
-	a tall billboard with icon and name. This is what tells a new player where
-	the eggs, the pets and the tower are without a tutorial.
+	ÁREAS DO LOBBY. Antes cada área era um disco saturado (amarelo, rosa,
+	ciano...) com anel neon e um poste com placa enorme: o lobby parecia um
+	monte de plataformas independentes. Agora:
+	- o piso é da mesma pedra clara da praça, com um friso fino na cor da área
+	  (Floor = "Stone"), piso de academia (Mat) ou o adro escuro do portão;
+	- a identidade vem de um ESTANDARTE pequeno (mastro + flâmula na cor da
+	  área + cristal), virado para a praça, com ícone e nome curtos e que só
+	  aparecem a uma distância razoável;
+	- áreas cuja arquitetura já diz o que são (Treino, Loja) mostram só o
+	  ícone (Label = "Icon").
 ]]
 local function buildAreas(model: Model, origin: Vector3, palette: Palette)
 	for _, area in LobbyConfig.Areas do
 		local centre = origin + area.Offset
-		disc(model, centre + Vector3.new(0, 0.35, 0), area.Radius, 0.7, shade(area.Color, 0.5), Enum.Material.Concrete)
-		disc(model, centre + Vector3.new(0, 0.5, 0), area.Radius - 3, 0.6, palette.Pad, Enum.Material.Concrete)
-		local ring = disc(model, centre + Vector3.new(0, 0.6, 0), area.Radius - 1, 0.3, area.Color, Enum.Material.Neon, false)
-		ring.Name = "AreaRing_" .. area.Id
+		if area.Floor == "Stone" then
+			disc(model, centre + Vector3.new(0, 0.25, 0), area.Radius, 0.5, area.Color:Lerp(Color3.fromRGB(120, 116, 110), 0.55), Enum.Material.SmoothPlastic)
+			disc(model, centre + Vector3.new(0, 0.35, 0), area.Radius - 1.6, 0.5, palette.Pad:Lerp(area.Color, 0.08), Enum.Material.Slate)
+		elseif area.Floor == "Mat" then
+			disc(model, centre + Vector3.new(0, 0.25, 0), area.Radius, 0.5, area.Color:Lerp(Color3.fromRGB(60, 60, 60), 0.5), Enum.Material.SmoothPlastic)
+			disc(model, centre + Vector3.new(0, 0.35, 0), area.Radius - 1.6, 0.5, Color3.fromRGB(58, 62, 74), Enum.Material.Rubber)
+		elseif area.Floor == "Forecourt" then
+			-- Adro retangular até a boca do corredor, onde ficam os pads de corte.
+			local fromX = area.Offset.X - area.Radius
+			local toX = WallConfig.Layout.StartX
+			local depth = area.Radius * 2
+			block(model, CFrame.new(origin + Vector3.new((fromX + toX) / 2, 0.2, area.Offset.Z)), Vector3.new(toX - fromX, 0.4, depth), Color3.fromRGB(78, 82, 98), Enum.Material.Slate)
+			for _, side in { -1, 1 } do
+				block(model, CFrame.new(origin + Vector3.new((fromX + toX) / 2, 0.3, area.Offset.Z + side * (depth / 2 - 1))), Vector3.new(toX - fromX, 0.4, 1.2), shade(LobbyConfig.Gate.Trim, 0.85), Enum.Material.SmoothPlastic)
+			end
+		end
 
-		-- The sign post, so the name is readable from across the island.
-		local post = makePart(model, {
-			Name = "AreaSign_" .. area.Id,
-			Size = Vector3.new(1.6, area.SignHeight, 1.6),
-			CFrame = CFrame.new(centre + Vector3.new(0, area.SignHeight / 2, -(area.Radius - 4))),
-			Color = palette.Rim,
-			Material = Enum.Material.Wood,
-			CanCollide = false,
-		})
-		light(post, area.Color, 18, 1)
-		billboard(
-			post,
-			string.format("%s %s", area.Icon, Text.GetFor(nil, area.NameKey)),
-			area.Color,
-			area.SignHeight / 2 + 4
-		)
+		if area.Label ~= "None" then
+			-- Estandarte no lado de FORA da área (de quem olha da praça).
+			local outward = if area.Offset.Magnitude > 1 then Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit else Vector3.new(0, 0, 1)
+			local base = centre + outward * (area.Radius - 5)
+			local poleHeight = math.min(area.SignHeight, 16)
+			block(model, CFrame.new(base + Vector3.new(0, poleHeight / 2, 0)), Vector3.new(1, poleHeight, 1), palette.Rim, Enum.Material.Wood, false)
+			local facing = CFrame.lookAt(base, base - outward)
+			local flag = block(model, facing + Vector3.new(0, poleHeight - 3.6, 0) + facing.RightVector * 2.4, Vector3.new(4, 6, 0.3), area.Color, Enum.Material.Fabric, false)
+			flag.Name = "AreaSign_" .. area.Id
+			local crystal = block(model, CFrame.new(base + Vector3.new(0, poleHeight + 1.4, 0)) * CFrame.Angles(math.rad(45), math.rad(45), 0), Vector3.new(1.6, 1.6, 1.6), area.Color, Enum.Material.Neon, false)
+			light(crystal, area.Color, 12, 0.8)
+			local text = if area.Label == "Name" then string.format("%s %s", area.Icon, Text.GetFor(nil, area.NameKey)) else area.Icon
+			billboard(flag, text, Color3.new(1, 1, 1), 5.5, 90, if area.Label == "Name" then 0.75 else 0.5)
+		end
 	end
 end
 
 --[[
-	The stone path from the plaza to the mouth of the tower. It is the one road
-	in the lobby, so "where do I go next" has a visual answer.
+	Calçadas de pedra da praça até cada área: é o que costura o lobby num
+	lugar só, em vez de ilhas de cor soltas na grama. Uma peça por calçada.
+]]
+local function buildWalkways(model: Model, origin: Vector3, palette: Palette)
+	for _, area in LobbyConfig.Areas do
+		if area.Id ~= "Tower" then
+			local target = Vector3.new(area.Offset.X, 0, area.Offset.Z)
+			local direction = if target.Magnitude > 1 then target.Unit else Vector3.new(0, 0, 1)
+			-- Da borda da praça (quadrado de ±PLAZA_HALF) até a borda da área.
+			local fromDistance = PLAZA_HALF / math.max(math.abs(direction.X), math.abs(direction.Z))
+			local toDistance = target.Magnitude - area.Radius + 2
+			if toDistance > fromDistance + 1 then
+				local a = origin + direction * fromDistance
+				local b = origin + direction * toDistance
+				local middle = (a + b) / 2 + Vector3.new(0, 0.2, 0)
+				local walk = block(model, CFrame.lookAt(middle, middle + direction), Vector3.new(10, 0.4, (b - a).Magnitude), shade(palette.Pad, 0.94), Enum.Material.Cobblestone, false)
+				walk.Name = "Walkway_" .. area.Id
+			end
+		end
+	end
+end
+
+--[[
+	O caminho de pedra da praça até o portão do Caminho do Poder: a única
+	estrada do lobby, então "para onde eu vou" tem resposta visual. Uma faixa
+	de energia no meio e pilares com cristal dos dois lados conduzem o olhar
+	até o portão.
 ]]
 local function buildTowerPath(model: Model, origin: Vector3, palette: Palette)
-	local tower = areaOf("Tower")
 	local path = LobbyConfig.Path
-	local fromX = 0
-	local toX = tower.Offset.X
+	local gate = LobbyConfig.Gate
+	local fromX = PLAZA_HALF
+	local toX = WallConfig.Layout.StartX
 	local tiles = math.max(math.floor((toX - fromX) / path.TileLength), 1)
+	local tileLength = (toX - fromX) / tiles
 	for index = 0, tiles - 1 do
-		local x = fromX + (index + 0.5) * path.TileLength
+		local x = fromX + (index + 0.5) * tileLength
 		block(
 			model,
 			CFrame.new(origin + Vector3.new(x, 0.25, 0)),
-			Vector3.new(path.TileLength - 2, 0.5, path.Width),
+			Vector3.new(tileLength - 1, 0.5, path.Width),
 			if index % 2 == 0 then palette.Pad else shade(palette.Pad, 0.92),
 			Enum.Material.Cobblestone,
 			false
 		)
 	end
+	-- Faixa de energia no eixo do caminho.
+	local runner = block(model, CFrame.new(origin + Vector3.new((fromX + toX) / 2, 0.55, 0)), Vector3.new(toX - fromX, 0.15, 1.4), gate.Energy, Enum.Material.Neon, false)
+	runner.Name = "PathRunner"
+	runner.Transparency = 0.25
+	for _, x in path.Pylons do
+		for _, side in { -1, 1 } do
+			local base = origin + Vector3.new(x, 0, side * path.PylonOffsetZ)
+			block(model, CFrame.new(base + Vector3.new(0, 2.5, 0)), Vector3.new(2.4, 5, 2.4), gate.Stone, Enum.Material.Slate)
+			local crystal = block(model, CFrame.new(base + Vector3.new(0, 7, 0)) * CFrame.Angles(0, math.rad(45), math.rad(12 * side)), Vector3.new(1.4, 4, 1.4), gate.Energy, Enum.Material.Neon, false)
+			crystal.Name = "PathCrystal"
+		end
+	end
+end
+
+--[[
+	PORTÃO DO CAMINHO DO PODER — o marco do lobby (LobbyConfig.Gate).
+
+	Na boca do corredor, de frente para a praça:
+		- dois pilares de pedra sobre plintos, com friso dourado e cristais de
+		  energia na base — eles também FECHAM o vão entre a parede do corredor
+		  e o paredão da ilha (por isso vão até a face do paredão);
+		- uma verga larga com a placa CAMINHO DO PODER (SurfaceGui, presa à
+		  pedra, e não um texto flutuante);
+		- uma espada gigante de energia cravada no alto da verga, visível de
+		  qualquer ponto do lobby.
+	A abertura entre os pilares deixa ver a primeira área e a barreira 1 lá
+	dentro. Não é torre nem teleporte: é a entrada do corredor reto.
+]]
+local function buildPathGate(model: Model, origin: Vector3)
+	local gate = LobbyConfig.Gate
+	local layout = WallConfig.Layout
+	local x = layout.StartX
+	local halfOpening = layout.Width / 2 + 2 -- pilares começam logo fora do piso do corredor
+	local pillarZ = halfOpening + gate.PillarWidth / 2
+	local top = gate.PlinthHeight + gate.PillarHeight
+
+	for _, side in { -1, 1 } do
+		local z = side * pillarZ
+		block(model, CFrame.new(origin + Vector3.new(x, gate.PlinthHeight / 2, z)), Vector3.new(gate.PillarWidth + 8, gate.PlinthHeight, gate.PillarWidth + 8), shade(gate.Stone, 0.8), Enum.Material.Slate)
+		local pillar = block(model, CFrame.new(origin + Vector3.new(x, gate.PlinthHeight + gate.PillarHeight / 2, z)), Vector3.new(gate.PillarWidth, gate.PillarHeight, gate.PillarWidth), gate.Stone, Enum.Material.Slate)
+		pillar.Name = "GatePillar"
+		-- Friso dourado no alto do pilar.
+		block(model, CFrame.new(origin + Vector3.new(x, top - 3, z)), Vector3.new(gate.PillarWidth + 1.2, 2, gate.PillarWidth + 1.2), gate.Trim, Enum.Material.Metal)
+		-- Veio de energia na face do pilar que dá para a praça.
+		local vein = block(model, CFrame.new(origin + Vector3.new(x - gate.PillarWidth / 2 - 0.2, gate.PlinthHeight + gate.PillarHeight * 0.45, z)), Vector3.new(0.4, gate.PillarHeight * 0.7, 2.2), gate.Energy, Enum.Material.Neon, false)
+		vein.Name = "GateVein"
+		-- Cristais na base, do lado da praça.
+		for index, height in { 9, 14, 6 } do
+			local crystal = block(
+				model,
+				CFrame.new(origin + Vector3.new(x - gate.PillarWidth / 2 - 5 - index * 1.5, height / 2 + 0.5, z - side * (index - 2) * 4))
+					* CFrame.Angles(math.rad(-10 * side), math.rad(30 * index), math.rad(14 * side)),
+				Vector3.new(2.6, height, 2.6),
+				gate.Energy,
+				Enum.Material.Neon,
+				false
+			)
+			crystal.Name = "GateCrystal"
+			crystal.Transparency = 0.1
+		end
+		local lamp = block(model, CFrame.new(origin + Vector3.new(x - gate.PillarWidth / 2 - 6, 4, z)), Vector3.new(1, 1, 1), gate.Energy, Enum.Material.Neon, false)
+		lamp.Transparency = 1
+		light(lamp, gate.Energy, 30, 1.6)
+	end
+
+	-- Verga: atravessa os dois pilares de ponta a ponta.
+	local spanZ = (pillarZ + gate.PillarWidth / 2) * 2 + 6
+	local lintelY = top + gate.LintelHeight / 2
+	block(model, CFrame.new(origin + Vector3.new(x, lintelY, 0)), Vector3.new(gate.LintelDepth, gate.LintelHeight, spanZ), gate.Stone, Enum.Material.Slate)
+	block(model, CFrame.new(origin + Vector3.new(x, top + 0.6, 0)), Vector3.new(gate.LintelDepth + 1, 1.2, spanZ + 1), gate.Trim, Enum.Material.Metal)
+	-- Coroa escalonada no meio, onde a espada fica cravada.
+	local crownTop = top + gate.LintelHeight + 6
+	block(model, CFrame.new(origin + Vector3.new(x, top + gate.LintelHeight + 3, 0)), Vector3.new(gate.LintelDepth - 6, 6, spanZ * 0.45), shade(gate.Stone, 0.9), Enum.Material.Slate)
+
+	-- Placa presa na face da verga que olha para a praça.
+	local plate = block(
+		model,
+		CFrame.lookAt(origin + Vector3.new(x - gate.LintelDepth / 2 - 0.3, lintelY, 0), origin + Vector3.new(x - gate.LintelDepth, lintelY, 0)),
+		Vector3.new(spanZ * 0.62, gate.LintelHeight - 2, 0.6),
+		Color3.fromRGB(34, 38, 56),
+		Enum.Material.Slate
+	)
+	plate.Name = "GateSign"
+	local surface = Instance.new("SurfaceGui")
+	surface.Face = Enum.NormalId.Front
+	surface.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	surface.PixelsPerStud = 24
+	surface.LightInfluence = 0
+	local signLabel = Instance.new("TextLabel")
+	signLabel.Size = UDim2.fromScale(1, 1)
+	signLabel.BackgroundTransparency = 1
+	signLabel.Font = Enum.Font.GothamBlack
+	signLabel.TextScaled = true
+	signLabel.TextColor3 = gate.Trim
+	signLabel.TextStrokeTransparency = 0.4
+	signLabel.Text = "⚔️ " .. string.upper(Text.GetFor(nil, "area.tower")) .. " ⚔️"
+	signLabel.Parent = surface
+	surface.Parent = plate
+
+	-- A espada de energia, cravada na coroa com a ponta para baixo.
+	local swordX = x
+	local bladeHeight = gate.SwordHeight * 0.7
+	local blade = block(model, CFrame.new(origin + Vector3.new(swordX, crownTop + bladeHeight / 2 - 4, 0)), Vector3.new(1.6, bladeHeight, 5), gate.Energy, Enum.Material.Neon, false)
+	blade.Name = "GateSword"
+	light(blade, gate.Energy, 46, 2)
+	local guardY = crownTop + bladeHeight - 4
+	block(model, CFrame.new(origin + Vector3.new(swordX, guardY + 1, 0)), Vector3.new(3, 2.2, 16), gate.Trim, Enum.Material.Metal, false)
+	block(model, CFrame.new(origin + Vector3.new(swordX, guardY + 5.5, 0)), Vector3.new(2, 7, 2), Color3.fromRGB(70, 50, 40), Enum.Material.Wood, false)
+	ball(model, origin + Vector3.new(swordX, guardY + 10, 0), 3.6, gate.Trim, Enum.Material.Metal, false)
 end
 
 -- ── Win corridor ────────────────────────────────────────────────────────────
@@ -1180,39 +1493,33 @@ local function decorateTraining(model: Model, origin: Vector3, rng: Random)
 	end
 	-- Flowers.
 	local flowerColors = { Color3.fromRGB(255, 90, 120), Color3.fromRGB(255, 220, 80), Color3.fromRGB(150, 110, 255) }
-	for _ = 1, 40 do
+	for _ = 1, 28 do
 		local p = origin + ringPoint(rng, 50, GROUND_RADIUS - 8)
 		ball(model, p + Vector3.new(0, 0.6, 0), 1.2, flowerColors[rng:NextInteger(1, #flowerColors)], Enum.Material.SmoothPlastic, false)
 	end
-	-- Pond with lily pads (north-west).
-	local pond = origin + Vector3.new(-96, 0, -58)
-	disc(model, pond + Vector3.new(0, 0.5, 0), 26, 1, Color3.fromRGB(150, 120, 80), Enum.Material.Ground)
-	local water = disc(model, pond + Vector3.new(0, 0.9, 0), 23, 0.6, Color3.fromRGB(70, 170, 220), Enum.Material.Glass, false)
+	-- Lago com vitórias-régias e pedras (LobbyConfig.Decoration.Pond). Antes
+	-- ficava em cima da área de Pets.
+	local pond = origin + LobbyConfig.Decoration.Pond
+	local pondRadius = LobbyConfig.Decoration.PondRadius
+	disc(model, pond + Vector3.new(0, 0.5, 0), pondRadius + 3, 1, Color3.fromRGB(150, 140, 120), Enum.Material.Slate)
+	local water = disc(model, pond + Vector3.new(0, 0.9, 0), pondRadius, 0.6, Color3.fromRGB(70, 170, 220), Enum.Material.Glass, false)
 	water.Transparency = 0.25
-	for _ = 1, 7 do
-		local p = pond + Vector3.new(rng:NextNumber(-17, 17), 1.2, rng:NextNumber(-17, 17))
-		disc(model, p, rng:NextNumber(2, 3.4), 0.3, Color3.fromRGB(80, 160, 70), Enum.Material.Grass, false)
+	for _ = 1, 5 do
+		local angle = rng:NextNumber(0, math.pi * 2)
+		local distance = rng:NextNumber(0, pondRadius - 4)
+		disc(model, pond + Vector3.new(math.cos(angle) * distance, 1.2, math.sin(angle) * distance), rng:NextNumber(1.6, 2.8), 0.3, Color3.fromRGB(80, 160, 70), Enum.Material.Grass, false)
+	end
+	for index = 1, 4 do
+		local angle = index / 4 * math.pi * 2 + 0.4
+		rock(model, pond + Vector3.new(math.cos(angle) * (pondRadius + 3), 0, math.sin(angle) * (pondRadius + 3)), rng, Color3.fromRGB(140, 138, 142), 0.8)
 	end
 
-	-- Windmill (north-east): a landmark visible from the plaza.
-	local mill = origin + Vector3.new(104, 0, -52)
-	for level = 0, 3 do
-		disc(model, mill + Vector3.new(0, 8 + level * 8, 0), 11 - level * 1.6, 8.2, Color3.fromRGB(226, 214, 190), Enum.Material.Sandstone)
-	end
-	disc(model, mill + Vector3.new(0, 42, 0), 12, 5, Color3.fromRGB(180, 70, 60), Enum.Material.Slate)
-	local hub = ball(model, mill + Vector3.new(0, 36, 11), 3, Color3.fromRGB(120, 90, 60), Enum.Material.Wood, false)
-	hub.Name = "MillHub"
-	for blade = 0, 3 do
-		local angle = blade * math.pi / 2 + math.pi / 6
-		block(model, CFrame.new(mill + Vector3.new(0, 36, 12)) * CFrame.Angles(0, 0, angle) * CFrame.new(0, 13, 0), Vector3.new(3.4, 26, 0.8), Color3.fromRGB(240, 235, 220), Enum.Material.WoodPlanks, false)
-	end
-
-	-- Hay bales and crates near the windmill.
-	for _ = 1, 9 do
-		local p = mill + Vector3.new(rng:NextNumber(-26, 26), 0, rng:NextNumber(10, 34))
-		local bale = block(model, CFrame.new(p + Vector3.new(0, 2.5, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), math.rad(90)), Vector3.new(5, 5, 5), Color3.fromRGB(226, 196, 110), Enum.Material.Grass)
-		bale.Name = "HayBale"
-	end
+	--[[
+		O moinho, os fardos de feno e os bonecos de treino saíram: o moinho
+		ficava dentro da área da Loja e os bonecos no meio do caminho para o
+		Caminho do Poder (sobras do layout antigo). A academia agora tem
+		arquitetura própria (buildTrainingMachines).
+	]]
 
 	-- Benches facing the plaza.
 	for i = -1, 1, 2 do
@@ -1235,19 +1542,11 @@ local function decorateTraining(model: Model, origin: Vector3, rng: Random)
 
 	-- Balloons floating over the island.
 	local balloonColors = { Color3.fromRGB(255, 90, 120), Color3.fromRGB(80, 220, 255), Color3.fromRGB(255, 196, 45), Color3.fromRGB(150, 110, 255) }
-	for _ = 1, 10 do
+	for _ = 1, 6 do
 		local p = origin + ringPoint(rng, 60, GROUND_RADIUS - 20) + Vector3.new(0, rng:NextNumber(40, 78), 0)
 		local color = balloonColors[rng:NextInteger(1, #balloonColors)]
 		ball(model, p, rng:NextNumber(7, 11), color, Enum.Material.SmoothPlastic, false)
 		block(model, CFrame.new(p - Vector3.new(0, 7, 0)), Vector3.new(0.3, 8, 0.3), Color3.fromRGB(240, 240, 240), Enum.Material.SmoothPlastic, false)
-	end
-
-	-- Training dummies near the plaza (east).
-	for i = 1, 4 do
-		local p = origin + Vector3.new(70, 0, -30 + i * 14)
-		block(model, CFrame.new(p + Vector3.new(0, 2.5, 0)), Vector3.new(1, 5, 1), Color3.fromRGB(120, 90, 60), Enum.Material.Wood)
-		block(model, CFrame.new(p + Vector3.new(0, 6, 0)), Vector3.new(3, 4, 2), Color3.fromRGB(210, 180, 140), Enum.Material.Fabric)
-		ball(model, p + Vector3.new(0, 9, 0), 2.6, Color3.fromRGB(210, 180, 140), Enum.Material.Fabric)
 	end
 end
 
@@ -1449,20 +1748,31 @@ local function decorateSky(model: Model, origin: Vector3, palette: Palette, rng:
 		end
 	end
 
+	--[[
+		Cascata descendo pela face do paredão (na direção de Waterfall.Offset)
+		até uma bacia rasa no pé dele. Antes era uma lâmina de água atravessando
+		o chão da ilha no meio da grama.
+	]]
 	local fall = decoration.Waterfall
-	local top = origin + fall.Offset
-	-- The spout, then the sheet of water falling into nothing.
-	disc(model, top + Vector3.new(0, 1, 0), fall.Width / 2, 2, Color3.fromRGB(120, 200, 235), Enum.Material.Water, false)
+	local direction = Vector3.new(fall.Offset.X, 0, fall.Offset.Z).Unit
+	local cliffTop = LobbyConfig.Cliffs.MinHeight
+	local faceRadius = GROUND_RADIUS - 0.6
+	local foot = origin + direction * faceRadius
+	local sheetFrame = CFrame.lookAt(foot, foot - direction)
 	local sheet = makePart(model, {
 		Name = "Waterfall",
-		Size = Vector3.new(fall.Width, fall.Drop, 2),
-		CFrame = CFrame.new(top - Vector3.new(0, fall.Drop / 2, 0)),
+		Size = Vector3.new(fall.Width, cliffTop, 1),
+		CFrame = sheetFrame + Vector3.new(0, cliffTop / 2, 0),
 		Color = Color3.fromRGB(150, 215, 245),
 		Material = Enum.Material.Water,
 		CanCollide = false,
-		Transparency = 0.35,
+		Transparency = 0.3,
 	})
 	sheet.CastShadow = false
+	local basin = origin + direction * (faceRadius - fall.Width / 2)
+	disc(model, basin + Vector3.new(0, 0.6, 0), fall.Width / 2 + 3, 1.2, Color3.fromRGB(140, 136, 128), Enum.Material.Slate)
+	local pool = disc(model, basin + Vector3.new(0, 0.9, 0), fall.Width / 2, 0.6, Color3.fromRGB(80, 175, 225), Enum.Material.Glass, false)
+	pool.Transparency = 0.2
 end
 
 -- ── Public API ──────────────────────────────────────────────────────────────
@@ -1480,9 +1790,16 @@ function WorldBuilder.Build(world: WorldData, origin: Vector3, worldsFolder: Fol
 	model:SetAttribute("Generated", true)
 
 	local rng = Random.new(world.Order * 7919)
+	local hasCorridor = world.Id == WallConfig.WorldId
 	buildGround(model, origin, palette)
+	-- Paredões com rng próprio: mexer neles não muda a decoração do resto.
+	buildCliffs(model, origin, palette, Random.new(world.Order * 104729), hasCorridor)
 	buildAreas(model, origin, palette)
-	buildTowerPath(model, origin, palette)
+	buildWalkways(model, origin, palette)
+	if hasCorridor then
+		buildTowerPath(model, origin, palette)
+		buildPathGate(model, origin)
+	end
 	buildSpawn(model, origin, palette, world, spawnsFolder, withSpawnLocation)
 	buildEggStands(model, origin, palette, world)
 	buildAltar(model, origin, palette)
@@ -1495,7 +1812,7 @@ function WorldBuilder.Build(world: WorldData, origin: Vector3, worldsFolder: Fol
 	if ZoneConfig.Build then
 		buildZones(model, origin, world)
 	end
-	if world.Id == WallConfig.WorldId then
+	if hasCorridor then
 		buildCutPads(model, origin, palette)
 		buildTrainingMachines(model, origin, palette)
 		buildCorridor(model, origin, palette)

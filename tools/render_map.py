@@ -57,12 +57,13 @@ def vector(text: str) -> tuple[float, float, float]:
 builder = open(os.path.join(ROOT, "src", "server", "World", "WorldBuilder.luau"), encoding="utf-8").read()
 GROUND_RADIUS = number(builder, "GROUND_RADIUS")
 TILE_STUDS = number(builder, "TILE_STUDS")
-HILL_STEPS = number(builder, "HILL_STEPS")
-HILL_STEP_HEIGHT = number(builder, "HILL_STEP_HEIGHT")
 # Altura que o personagem padrão do Roblox alcança num pulo.
 ROBLOX_JUMP = 7.2
 
 lobby = read("LobbyConfig.luau")
+_cliffs = lobby.split("Cliffs = {")[1]
+CLIFF_MIN_HEIGHT = number(_cliffs, "MinHeight")
+CLIFF_DEPTH = number(_cliffs, "Depth")
 AREAS = []
 for block in lobby.split("\t\tId = ")[1:]:
     AREAS.append(
@@ -215,10 +216,11 @@ def check() -> list[str]:
             f"o corredor chega a x={far:.0f} e o mundo vizinho comeca em {WORLD_SPACING - GROUND_RADIUS:.0f}"
         )
 
-    # a muralha tem de ser inescalável: um degrau não pode caber num pulo
-    if HILL_STEP_HEIGHT <= ROBLOX_JUMP:
+    # o paredão tem de ser inescalável, com folga para pulo turbinado por
+    # aura de velocidade e para subir em decoração encostada nele
+    if CLIFF_MIN_HEIGHT < ROBLOX_JUMP * 6:
         problems.append(
-            f"degrau da muralha com {HILL_STEP_HEIGHT:.0f} studs: o pulo do Roblox sobe {ROBLOX_JUMP:.1f}"
+            f"paredao com {CLIFF_MIN_HEIGHT:.0f} studs: baixo demais (pulo do Roblox sobe {ROBLOX_JUMP:.1f})"
         )
 
     # o corredor tem de começar colado na ilha, sem vão para cair
@@ -271,7 +273,7 @@ def draw() -> str:
     scale = 1.6  # pixels por stud
     margin = 40
     areas = corridor_areas()
-    min_x = -GROUND_RADIUS - HILL_STEPS * TILE_STUDS
+    min_x = -GROUND_RADIUS - CLIFF_DEPTH
     max_x = max(area["BarrierX1"] for area in areas) + 220
     min_z = -GROUND_RADIUS - 40
     max_z = GROUND_RADIUS + 40
