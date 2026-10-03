@@ -177,9 +177,33 @@ local function light(part: BasePart, color: Color3, range: number, brightness: n
 	pointLight.Parent = part
 end
 
--- True when (x, z) is outside every lobby area, the main path and the pond,
--- with `margin` studs to spare.
+local WALKWAY_WIDTH = 7
+
+-- Distância de (x, z) até a calçada da praça para a área (eixo origem->área).
+local function nearWalkway(x: number, z: number, margin: number): boolean
+	for _, area in LobbyConfig.Areas do
+		if area.Id ~= "Tower" then
+			local target = Vector3.new(area.Offset.X, 0, area.Offset.Z)
+			local length = target.Magnitude
+			if length > 1 then
+				local direction = target / length
+				local t = math.clamp(x * direction.X + z * direction.Z, 0, length)
+				local dx, dz = x - direction.X * t, z - direction.Z * t
+				if dx * dx + dz * dz < (WALKWAY_WIDTH / 2 + margin + 3) ^ 2 then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+-- True when (x, z) is outside every lobby area, the main path, the walkways
+-- and the pond, with `margin` studs to spare.
 local function clearOfLayout(x: number, z: number, margin: number): boolean
+	if nearWalkway(x, z, margin) then
+		return false
+	end
 	for _, area in LobbyConfig.Areas do
 		local dx, dz = x - area.Offset.X, z - area.Offset.Z
 		if dx * dx + dz * dz < (area.Radius + margin) ^ 2 then
@@ -444,6 +468,31 @@ local function buildEggStands(model: Model, origin: Vector3, palette: Palette, w
 			prompt(eggPart, "Eggs", "world.prompt.hatch", "egg." .. eggId .. ".name")
 		end
 	end
+
+	--[[
+		MARCO DOS OVOS: um ovo gigante num pedestal, atrás das bancadas. De
+		longe ele diz "ovos" sem precisar do letreiro. Baixo de propósito
+		(~17 studs): o protagonista do lobby é o portão do Caminho do Poder.
+	]]
+	local back = origin + area.Offset + Vector3.new(0, 0, -1) * (area.Radius - 13)
+	disc(model, back + Vector3.new(0, 1, 0), 6.5, 1, palette.Rim, Enum.Material.Marble)
+	disc(model, back + Vector3.new(0, 3, 0), 5, 2, palette.Pad, Enum.Material.Marble)
+	local giant = makePart(model, {
+		Name = "EggLandmark",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(9, 9, 9),
+		CFrame = CFrame.new(back + Vector3.new(0, 9.4, 0)),
+		Color = Color3.fromRGB(250, 244, 228),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+	})
+	local giantMesh = Instance.new("SpecialMesh")
+	giantMesh.MeshType = Enum.MeshType.Sphere
+	giantMesh.Scale = Vector3.new(1, 1.35, 1)
+	giantMesh.Parent = giant
+	local band = disc(model, back + Vector3.new(0, 9.9, 0), 4.6, 1.4, LobbyConfig.Gate.Trim, Enum.Material.Metal, false)
+	band.Name = "EggLandmarkBand"
+	light(giant, Color3.fromRGB(255, 226, 150), 18, 0.9)
 end
 
 local function buildAltar(model: Model, origin: Vector3, palette: Palette)
@@ -457,6 +506,27 @@ local function buildAltar(model: Model, origin: Vector3, palette: Palette)
 	light(orb, Color3.fromRGB(140, 90, 255), 18, 2)
 	billboard(orb, "🔁 " .. Text.GetFor(nil, "menu.rebirth"), Color3.fromRGB(200, 170, 255), 5, 60, 0.8)
 	prompt(orb, "Rebirth", "world.prompt.rebirth")
+
+	--[[
+		MARCO DO RENASCER: um halo roxo vertical sobre o altar, virado para a
+		praça (oito segmentos, como a moldura do portal). Reconhecível de longe,
+		baixo o bastante para não competir com o portão.
+	]]
+	local towardPlaza = Vector3.new(-base.X + origin.X, 0, -base.Z + origin.Z).Unit
+	local haloCentre = base + Vector3.new(0, 13, 0)
+	local haloFrame = CFrame.lookAt(haloCentre, haloCentre + towardPlaza)
+	for segment = 0, 7 do
+		local angle = segment * math.pi / 4
+		local piece = block(
+			model,
+			haloFrame * CFrame.new(math.cos(angle) * 7, math.sin(angle) * 7, 0) * CFrame.Angles(0, 0, angle + math.pi / 2),
+			Vector3.new(5.6, 0.9, 0.9),
+			Color3.fromRGB(170, 120, 255),
+			Enum.Material.Neon,
+			false
+		)
+		piece.Name = "RebirthHalo"
+	end
 end
 
 local function buildPortal(model: Model, origin: Vector3, palette: Palette)
@@ -775,6 +845,24 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 		})
 		plate.Name = "GymPlate"
 	end
+	--[[
+		MARCO DO TREINO: um haltere gigante sobre a viga de trás do pórtico —
+		a silhueta mais óbvia de "academia" que existe. Fica a ~20 studs.
+	]]
+	local barCentre = backFrame * CFrame.new(0, beamHeight + 3.2, reach * 0.62)
+	block(model, barCentre, Vector3.new(12, 1.2, 1.2), Color3.fromRGB(190, 196, 208), Enum.Material.Metal, false).Name = "GymLandmark"
+	for _, side in { -1, 1 } do
+		local weight = makePart(model, {
+			Name = "GymLandmark",
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(2.2, 6, 6),
+			CFrame = barCentre * CFrame.new(side * 5.2, 0, 0),
+			Color = area.Color,
+			Material = Enum.Material.Metal,
+			CanCollide = false,
+		})
+		weight.Name = "GymLandmark"
+	end
 	-- Rack de halteres no fundo (lado de fora, de frente para a praça).
 	local outward = Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit
 	local rackBase = gymCentre + outward * (reach - 1)
@@ -956,10 +1044,38 @@ end
 	- áreas cuja arquitetura já diz o que são (Treino, Loja) mostram só o
 	  ícone (Label = "Icon").
 ]]
+--[[
+	Piso retangular de cantos arredondados (6 peças): uma cruz de dois blocos
+	e quatro discos nos cantos. Alinhado aos eixos do mundo, como a praça.
+]]
+local function roundedRect(model: Model, centre: Vector3, size: Vector2, corner: number, height: number, color: Color3, material: Enum.Material)
+	local w, d = size.X, size.Y
+	block(model, CFrame.new(centre - Vector3.new(0, height / 2, 0)), Vector3.new(w - corner * 2, height, d), color, material)
+	block(model, CFrame.new(centre - Vector3.new(0, height / 2, 0)), Vector3.new(w, height, d - corner * 2), color, material)
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			disc(model, centre + Vector3.new(sx * (w / 2 - corner), 0, sz * (d / 2 - corner)), corner, height, color, material)
+		end
+	end
+end
+
 local function buildAreas(model: Model, origin: Vector3, palette: Palette)
 	for _, area in LobbyConfig.Areas do
 		local centre = origin + area.Offset
-		if area.Floor == "Stone" then
+		local size = area.FloorSize or Vector2.new(area.Radius * 1.6, area.Radius * 1.2)
+		if area.Floor == "Square" then
+			-- Praça retangular de pedra clara com friso fino na cor da área.
+			-- Topo em 0,34 (o adro do portão fica em 0,4): onde se encostam, o
+			-- adro fica por cima, sem cintilação de faces na mesma altura.
+			roundedRect(model, centre + Vector3.new(0, 0.26, 0), size + Vector2.new(2, 2), 5, 0.5, area.Color:Lerp(Color3.fromRGB(120, 116, 110), 0.55), Enum.Material.SmoothPlastic)
+			roundedRect(model, centre + Vector3.new(0, 0.34, 0), size, 4, 0.5, palette.Pad:Lerp(area.Color, 0.06), Enum.Material.Slate)
+		elseif area.Floor == "Deck" then
+			-- Deck de madeira um degrau acima da grama.
+			roundedRect(model, centre + Vector3.new(0, 0.6, 0), size, 3, 1, Color3.fromRGB(176, 136, 94), Enum.Material.WoodPlanks)
+		elseif area.Floor == "MatSquare" then
+			roundedRect(model, centre + Vector3.new(0, 0.26, 0), size + Vector2.new(2, 2), 5, 0.5, area.Color:Lerp(Color3.fromRGB(60, 60, 60), 0.5), Enum.Material.SmoothPlastic)
+			roundedRect(model, centre + Vector3.new(0, 0.34, 0), size, 4, 0.5, Color3.fromRGB(58, 62, 74), Enum.Material.Rubber)
+		elseif area.Floor == "Stone" then
 			disc(model, centre + Vector3.new(0, 0.25, 0), area.Radius, 0.5, area.Color:Lerp(Color3.fromRGB(120, 116, 110), 0.55), Enum.Material.SmoothPlastic)
 			disc(model, centre + Vector3.new(0, 0.35, 0), area.Radius - 1.6, 0.5, palette.Pad:Lerp(area.Color, 0.08), Enum.Material.Slate)
 		elseif area.Floor == "Mat" then
@@ -1009,7 +1125,9 @@ local function buildWalkways(model: Model, origin: Vector3, palette: Palette)
 				local a = origin + direction * fromDistance
 				local b = origin + direction * toDistance
 				local middle = (a + b) / 2 + Vector3.new(0, 0.2, 0)
-				local walk = block(model, CFrame.lookAt(middle, middle + direction), Vector3.new(10, 0.4, (b - a).Magnitude), shade(palette.Pad, 0.94), Enum.Material.Cobblestone, false)
+				-- Caminho secundário: mais estreito e mais escuro que a avenida do
+				-- Caminho do Poder (24 de largura, pedra clara), para não competir.
+				local walk = block(model, CFrame.lookAt(middle, middle + direction), Vector3.new(WALKWAY_WIDTH, 0.3, (b - a).Magnitude), shade(palette.Pad, 0.82), Enum.Material.Slate, false)
 				walk.Name = "Walkway_" .. area.Id
 			end
 		end
@@ -1643,8 +1761,23 @@ local function rock(model: Model, position: Vector3, rng: Random, color: Color3,
 end
 
 local function decorateTraining(model: Model, origin: Vector3, rng: Random)
-	for _ = 1, 26 do
-		tree(model, origin + ringPoint(rng, 70, GROUND_RADIUS - 10), rng)
+	--[[
+		Árvores em GRUPOS de 2–3 (antes eram 26 soltas, espaçadas de forma
+		uniforme). Os grupos separam as atividades e deixam livres as áreas,
+		as calçadas, a avenida e a linha de visão do spawn (clearOfLayout).
+	]]
+	for _ = 1, 10 do
+		local centre = ringPoint(rng, 70, GROUND_RADIUS - 14)
+		for _ = 1, rng:NextInteger(2, 3) do
+			for _ = 1, 8 do
+				local angle = rng:NextNumber(0, math.pi * 2)
+				local p = centre + Vector3.new(math.cos(angle), 0, math.sin(angle)) * rng:NextNumber(4, 8)
+				if p.Magnitude < GROUND_RADIUS - 8 and clearOfLayout(p.X, p.Z, 4) then
+					tree(model, origin + p, rng)
+					break
+				end
+			end
+		end
 	end
 	for _ = 1, 14 do
 		rock(model, origin + ringPoint(rng, 55, GROUND_RADIUS - 6), rng, Color3.fromRGB(130, 130, 136), 1)
@@ -1907,30 +2040,11 @@ local function decorateSky(model: Model, origin: Vector3, palette: Palette, rng:
 	end
 
 	--[[
-		Cascata descendo pela face do paredão (na direção de Waterfall.Offset)
-		até uma bacia rasa no pé dele. Antes era uma lâmina de água atravessando
-		o chão da ilha no meio da grama.
+		(A cascata no paredão sul saiu: era uma lâmina de água de 22 x 58 studs
+		encostada no paredão; de cima e de longe ela lia como uma placa azul
+		grande e inclinada, sem função — foi o objeto azul estranho visto no
+		teste do Studio.)
 	]]
-	local fall = decoration.Waterfall
-	local direction = Vector3.new(fall.Offset.X, 0, fall.Offset.Z).Unit
-	local cliffTop = LobbyConfig.Cliffs.MinHeight
-	local faceRadius = GROUND_RADIUS - 0.6
-	local foot = origin + direction * faceRadius
-	local sheetFrame = CFrame.lookAt(foot, foot - direction)
-	local sheet = makePart(model, {
-		Name = "Waterfall",
-		Size = Vector3.new(fall.Width, cliffTop, 1),
-		CFrame = sheetFrame + Vector3.new(0, cliffTop / 2, 0),
-		Color = Color3.fromRGB(150, 215, 245),
-		Material = Enum.Material.Water,
-		CanCollide = false,
-		Transparency = 0.3,
-	})
-	sheet.CastShadow = false
-	local basin = origin + direction * (faceRadius - fall.Width / 2)
-	disc(model, basin + Vector3.new(0, 0.6, 0), fall.Width / 2 + 3, 1.2, Color3.fromRGB(140, 136, 128), Enum.Material.Slate)
-	local pool = disc(model, basin + Vector3.new(0, 0.9, 0), fall.Width / 2, 0.6, Color3.fromRGB(80, 175, 225), Enum.Material.Glass, false)
-	pool.Transparency = 0.2
 end
 
 -- ── Public API ──────────────────────────────────────────────────────────────

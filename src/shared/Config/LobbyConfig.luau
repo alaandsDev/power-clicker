@@ -29,11 +29,16 @@ export type Area = {
 		gigante. A identidade vem de detalhe, material e arquitetura:
 		- Label: "Name" (estandarte pequeno com ícone + nome), "Icon" (só o
 		  ícone: a estrutura já diz o que é — Treino, Loja) ou "None".
-		- Floor: "Stone" (pedra clara da praça), "Mat" (piso de academia),
-		  "Forecourt" (adro escuro diante do portão) ou "None".
+		- Floor: "Stone" (disco de pedra clara), "Square" (praça retangular de
+		  cantos arredondados), "Deck" (deck de madeira), "MatSquare" (piso
+		  de academia retangular), "Mat" (disco de academia), "Forecourt"
+		  (adro escuro diante do portão) ou "None". Só Ovos e Renascer ficam
+		  em disco: a mistura evita o "monte de círculos na grama".
+		- FloorSize: largura x profundidade dos pisos retangulares.
 	]]
 	Label: string,
 	Floor: string,
+	FloorSize: Vector2?,
 }
 
 export type Station = {
@@ -56,7 +61,8 @@ local Areas: { [string]: Area } = {
 		Color = Color3.fromRGB(255, 226, 120),
 		SignHeight = 18,
 		Label = "None",
-		Floor = "Stone",
+		Floor = "Square",
+		FloorSize = Vector2.new(76, 26),
 	},
 	Eggs = {
 		Id = "Eggs",
@@ -78,7 +84,8 @@ local Areas: { [string]: Area } = {
 		Color = Color3.fromRGB(80, 220, 255),
 		SignHeight = 22,
 		Label = "Name",
-		Floor = "Stone",
+		Floor = "Deck",
+		FloorSize = Vector2.new(44, 34),
 	},
 	Shop = {
 		Id = "Shop",
@@ -89,7 +96,8 @@ local Areas: { [string]: Area } = {
 		Color = Color3.fromRGB(255, 150, 80),
 		SignHeight = 22,
 		Label = "Icon",
-		Floor = "Stone",
+		Floor = "Square",
+		FloorSize = Vector2.new(50, 38),
 	},
 	Rebirth = {
 		Id = "Rebirth",
@@ -114,7 +122,8 @@ local Areas: { [string]: Area } = {
 		Color = Color3.fromRGB(104, 230, 140),
 		SignHeight = 24,
 		Label = "Icon",
-		Floor = "Mat",
+		Floor = "MatSquare",
+		FloorSize = Vector2.new(54, 46),
 	},
 	Tower = {
 		Id = "Tower",
@@ -213,12 +222,6 @@ return {
 		IslandHeight = 70, -- altura média acima do chão
 		Clouds = 14,
 		CloudHeight = 150,
-		Waterfall = {
-			-- Cascata que desce pela face do paredão sul até um lago raso.
-			Offset = Vector3.new(-40, 0, 128), -- só a DIREÇÃO importa: fica no paredão
-			Width = 22,
-			Drop = 140, -- (legado: a cascata agora cai do topo do paredão)
-		},
 		-- Lago com pedras (antes ficava em cima da área de Pets).
 		Pond = Vector3.new(-122, 0, 0),
 		PondRadius = 16,
