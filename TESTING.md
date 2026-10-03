@@ -275,3 +275,16 @@ S.7. Outro jogador (Test > 2 jogadores) vê a espada na mão do primeiro.
 Coberto fora do Studio: `lune run tools/lune/check_sword.luau` (ordem de eventos,
 fallback e duplicação) e `SwordEquip.spec` (qual espada vale). Solda na mão,
 visual e replicação **só no Studio**.
+
+### Core loop do Caminho (rodada de gameplay) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+G.1. Jogador novo: o chip "⚔️ Objetivo: quebre a Barreira 1 — siga a avenida" aparece no lobby e some ao chegar no corredor e de vez após a 1ª barreira.
+G.2. Perto da barreira 1: faixa com "⚔ Estágio 1 — Madeira", barra de HP, "≈N golpes · Prêmio". Barreira forte demais (ex.: chegar à 4 cedo) mostra "⚠ Forte demais: treine e melhore o Corte" em vermelho.
+G.3. Golpear: faísca pequena na face da barreira, no ponto mais perto do personagem, na cor da espada; a barra responde a cada golpe; nada de efeito empilhando.
+G.4. Fileira quebrando: estilhaços na cor da madeira e das tábuas; tábuas, X e cintas da fileira somem junto; não sobra nada flutuando nem parede invisível; a fileira de trás continua sólida.
+G.5. Última fileira: anúncio "💥 BARREIRA 1 DESTRUÍDA!" + "siga: Barreira 2 — Pedra Reforçada" por ~2,5 s, sem bloquear a tela. Outro jogador perto vê só "Barreira 1 aberta por X"; longe, nada.
+G.6. Pegar o pad: +vitórias e **o personagem fica onde está** (não volta para a praça). Seguir andando até a barreira 2.
+G.7. Ficar parado DENTRO do bloco da barreira quando os 14 s acabam: ela não se fecha em cima do personagem; fecha quando ele sai.
+G.8. Depois de passar, virar e golpear a barreira 1 por trás: não tira HP.
+G.9. Na área 2, resetar o personagem: renasce no spawn olhando a avenida, espada na mão (um `CutBlade` só), progresso igual no painel Progresso. Cronometrar a volta até a barreira 2 (estimado: ~31 s andando + quebrar a 1 de novo).
+G.10. Dois jogadores: um quebra, o outro passa junto; cada um pega o próprio pad uma vez.
+G.11. Ovo gigante (Ovos), haltere (Treino) e halo roxo (Renascer) reconhecíveis de longe; nenhum compete com o portão vindo do spawn. Sem cascata no paredão sul.

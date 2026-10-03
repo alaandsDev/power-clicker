@@ -314,7 +314,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 	-- Pior caso: tudo que pode aparecer, visível ao mesmo tempo.
 	-- Inclui tutorial e avisos: a versão anterior deixava os dois de fora e
 	-- declarou "OK" enquanto o tutorial cobria as moedas no Studio.
-	for _, n in { "TutorialBanner", "Toast1", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "Combo", "QuestChip", "MenuSecondary" } do
+	for _, n in { "TutorialBanner", "Toast1", "WallBanner", "ObjectiveChip", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "Combo", "QuestChip", "MenuSecondary" } do
 		local g = find(n)
 		if g then
 			g.Visible = true
@@ -322,7 +322,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 			table.insert(problems, "elemento não encontrado: " .. n)
 		end
 	end
-	for _, n in { "Boosts", "HappyHour" } do -- AutomaticSize X: largura plausível
+	for _, n in { "Boosts", "HappyHour", "ObjectiveChip" } do -- AutomaticSize X: largura plausível
 		local g = find(n)
 		if g then
 			g.Size = roblox.UDim2.fromOffset(260, g.Size.Y.Offset)
@@ -339,7 +339,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 	end
 
 	local items = {}
-	for _, n in { "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" } do
+	for _, n in { "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "WallBanner", "ObjectiveChip", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" } do
 		local g = find(n)
 		if g then
 			local p, s = rectOf(g)
@@ -350,7 +350,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 		return a.x < b.x + b.w - 0.5 and b.x < a.x + a.w - 0.5 and a.y < b.y + b.h - 0.5 and b.y < a.y + a.h - 0.5
 	end
 	for _, group in {
-		{ "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "ClickButton" },
+		{ "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "WallBanner", "ObjectiveChip", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "ClickButton" },
 		{ "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" },
 	} do
 		for i = 1, #group do

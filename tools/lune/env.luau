@@ -152,7 +152,7 @@ M.CFrame = setmetatable({
 }, { __index = RealCFrame })
 local cache = {}
 -- Ajustes SÓ no texto carregado aqui (o arquivo do repo não muda):
-M.patches = {} -- [fullName] = { {trecho, substituto}, ... } (busca literal)
+M.patches = {} -- [fullName] = { {trecho, substituto, "all"?}, ... } (busca literal)
 M.stubModules = {} -- [fullName] = valor devolvido no lugar do módulo
 M.extraGlobals = {} -- globais extras para os módulos (ex.: TweenInfo)
 local requireFn
@@ -175,9 +175,18 @@ requireFn = function(mod)
 	if M.stubModules[full] ~= nil then cache[full] = M.stubModules[full] return cache[full] end
 	local src = mod.Source
 	for _, pair in M.patches[full] or {} do
-		local a, b = string.find(src, pair[1], 1, true)
-		if not a then error("patch not found in " .. full .. ": " .. pair[1]) end
-		src = string.sub(src, 1, a - 1) .. pair[2] .. string.sub(src, b + 1)
+		if pair[3] == "all" then
+			-- Troca TODAS as ocorrências (busca literal).
+			local escaped = string.gsub(pair[1], "[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+			local replacement = string.gsub(pair[2], "%%", "%%%%")
+			local count
+			src, count = string.gsub(src, escaped, replacement)
+			if count == 0 then error("patch not found in " .. full .. ": " .. pair[1]) end
+		else
+			local a, b = string.find(src, pair[1], 1, true)
+			if not a then error("patch not found in " .. full .. ": " .. pair[1]) end
+			src = string.sub(src, 1, a - 1) .. pair[2] .. string.sub(src, b + 1)
+		end
 	end
 	local fn = luau.load(luau.compile(src), { debugName = mod:GetFullName(), environment = makeEnv(mod) })
 	local result = fn()

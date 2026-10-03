@@ -29,6 +29,9 @@ local Sounds: { [string]: SoundData } = {
 	Purchase = { SoundId = "", Volume = 0.7, MinInterval = 0.2, PitchVariation = 0 }, -- TODO_ASSET
 	Reward = { SoundId = "", Volume = 0.7, MinInterval = 0.2, PitchVariation = 0 }, -- TODO_ASSET
 	Error = { SoundId = "", Volume = 0.5, MinInterval = 0.2, PitchVariation = 0 }, -- TODO_ASSET
+	-- Caminho do Poder: golpe na barreira e fileira quebrando (madeira, pedra...).
+	WallHit = { SoundId = "", Volume = 0.45, MinInterval = 0.08, PitchVariation = 0.1 }, -- TODO_ASSET
+	WallBreak = { SoundId = "", Volume = 0.8, MinInterval = 0.15, PitchVariation = 0.05 }, -- TODO_ASSET
 }
 
 return {

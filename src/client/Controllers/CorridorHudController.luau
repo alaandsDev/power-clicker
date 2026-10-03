@@ -36,7 +36,10 @@ local HudController = require(script.Parent.HudController)
 local SHOW_RANGE = WallConfig.HitRange * 3
 -- Compacta: uma linha de texto e uma barra fina. Clicar abre o painel
 -- completo de Progresso, que é onde o detalhe pertence.
-local PANEL_WIDTH = 340
+local PANEL_WIDTH = 380
+-- Acima disto (golpes para o estágio inteiro, ~1 min segurando o clique) a
+-- faixa avisa que o jogador ainda está fraco para esta barreira.
+local WEAK_HITS = 600
 local PANEL_HEIGHT = 48
 
 local CorridorHudController = {}
@@ -79,7 +82,8 @@ local function nearestRow(position: Vector3): (BasePart?, number)
 	local best: BasePart? = nil
 	local bestDistance = SHOW_RANGE
 	for _, row in rows do
-		if row:GetAttribute("Broken") ~= true then
+		-- Só fileiras À FRENTE do jogador (o servidor só aceita golpe nelas).
+		if row:GetAttribute("Broken") ~= true and position.X < row.Position.X then
 			local distance = (row.Position - position).Magnitude
 			if distance <= bestDistance then
 				best, bestDistance = row, distance
@@ -124,12 +128,31 @@ local function refresh()
 		icon = Theme.Icons.Power,
 		power = NumberFormat.Short(perClick),
 	})
+	--[[
+		Quantos golpes faltam para o estágio inteiro (fileiras de pé) com o
+		golpe atual. Acima de WEAK_HITS (~1 minuto segurando o clique), avisa
+		que o jogador está fraco para esta barreira em vez de deixá-lo bater
+		sem perceber progresso.
+	]]
+	local remaining = 0
+	for _, other in rows do
+		if other:GetAttribute("StageId") == stageId and other:GetAttribute("Broken") ~= true then
+			remaining += math.max(tonumber(other:GetAttribute("Hp")) or 0, 0)
+		end
+	end
+	local hits = if perClick > 0 then math.ceil(remaining / perClick) else math.huge
+	setBar(math.clamp(fraction, 0, 1))
+	if hits > WEAK_HITS then
+		rewardLabel.Text = Text.Get("corridor.weak")
+		Build.paint(rewardLabel, "TextColor3", Theme.Colors.Bad)
+		return
+	end
+	Build.paint(rewardLabel, "TextColor3", Theme.Colors.Power)
 	-- O painel completo abre no clique; aqui fica só o essencial.
-	rewardLabel.Text = Text.Get("corridor.reward", {
+	rewardLabel.Text = Text.Get("corridor.hits", { hits = NumberFormat.Short(hits) }) .. "  ·  " .. Text.Get("corridor.reward", {
 		wins = NumberFormat.Short(math.max(table.unpack(stage.Pads))),
 		icon = Theme.Icons.Wins,
 	})
-	setBar(math.clamp(fraction, 0, 1))
 end
 
 function CorridorHudController.Init()
@@ -162,7 +185,9 @@ function CorridorHudController.Init()
 		Font = Theme.FontDisplay,
 		TextSize = 19,
 		Position = UDim2.fromOffset(12, 4),
-		Size = UDim2.new(1, -24, 0, 22),
+		-- Metade esquerda: a direita é de golpes/prêmio (não se sobrepõem).
+		Size = UDim2.new(0.5, -12, 0, 22),
+		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = panel,
 	})
@@ -172,7 +197,8 @@ function CorridorHudController.Init()
 		TextColor3 = Theme.Colors.Power,
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -12, 0, 6),
-		Size = UDim2.new(0.45, -12, 0, 20),
+		Size = UDim2.new(0.5, -12, 0, 20),
+		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = panel,
 	})

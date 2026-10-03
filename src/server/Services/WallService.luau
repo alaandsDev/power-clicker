@@ -109,20 +109,67 @@ local function restore(state: StageState)
 	end
 end
 
+-- Is any character standing inside the stage's block of rows right now?
+local function someoneInside(state: StageState): boolean
+	local minX, maxX = math.huge, -math.huge
+	local halfZ, top = 0, 0
+	for _, row in state.Rows do
+		local part = row.Part
+		minX = math.min(minX, part.Position.X - part.Size.X / 2)
+		maxX = math.max(maxX, part.Position.X + part.Size.X / 2)
+		halfZ = math.max(halfZ, part.Size.Z / 2)
+		top = math.max(top, part.Position.Y + part.Size.Y / 2)
+	end
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if root and root:IsA("BasePart") then
+			local p = root.Position
+			if p.X > minX - 3 and p.X < maxX + 3 and math.abs(p.Z) <= halfZ + 1 and p.Y < top + 4 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+--[[
+	Fecha a sala quando a janela acaba — mas nunca em cima de alguém: se um
+	personagem ainda estiver dentro do bloco de fileiras, espera ele sair
+	(fileiras sólidas surgindo em volta de um personagem o prendiam ou o
+	arremessavam). A janela dos pads acaba no horário de qualquer jeito.
+]]
+local function restoreWhenClear(state: StageState, opening: number)
+	if state.Opening ~= opening then
+		return
+	end
+	if someoneInside(state) then
+		task.delay(1, restoreWhenClear, state, opening)
+		return
+	end
+	restore(state)
+end
+
 local function characterPosition(player: Player): Vector3?
 	local character = player.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	return if root and root:IsA("BasePart") then root.Position else nil
 end
 
--- The standing row closest to the player, if any is in reach.
+--[[
+	The standing row closest to the player, if any is in reach — and only rows
+	IN FRONT of the player (the corridor runs to +X, so the row's centre must
+	be ahead of the player). Without this a player who walked through could
+	keep hitting the barrier from behind; now that a win pad no longer sends
+	the player back to the plaza, that would turn the room into a farm.
+]]
 local function nearestRow(position: Vector3): (StageState?, RowState?, number)
 	local bestStage: StageState? = nil
 	local bestRow: RowState? = nil
 	local bestDistance = WallConfig.HitRange
 	for _, state in stages do
 		for _, row in state.Rows do
-			if row.Standing then
+			if row.Standing and position.X < row.Part.Position.X then
 				local distance = (row.Part.Position - position).Magnitude
 				if distance <= bestDistance then
 					bestStage, bestRow, bestDistance = state, row, distance
@@ -191,8 +238,11 @@ local function onPadTouched(pad: BasePart, hit: BasePart)
 	local granted = CurrencyService.Add(player, WallConfig.Currency, payout, "WinPad:" .. state.Stage.Id)
 	NetService.FireClient("Notify", player, "WinPad", { StageId = state.Stage.Id, Wins = granted, Share = share })
 	WallService.Claimed:Fire(player, state.Stage.Id, granted)
-	-- Out with the prize: the run ends at the plaza, not inside the room.
-	WorldService.SendToSpawn(player)
+	--[[
+		O prêmio NÃO manda mais o jogador para a praça: quem quebrou a barreira
+		segue andando para a próxima área ("quebrei e agora passo"). Voltar é
+		pelo pad vermelho de voltar, que continua em cada estágio.
+	]]
 end
 
 -- Finds the corridor once the world exists.
@@ -282,17 +332,14 @@ function WallService.OnClick(player: Player, damage: number): number
 	state.Opening += 1
 	state.OpenUntil = os.clock() + WallConfig.OpenSeconds
 	local opening = state.Opening
-	task.delay(WallConfig.OpenSeconds, function()
-		if state.Opening == opening then
-			restore(state)
-		end
-	end)
+	task.delay(WallConfig.OpenSeconds, restoreWhenClear, state, opening)
 	--[[
 		First time this player gets through this stage: record it and pay the
 		gems. Marked BEFORE granting, so a failure in the grant cannot pay it
 		twice on a retry.
 	]]
 	local tower = data.Tower
+	local firstClear = 0
 	if not tower.Cleared[state.Stage.Id] then
 		tower.Cleared[state.Stage.Id] = true
 		tower.Highest = math.max(tower.Highest, state.Stage.Order)
@@ -304,13 +351,20 @@ function WallService.OnClick(player: Player, damage: number): number
 				Order = state.Stage.Order,
 				Gems = gems,
 			})
+			firstClear = gems
 		end
 	end
 
+	-- Todos recebem (a barreira some para todos), mas cada cliente decide: quem
+	-- quebrou vê o anúncio grande; quem está perto, um aviso curto; o resto,
+	-- nada (antes era um aviso para o servidor inteiro a cada quebra).
 	NetService.FireAllClients("Notify", "WallBroken", {
 		StageId = state.Stage.Id,
+		Order = state.Stage.Order,
 		Seconds = WallConfig.OpenSeconds,
 		By = player.DisplayName,
+		ById = player.UserId,
+		FirstClearGems = firstClear,
 	})
 	WallService.Opened:Fire(player, state.Stage.Id)
 	log:Info(string.format("user=%d opened stage %s", player.UserId, state.Stage.Id))

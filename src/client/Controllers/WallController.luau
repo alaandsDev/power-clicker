@@ -26,9 +26,13 @@ local Text = require(Shared:WaitForChild("Localization"))
 local SwordConfig = require(Shared:WaitForChild("Config"):WaitForChild("SwordConfig"))
 
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Build = require(script.Parent.Parent.UI.Build)
+local Anim = require(script.Parent.Parent.UI.Anim)
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 local SoundController = require(script.Parent.SoundController)
 local NotificationController = require(script.Parent.NotificationController)
+local HudController = require(script.Parent.HudController)
+local DataController = require(script.Parent.DataController)
 
 type Sign = {
 	Gui: BillboardGui,
@@ -52,6 +56,13 @@ local HIT_FLASH_SECONDS = 0.08
 local HIT_MIN_INTERVAL = 0.09
 local BREAK_PIECES = 8
 local BREAK_SECONDS = 0.5
+-- Faísca no PONTO atingido (só para os golpes do próprio jogador, perto da
+-- barreira): 3 lascas pequenas, pool fixo, nunca peças físicas.
+local SPARK_PIECES = 3
+local SPARK_SECONDS = 0.22
+local SPARK_RANGE = WallConfig.HitRange + 6
+-- Anúncio "BARREIRA N DESTRUÍDA!": curto, no topo, não bloqueia nada.
+local BANNER_SECONDS = 2.6
 
 local WallController = {}
 
@@ -63,6 +74,11 @@ local lastHp: { [BasePart]: number } = {}
 local debris: { BasePart } = {}
 local debrisIndex = 0
 local debrisFolder: Folder
+local sparks: { BasePart } = {}
+local sparkIndex = 0
+local banner: TextLabel
+local bannerStamp = 0
+local objectiveChip: TextLabel
 
 local function stageOrder(stageId: string): number
 	for _, stage in WallConfig.Stages do
@@ -94,6 +110,44 @@ local function swordColor(): Color3
 end
 
 --[[
+	Faísca no ponto da face da fileira mais perto do personagem local: só se
+	ele estiver perto (os golpes de outros jogadores longe não geram nada).
+]]
+local function spark(row: BasePart)
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not root or not root:IsA("BasePart") or #sparks == 0 then
+		return
+	end
+	local position = root.Position
+	if (row.Position - position).Magnitude > SPARK_RANGE or position.X >= row.Position.X then
+		return
+	end
+	SoundController.Play("WallHit")
+	local half = row.Size / 2
+	local hit = Vector3.new(
+		row.Position.X - half.X - 0.3,
+		math.clamp(position.Y + 1, row.Position.Y - half.Y + 1, row.Position.Y + half.Y - 1),
+		math.clamp(position.Z, row.Position.Z - half.Z + 1, row.Position.Z + half.Z - 1)
+	)
+	local colour = swordColor()
+	for _ = 1, SPARK_PIECES do
+		sparkIndex = (sparkIndex % #sparks) + 1
+		local piece = sparks[sparkIndex]
+		piece.Color = colour
+		piece.Transparency = 0
+		piece.Size = Vector3.new(0.7, 0.7, 0.7)
+		piece.CFrame = CFrame.new(hit)
+		local fly = hit + Vector3.new(-math.random(10, 30) / 10, math.random(-20, 25) / 10, math.random(-25, 25) / 10)
+		TweenService:Create(piece, TweenInfo.new(SPARK_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			CFrame = CFrame.new(fly),
+			Transparency = 1,
+			Size = Vector3.new(0.2, 0.2, 0.2),
+		}):Play()
+	end
+end
+
+--[[
 	Rachadura progressiva: quanto menos HP, mais a fileira escurece e fica
 	transparente. Não é textura de rachadura (seria um asset por material);
 	é a leitura mais honesta que dá para fazer só com propriedades da peça.
@@ -105,6 +159,7 @@ local function showDamage(row: BasePart, fraction: number)
 	end
 	lastHitAt[row] = now
 	row.LocalTransparencyModifier = (1 - fraction) * 0.35
+	spark(row)
 	local flash = swordColor()
 	local original = row.Color
 	row.Color = original:Lerp(flash, 0.5)
@@ -115,13 +170,25 @@ local function showDamage(row: BasePart, fraction: number)
 	end)
 end
 
--- Estilhaços quando a fileira cai: peças locais, recicladas de um pool.
+-- Estilhaços quando a fileira cai: peças locais, recicladas de um pool. Metade
+-- na cor da fileira, metade na cor dos detalhes (tábuas, juntas) ou cinza de
+-- poeira, para ler como algo se despedaçando e não como um bloco sumindo.
 local function burst(row: BasePart)
+	SoundController.Play("WallBreak")
+	local detailColour = Color3.fromRGB(150, 146, 140)
+	for _, child in row:GetChildren() do
+		if child:IsA("BasePart") and child:GetAttribute("WallDetail") == true then
+			detailColour = child.Color
+			break
+		end
+	end
+	local pieceIndex = 0
 	local colour = row.Color
 	for _ = 1, BREAK_PIECES do
 		debrisIndex = (debrisIndex % #debris) + 1
 		local piece = debris[debrisIndex]
-		piece.Color = colour
+		pieceIndex += 1
+		piece.Color = if pieceIndex % 2 == 0 then detailColour else colour
 		piece.Transparency = 0.1
 		piece.CFrame = row.CFrame
 			* CFrame.new(
@@ -268,6 +335,20 @@ local function scan()
 			piece.Parent = debrisFolder
 			debris[index] = piece
 		end
+		for index = 1, SPARK_PIECES * 3 do
+			local piece = Instance.new("Part")
+			piece.Name = "Spark" .. index
+			piece.Size = Vector3.new(0.7, 0.7, 0.7)
+			piece.Material = Enum.Material.Neon
+			piece.Anchored = true
+			piece.CanCollide = false
+			piece.CanQuery = false
+			piece.CanTouch = false
+			piece.CastShadow = false
+			piece.Transparency = 1
+			piece.Parent = debrisFolder
+			sparks[index] = piece
+		end
 	end
 	local map = Workspace:FindFirstChild("Map")
 	local worlds = if map then map:FindFirstChild("Worlds") else nil
@@ -300,7 +381,98 @@ local function scan()
 	scanned = next(rowsByStage) ~= nil
 end
 
+-- O personagem local está perto das fileiras desse estágio?
+local function nearStage(stageId: any): boolean
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local rows = if type(stageId) == "string" then rowsByStage[stageId] else nil
+	if not root or not root:IsA("BasePart") or not rows or not rows[1] then
+		return false
+	end
+	return (rows[1].Position - root.Position).Magnitude <= WallConfig.HitRange * 4
+end
+
+--[[
+	"BARREIRA N DESTRUÍDA!" para quem quebrou: estágio, gemas da primeira vez
+	e para onde ir agora. Some sozinho em poucos segundos.
+]]
+local function showDestroyed(payload: any)
+	local order = tonumber(payload.Order) or stageOrder(tostring(payload.StageId))
+	local lines = { Text.Get("wall.destroyed", { order = tostring(order) }) }
+	local gems = tonumber(payload.FirstClearGems) or 0
+	if gems > 0 then
+		table.insert(lines, Text.Get("wall.destroyedGems", { gems = NumberFormat.Short(gems), icon = Theme.Icons.Gems }))
+	end
+	local nextStage = WallConfig.Stages[order + 1]
+	if nextStage then
+		table.insert(lines, Text.Get("wall.destroyedNext", { next = tostring(nextStage.Order), name = stageName(nextStage.Id) }))
+	else
+		table.insert(lines, Text.Get("wall.destroyedLast"))
+	end
+	banner.Text = table.concat(lines, "\n")
+	banner.Size = UDim2.fromOffset(470, 30 + 22 * (#lines - 1))
+	banner.Visible = true
+	Anim.PopIn(banner, 0.6, 0.3)
+	SoundController.Play("Reward")
+	bannerStamp += 1
+	local stamp = bannerStamp
+	task.delay(BANNER_SECONDS, function()
+		if bannerStamp == stamp then
+			banner.Visible = false
+		end
+	end)
+end
+
+-- Objetivo até a primeira barreira cair: só no lobby (perto da barreira, a
+-- faixa do corredor assume) e some de vez depois do primeiro estágio.
+local function refreshObjective()
+	local tower = DataController.Get("Tower")
+	local highest = if type(tower) == "table" then tonumber(tower.Highest) or 0 else 0
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local inLobby = root ~= nil and root:IsA("BasePart") and root.Position.X < WallConfig.Layout.StartX + 40
+	objectiveChip.Visible = DataController.IsLoaded() and highest < 1 and inLobby
+end
+
 function WallController.Init()
+	banner = Build.label({
+		Name = "WallBanner",
+		Text = "",
+		Font = Theme.FontDisplay,
+		TextSize = 20,
+		TextWrapped = true,
+		TextColor3 = Theme.Colors.Power,
+		BackgroundColor3 = Theme.Hud.Surface,
+		BackgroundTransparency = 0.15,
+		Size = UDim2.fromOffset(470, 30),
+		Visible = false,
+		ZIndex = 25,
+		LayoutOrder = 1,
+		Parent = HudController.GetTopStack(),
+	})
+	Build.corner(banner, UDim.new(0, 12))
+	Build.textStroke(banner, 2)
+	objectiveChip = Build.label({
+		Name = "ObjectiveChip",
+		Text = Text.Get("objective.firstBarrier"),
+		TextSize = 16,
+		BackgroundColor3 = Theme.Hud.Surface,
+		BackgroundTransparency = 0.25,
+		Size = UDim2.fromOffset(0, 26),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Visible = false,
+		LayoutOrder = 6,
+		Parent = HudController.GetTopStack(),
+	})
+	Build.corner(objectiveChip, UDim.new(1, 0))
+	Build.new("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = objectiveChip })
+	task.spawn(function()
+		while true do
+			refreshObjective()
+			task.wait(0.5)
+		end
+	end)
+
 	ClientNet.On("Notify", function(kind: any, payload: any)
 		if type(payload) ~= "table" then
 			return
@@ -312,16 +484,19 @@ function WallController.Init()
 				icon = Theme.Icons.Wins,
 			}), "Good")
 		elseif kind == "WallBroken" then
-			SoundController.Play("Rebirth")
-			NotificationController.Show(Text.Get("wall.opened", {
-				seconds = tostring(payload.Seconds or 0),
-			}), "Good")
+			local local_ = Players.LocalPlayer
+			if payload.ById == local_.UserId then
+				showDestroyed(payload)
+			elseif nearStage(payload.StageId) then
+				NotificationController.Show(Text.Get("wall.openedNear", {
+					order = tostring(payload.Order or stageOrder(tostring(payload.StageId))),
+					name = tostring(payload.By or "?"),
+				}), "Info")
+			end
 		elseif kind == "TowerCleared" then
+			-- As gemas da primeira vez entram no anúncio grande (WallBroken traz
+			-- FirstClearGems); aqui só o som.
 			SoundController.Play("Rebirth")
-			NotificationController.Show(Text.Get("wall.firstClear", {
-				order = tostring(payload.Order or 0),
-				gems = NumberFormat.Short(tonumber(payload.Gems) or 0),
-			}), "Good")
 		elseif kind == "WallRow" then
 			NotificationController.Show(Text.Get("wall.rowsLeft", {
 				count = tostring(payload.Remaining or 0),

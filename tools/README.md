@@ -36,6 +36,7 @@ lune run tools/lune/run_tests.luau      # specs de src/server/Tests (o mesmo Tes
 lune run tools/lune/check_world.luau    # WorldBuilder + geometria do mapa
 lune run tools/lune/check_hud.luau      # layout do HUD em 5 resoluções/entradas
 lune run tools/lune/check_sword.luau    # espada equipada aplicada ao personagem (SwordService real)
+lune run tools/lune/check_corridor.luau # loop do Caminho do Poder (WallService real sobre o mapa)
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
@@ -59,6 +60,14 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   respawn, troca pelo remote, reentrada, dados migrados, equipada inválida ou
   não possuída (cai para a inicial) e corridas (uma espada só, nada na
   mochila). O `EquipTool` simulado imita o Studio: sem mão, a espada se perde.
+- **check_corridor** — o `WallService` real sobre o mapa gerado: ordem das
+  barreiras; golpe de frente quebra e de trás não; detalhes somem/voltam com a
+  fileira e nunca colidem; abertura paga o pad uma vez por abertura e não
+  teleporta; gemas da primeira vez uma vez só; a barreira não se refaz com
+  alguém dentro; respawn não perde progresso; efeitos não mexem no HP; não dá
+  para contornar/pular. Imprime a distância/tempo de volta do spawn até cada
+  barreira. (Adapta só no carregamento: `.Position` -> `.CFrame.Position` e
+  janela aberta de 0,5 s.)
 - **check_hud** — inicializa os controllers do cliente na ordem do
   `ClientBootstrap` e mede o HUD com tudo visível (pior caso, incluindo
   tutorial e avisos): sem sobreposição, tudo dentro da tela; faixa de
