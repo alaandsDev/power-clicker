@@ -13,7 +13,13 @@
 	  - nenhuma sobreposição dentro do rodapé (nível · combo · overdrive ·
 	    barra · botão);
 	  - tudo dentro da tela;
-	  - números flutuantes nascem ACIMA da faixa do rodapé.
+	  - tutorial e avisos (toasts) também entram no pior caso;
+	  - faixa de feedback: no máximo 6 números de clique e 3 do automático;
+	    o trajeto deles não cruza moedas, menu, rodapé nem botão e não sobe
+	    sobre o personagem (acima de 60% da altura).
+
+	REQUER VALIDAÇÃO NO STUDIO: tamanho real do texto (TextScaled, fontes),
+	a câmera/personagem real e a sensação de leitura — este script mede caixas.
 
 	Resoluções são o "canvas" de referência: o UIController escala a tela
 	inteira de forma uniforme a partir de 1280x720, então um celular em
@@ -306,7 +312,9 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 
 	local problems = {}
 	-- Pior caso: tudo que pode aparecer, visível ao mesmo tempo.
-	for _, n in { "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "Combo", "QuestChip", "MenuSecondary" } do
+	-- Inclui tutorial e avisos: a versão anterior deixava os dois de fora e
+	-- declarou "OK" enquanto o tutorial cobria as moedas no Studio.
+	for _, n in { "TutorialBanner", "Toast1", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "Combo", "QuestChip", "MenuSecondary" } do
 		local g = find(n)
 		if g then
 			g.Visible = true
@@ -320,13 +328,18 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 			g.Size = roblox.UDim2.fromOffset(260, g.Size.Y.Offset)
 		end
 	end
+	local toasts = find("Toasts")
+	local firstToast = find("Toast1")
+	if toasts and firstToast then -- AutomaticSize Y: altura de um aviso visível
+		toasts.Size = roblox.UDim2.fromOffset(toasts.Size.X.Offset, firstToast.Size.Y.Offset)
+	end
 	local secondary = find("MenuSecondary")
 	if secondary then
 		secondary.Size = roblox.UDim2.fromOffset(secondary.Size.X.Offset, gridHeight(secondary))
 	end
 
 	local items = {}
-	for _, n in { "Power", "Gems", "Wins", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" } do
+	for _, n in { "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" } do
 		local g = find(n)
 		if g then
 			local p, s = rectOf(g)
@@ -337,7 +350,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 		return a.x < b.x + b.w - 0.5 and b.x < a.x + a.w - 0.5 and a.y < b.y + b.h - 0.5 and b.y < a.y + a.h - 0.5
 	end
 	for _, group in {
-		{ "Power", "Gems", "Wins", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "ClickButton" },
+		{ "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "ClickButton" },
 		{ "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" },
 	} do
 		for i = 1, #group do
@@ -354,11 +367,60 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 			table.insert(problems, "fora da tela: " .. name)
 		end
 	end
+	--[[
+		Faixa de feedback (números flutuantes). Usa as constantes do próprio
+		ClickController e a posição real da faixa do rodapé:
+		  - no máximo 6 números de clique e 3 do automático existindo;
+		  - o caminho inteiro de cada número (nascer -> subir) não cruza moedas,
+		    menu, faixa do rodapé nem botão, e não sobe além de 60% da altura da
+		    tela (onde fica o personagem).
+	]]
+	local clickSource = E.Client.Controllers.ClickController.Source
+	local function constant(name: string): number
+		return tonumber(string.match(clickSource, "local " .. name .. " = ([%d%.]+)")) or -1
+	end
 	local hud = loaded.HudController
+	local floatLayer = find("FloatingNumbers")
+	local clickFloats, autoFloats = 0, 0
+	if floatLayer then
+		for _, child in floatLayer:GetChildren() do
+			if string.match(child.Name, "^Float%d+$") then
+				clickFloats += 1
+			elseif string.match(child.Name, "^AutoFloat%d+$") then
+				autoFloats += 1
+			end
+		end
+	end
+	if clickFloats > 6 or clickFloats == 0 then
+		table.insert(problems, string.format("feedback: %d números de clique simultâneos (máx. 6)", clickFloats))
+	end
+	if autoFloats > 3 or autoFloats == 0 then
+		table.insert(problems, string.format("feedback: %d números do automático simultâneos (máx. 3)", autoFloats))
+	end
 	if items.ClickStatus and items.ClickButton and hud.DockHeight then
-		local floatCentre = items.ClickButton.y - hud.DockHeight() - 26
-		if floatCentre + 22 > items.ClickStatus.y + 0.5 then
-			table.insert(problems, "números flutuantes nascem em cima da faixa do rodapé")
+		local buttonTop = CH - items.ClickButton.y
+		local lift, rise, spread = constant("FLOAT_LIFT"), constant("FLOAT_RISE"), constant("FLOAT_SPREAD_X")
+		local autoRise = constant("AUTO_RISE")
+		local floatW, floatH = 240, 44
+		local startY = CH - buttonTop - hud.DockHeight() - lift
+		local click = { x = CW / 2 - spread - floatW / 2, y = startY - 14 - rise - floatH / 2, w = spread * 2 + floatW, h = 14 + rise + floatH }
+		-- Mesma posição que o ClickController usa para a trilha do automático.
+		local Theme = E.require(E.Client.UI.Theme)
+		local autoX = CW / 2 + Theme.Hud.LevelBar.X / 2 + 16
+		local autoY = CH - buttonTop - hud.DockHeight() / 2
+		local auto = { x = autoX, y = autoY - autoRise - 13, w = 160, h = autoRise + 26 }
+		for label, lane in { clique = click, automatico = auto } do
+			for _, other in { "ClickStatus", "ClickButton", "Menu", "Power", "Gems", "Wins" } do
+				if items[other] and overlap(lane, items[other]) then
+					table.insert(problems, string.format("feedback (%s): trajeto cruza %s", label, other))
+				end
+			end
+			if lane.y < CH * 0.6 then
+				table.insert(problems, string.format("feedback (%s): sobe até y=%.0f, em cima do personagem", label, lane.y))
+			end
+			if lane.x < 0 or lane.x + lane.w > CW then
+				table.insert(problems, string.format("feedback (%s): sai da tela", label))
+			end
 		end
 	end
 	return problems, initFailures

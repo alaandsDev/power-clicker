@@ -25,6 +25,7 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local Build = require(script.Parent.Parent.UI.Build)
 local UIController = require(script.Parent.UIController)
 local MenuController = require(script.Parent.MenuController)
+local HudController = require(script.Parent.HudController)
 local DataController = require(script.Parent.DataController)
 local NotificationController = require(script.Parent.NotificationController)
 
@@ -150,16 +151,17 @@ function TutorialController.Init()
 	banner = Build.label({
 		Name = "TutorialBanner",
 		Text = "",
-		TextSize = 24,
+		TextSize = 20,
 		TextWrapped = true,
 		BackgroundTransparency = 0.15,
 		BackgroundColor3 = Theme.Colors.Accent,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, Theme.Hud.Margin),
-		Size = UDim2.fromOffset(620, 50),
+		-- Primeiro item da coluna central, logo ABAIXO das moedas (antes ficava
+		-- em y = 18 e cobria Power/Gemas/Vitórias).
+		Size = UDim2.fromOffset(540, 44),
 		Visible = false,
 		ZIndex = 30,
-		Parent = UIController.GetCanvas(),
+		LayoutOrder = 0,
+		Parent = HudController.GetTopStack(),
 	})
 	Build.corner(banner, Theme.CornerSmall)
 	Build.padding(banner, 6)

@@ -28,7 +28,7 @@ local HudController = require(script.Parent.HudController)
 -- Compacta: título + tempo numa linha e a barra embaixo. Mora na coluna
 -- central ABAIXO das moedas (HudController.GetTopStack) — antes ficava em
 -- y = 76 e cobria Power/Gemas/Vitórias.
-local BAR_SIZE = Vector2.new(420, 14)
+local BAR_SIZE = Vector2.new(396, 14) -- estreita: com tudo aberto, não encosta no painel do "Mais"
 
 local EventController = {}
 

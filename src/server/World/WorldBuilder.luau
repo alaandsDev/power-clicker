@@ -190,7 +190,7 @@ local function clearOfLayout(x: number, z: number, margin: number): boolean
 		return false
 	end
 	-- Linha de visão de quem nasce até o portão: nada alto no meio dela.
-	local spawnArea = LobbyConfig.Areas.Spawn.Offset
+	local spawnArea = LobbyConfig.SpawnPoint
 	local gateX = WallConfig.Layout.StartX
 	local sx, sz = gateX - spawnArea.X, -spawnArea.Z
 	local t = math.clamp(((x - spawnArea.X) * sx + (z - spawnArea.Z) * sz) / (sx * sx + sz * sz), 0, 1)
@@ -359,21 +359,20 @@ local function buildCliffs(model: Model, origin: Vector3, palette: Palette, rng:
 end
 
 local function buildSpawn(model: Model, origin: Vector3, palette: Palette, world: WorldData, spawns: Folder, withSpawnLocation: boolean)
-	local spawnArea = areaOf("Spawn")
-	local padCenter = origin + spawnArea.Offset + Vector3.new(0, 0.3, 0)
+	local padCenter = origin + LobbyConfig.SpawnPoint + Vector3.new(0, 0.3, 0)
 	-- Tablado de pedra com friso dourado fino (antes: disco neon amarelo inteiro).
-	disc(model, padCenter, 12, 0.6, shade(LobbyConfig.Gate.Trim, 0.8), Enum.Material.SmoothPlastic)
-	disc(model, padCenter + Vector3.new(0, 0.1, 0), 11, 0.6, palette.Pad, Enum.Material.Marble)
+	disc(model, padCenter, 9, 0.6, shade(LobbyConfig.Gate.Trim, 0.8), Enum.Material.SmoothPlastic)
+	disc(model, padCenter + Vector3.new(0, 0.1, 0), 8, 0.6, palette.Pad, Enum.Material.Marble)
 	local glow = disc(model, padCenter + Vector3.new(0, 0.18, 0), 3, 0.2, LobbyConfig.Gate.Energy, Enum.Material.Neon, false)
 	glow.Transparency = 0.45
 	--[[
-		O jogador nasce OLHANDO para a entrada do Caminho do Poder. Antes o
-		marcador girava 180° e o personagem nascia de frente para o paredão
-		sul, de costas para tudo.
+		O jogador nasce olhando para +X, ao longo da avenida, de frente para o
+		portão do Caminho do Poder. A orientação é montada com fromMatrix (sem
+		lookAt) para não depender de nenhuma convenção: LookVector = +X.
+		ATENÇÃO: no Roblox a câmera NÃO acompanha o PivotTo do servidor; quem
+		alinha a câmera depois do teleporte é o SpawnCameraController (cliente).
 	]]
-	local gateTarget = origin + Vector3.new(WallConfig.Layout.StartX, padCenter.Y - origin.Y + 3, 0)
-	local spawnFrame = CFrame.lookAt(padCenter + Vector3.new(0, 3, 0), gateTarget)
-
+	local spawnFrame = CFrame.fromMatrix(padCenter + Vector3.new(0, 3, 0), Vector3.new(0, 0, 1), Vector3.new(0, 1, 0))
 	local marker = Instance.new("Part")
 	marker.Name = world.SpawnName
 	marker:SetAttribute("TODO_ASSET", true)
@@ -1115,44 +1114,202 @@ local function buildPathGate(model: Model, origin: Vector3)
 	local crownTop = top + gate.LintelHeight + 6
 	block(model, CFrame.new(origin + Vector3.new(x, top + gate.LintelHeight + 3, 0)), Vector3.new(gate.LintelDepth - 6, 6, spanZ * 0.45), shade(gate.Stone, 0.9), Enum.Material.Slate)
 
-	-- Placa presa na face da verga que olha para a praça.
+	-- Placa presa na face da verga que olha para a praça: quase a verga
+	-- inteira, fundo escuro e letras douradas grossas, sem emoji (emoji num
+	-- TextScaled encolhe o texto todo).
+	local plateWidth = spanZ * 0.78
+	local plateHeight = gate.LintelHeight - 2.4
 	local plate = block(
 		model,
 		CFrame.lookAt(origin + Vector3.new(x - gate.LintelDepth / 2 - 0.3, lintelY, 0), origin + Vector3.new(x - gate.LintelDepth, lintelY, 0)),
-		Vector3.new(spanZ * 0.62, gate.LintelHeight - 2, 0.6),
-		Color3.fromRGB(34, 38, 56),
-		Enum.Material.Slate
+		Vector3.new(plateWidth, plateHeight, 0.6),
+		Color3.fromRGB(26, 30, 48),
+		Enum.Material.SmoothPlastic
 	)
 	plate.Name = "GateSign"
+	-- Moldura dourada fina em volta da placa.
+	for _, edge in { -1, 1 } do
+		block(model, CFrame.new(origin + Vector3.new(x - gate.LintelDepth / 2 - 0.35, lintelY + edge * (plateHeight / 2 + 0.4), 0)), Vector3.new(0.7, 0.8, plateWidth + 1.6), gate.Trim, Enum.Material.Metal, false)
+	end
 	local surface = Instance.new("SurfaceGui")
 	surface.Face = Enum.NormalId.Front
 	surface.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	surface.PixelsPerStud = 24
+	surface.PixelsPerStud = 30
 	surface.LightInfluence = 0
+	surface.MaxDistance = 1000
 	local signLabel = Instance.new("TextLabel")
-	signLabel.Size = UDim2.fromScale(1, 1)
+	signLabel.Size = UDim2.fromScale(0.96, 0.86)
+	signLabel.Position = UDim2.fromScale(0.02, 0.07)
 	signLabel.BackgroundTransparency = 1
 	signLabel.Font = Enum.Font.GothamBlack
 	signLabel.TextScaled = true
-	signLabel.TextColor3 = gate.Trim
-	signLabel.TextStrokeTransparency = 0.4
-	signLabel.Text = "⚔️ " .. string.upper(Text.GetFor(nil, "area.tower")) .. " ⚔️"
+	signLabel.TextColor3 = Color3.fromRGB(255, 214, 110)
+	signLabel.TextStrokeColor3 = Color3.fromRGB(60, 34, 0)
+	signLabel.TextStrokeTransparency = 0.2
+	signLabel.Text = string.upper(Text.GetFor(nil, "area.tower"))
 	signLabel.Parent = surface
 	surface.Parent = plate
 
-	-- A espada de energia, cravada na coroa com a ponta para baixo.
-	local swordX = x
-	local bladeHeight = gate.SwordHeight * 0.7
-	local blade = block(model, CFrame.new(origin + Vector3.new(swordX, crownTop + bladeHeight / 2 - 4, 0)), Vector3.new(1.6, bladeHeight, 5), gate.Energy, Enum.Material.Neon, false)
+	--[[
+		A ESPADA, de pé sobre a coroa, ponta para cima — a silhueta de espada
+		que qualquer um reconhece: pomo, empunhadura, guarda larga, lâmina de
+		aço claro com ponta e um fio de energia nas duas bordas. Antes era uma
+		barra neon com a ponta enterrada na coroa, que de longe lia como um
+		tubo de luz.
+	]]
+	local steel = Color3.fromRGB(214, 224, 236)
+	local thickness = 1.2
+	local bladeWidth = 6
+	local tipHeight = 6
+	local gripHeight = 6
+	local guardHeight = 2.4
+	local bladeHeight = gate.SwordHeight - gripHeight - guardHeight - tipHeight - 2
+	local baseY = crownTop
+	ball(model, origin + Vector3.new(x, baseY + 1.6, 0), 3.6, gate.Trim, Enum.Material.Metal, false)
+	block(model, CFrame.new(origin + Vector3.new(x, baseY + 2 + gripHeight / 2, 0)), Vector3.new(1.8, gripHeight, 1.8), Color3.fromRGB(70, 46, 34), Enum.Material.Wood, false)
+	local guardY = baseY + 2 + gripHeight + guardHeight / 2
+	block(model, CFrame.new(origin + Vector3.new(x, guardY, 0)), Vector3.new(3, guardHeight, 20), gate.Trim, Enum.Material.Metal, false)
+	for _, side in { -1, 1 } do
+		-- Pontas da guarda levemente viradas para cima.
+		block(model, CFrame.new(origin + Vector3.new(x, guardY + 1.2, side * 10.4)) * CFrame.Angles(math.rad(-25 * side), 0, 0), Vector3.new(3, 3.2, 1.6), gate.Trim, Enum.Material.Metal, false)
+	end
+	local bladeBottom = guardY + guardHeight / 2
+	local bladeCentre = origin + Vector3.new(x, bladeBottom + bladeHeight / 2, 0)
+	local blade = block(model, CFrame.new(bladeCentre), Vector3.new(thickness, bladeHeight, bladeWidth), steel, Enum.Material.Metal, false)
 	blade.Name = "GateSword"
-	light(blade, gate.Energy, 46, 2)
-	local guardY = crownTop + bladeHeight - 4
-	block(model, CFrame.new(origin + Vector3.new(swordX, guardY + 1, 0)), Vector3.new(3, 2.2, 16), gate.Trim, Enum.Material.Metal, false)
-	block(model, CFrame.new(origin + Vector3.new(swordX, guardY + 5.5, 0)), Vector3.new(2, 7, 2), Color3.fromRGB(70, 50, 40), Enum.Material.Wood, false)
-	ball(model, origin + Vector3.new(swordX, guardY + 10, 0), 3.6, gate.Trim, Enum.Material.Metal, false)
+	-- Sulco central (fuller) e fio de energia nas bordas.
+	block(model, CFrame.new(bladeCentre + Vector3.new(-thickness / 2 - 0.05, -1, 0)), Vector3.new(0.2, bladeHeight - 4, 1), Color3.fromRGB(150, 165, 185), Enum.Material.Metal, false)
+	for _, side in { -1, 1 } do
+		local edge = block(model, CFrame.new(bladeCentre + Vector3.new(0, 0, side * (bladeWidth / 2 + 0.25))), Vector3.new(thickness + 0.3, bladeHeight, 0.5), gate.Energy, Enum.Material.Neon, false)
+		edge.Name = "GateSwordEdge"
+	end
+	-- Ponta: duas cunhas formando o triângulo.
+	local tipY = bladeBottom + bladeHeight + tipHeight / 2
+	for _, side in { -1, 1 } do
+		local tip = Instance.new("WedgePart")
+		tip.Name = "GateSwordTip"
+		tip.Anchored = true
+		tip.CanCollide = false
+		tip.Size = Vector3.new(thickness, tipHeight, bladeWidth / 2)
+		-- A face vertical da cunha (local +Z) fica no meio da lâmina.
+		tip.CFrame = CFrame.new(origin + Vector3.new(x, tipY, side * bladeWidth / 4)) * CFrame.Angles(0, if side > 0 then math.pi else 0, 0)
+		tip.Color = steel
+		tip.Material = Enum.Material.Metal
+		tip.TopSurface = Enum.SurfaceType.Smooth
+		tip.BottomSurface = Enum.SurfaceType.Smooth
+		tip.Parent = model
+	end
+	light(blade, gate.Energy, 40, 1.6)
 end
 
 -- ── Win corridor ────────────────────────────────────────────────────────────
+
+--[[
+	APARÊNCIA DE OBSTÁCULO QUEBRÁVEL. Cada fileira era um bloco liso de uma cor
+	— a barreira 1, vista da entrada, parecia só uma parede marrom. Agora a
+	face da fileira que dá para o jogador (-X) ganha detalhes do tema:
+		Planks — tábuas com frestas, travessas em X e cintas de ferro (madeira)
+		Bricks — juntas de alvenaria desencontradas (pedra, ruínas, vulcânica)
+		Cracks — moldura e rachaduras em raio (gelo, cristal, magma)
+		Plates — placas rebitadas com emendas (ouro, energia, colosso)
+	Os detalhes são FILHOS da fileira, sem colisão, sem consulta e sem toque:
+	não mudam HP, alcance, colisão nem lógica. O WallService esconde e mostra
+	os filhos junto com a fileira (atributo WallDetail).
+]]
+local BARRIER_PATTERNS: { [string]: string } = {
+	Wood = "Planks",
+	Ruins = "Bricks",
+	Ice = "Cracks",
+	Crystal = "Cracks",
+	Gold = "Plates",
+	Ancient = "Bricks",
+	Volcanic = "Bricks",
+	Magma = "Cracks",
+	Tech = "Plates",
+	Colossus = "Plates",
+}
+
+local function barrierDetails(row: BasePart, stage: any, thickness: number)
+	local pattern = BARRIER_PATTERNS[stage.Id] or "Bricks"
+	local size = row.Size
+	local height, width = size.Y, size.Z
+	-- Plano da face da frente, um pouco para fora dela.
+	local faceX = -thickness / 2 - 0.15
+	local dark = shade(stage.Color, 0.55)
+	local light = shade(stage.Color, 1.18)
+	local glow = stage.Accent
+	local function piece(localFrame: CFrame, pieceSize: Vector3, color: Color3, material: Enum.Material?)
+		local part = makePart(row, {
+			Name = "WallDetail",
+			Size = pieceSize,
+			CFrame = row.CFrame * localFrame,
+			Color = color,
+			Material = material or row.Material,
+			CanCollide = false,
+			CastShadow = false,
+		})
+		part.CanQuery = false
+		part.CanTouch = false
+		part:SetAttribute("WallDetail", true)
+		part:SetAttribute("BaseTransparency", 0)
+		return part
+	end
+	local function strip(y: number, z: number, length: number, angle: number, thick: number, color: Color3, material: Enum.Material?)
+		piece(CFrame.new(faceX, y, z) * CFrame.Angles(angle, 0, 0), Vector3.new(0.4, thick, length), color, material)
+	end
+	if pattern == "Planks" then
+		for index = 1, 4 do
+			strip(-height / 2 + index * height / 5, 0, width - 1, 0, 0.5, dark)
+		end
+		local diagonal = math.atan2(height - 6, width - 6)
+		strip(0, 0, math.sqrt((height - 6) ^ 2 + (width - 6) ^ 2), diagonal, 2.2, light)
+		strip(0, 0, math.sqrt((height - 6) ^ 2 + (width - 6) ^ 2), -diagonal, 2.2, light)
+		for _, y in { -height / 2 + 2.5, height / 2 - 2.5 } do
+			strip(y, 0, width - 0.5, 0, 1.6, Color3.fromRGB(70, 70, 78), Enum.Material.Metal)
+		end
+	elseif pattern == "Bricks" then
+		local courses = 4
+		local courseHeight = height / courses
+		for index = 1, courses - 1 do
+			strip(-height / 2 + index * courseHeight, 0, width - 0.5, 0, 0.6, dark)
+		end
+		for course = 1, courses do
+			local y = -height / 2 + (course - 0.5) * courseHeight
+			local joints = if course % 2 == 1 then { -width / 4, width / 4 } else { 0 }
+			for _, z in joints do
+				piece(CFrame.new(faceX, y, z), Vector3.new(0.4, courseHeight - 0.6, 0.6), dark)
+			end
+		end
+		if stage.Neon or stage.Id == "Volcanic" then
+			-- Fissura incandescente atravessando os blocos.
+			strip(height * 0.05, width * 0.08, height * 0.7, math.rad(62), 0.6, glow, Enum.Material.Neon)
+		end
+	elseif pattern == "Cracks" then
+		for _, y in { -height / 2 + 1, height / 2 - 1 } do
+			strip(y, 0, width - 0.5, 0, 1.2, dark)
+		end
+		-- Rachadura em raio a partir de um ponto de impacto.
+		local centre = Vector3.new(0, height * 0.08, -width * 0.06)
+		for index, angle in { 20, 75, 140, 205, 290 } do
+			local radians = math.rad(angle)
+			local length = height * (0.28 + 0.06 * (index % 3))
+			local offset = Vector3.new(0, math.sin(radians) * length / 2, math.cos(radians) * length / 2)
+			-- Rachadura grossa e clara (gelo) ou incandescente (cristal, magma):
+			-- fina e escura, de longe ela some.
+			piece(CFrame.new(faceX, centre.Y + offset.Y, centre.Z + offset.Z) * CFrame.Angles(-radians, 0, 0), Vector3.new(0.4, 1.1, length), if stage.Neon then glow else light:Lerp(Color3.new(1, 1, 1), 0.6), if stage.Neon then Enum.Material.Neon else Enum.Material.SmoothPlastic)
+		end
+	else -- Plates
+		strip(0, 0, width - 0.5, 0, 0.7, dark, Enum.Material.Metal)
+		piece(CFrame.new(faceX, 0, 0), Vector3.new(0.4, height - 1, 0.7), dark, Enum.Material.Metal)
+		for _, y in { -height / 2 + 1, height / 2 - 1 } do
+			strip(y, 0, width - 0.5, 0, 1.2, light, Enum.Material.Metal)
+		end
+		for _, corner in { Vector2.new(-1, -1), Vector2.new(-1, 1), Vector2.new(1, -1), Vector2.new(1, 1) } do
+			local rivet = piece(CFrame.new(faceX - 0.2, corner.Y * height / 4, corner.X * width / 4), Vector3.new(1.4, 1.4, 1.4), if stage.Neon then glow else light, if stage.Neon then Enum.Material.Neon else Enum.Material.Metal)
+			rivet.Shape = Enum.PartType.Ball
+		end
+	end
+end
 
 --[[
 	O CORREDOR: dez áreas temáticas em linha reta a leste da praça, todas no
@@ -1291,6 +1448,7 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 			if stage.Neon then
 				light(part, stage.Accent, 24, 1.2)
 			end
+			barrierDetails(part, stage, layout.RowThickness)
 		end
 
 		-- Arco emoldurando a barreira: o portão que marca o checkpoint.

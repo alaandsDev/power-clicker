@@ -91,6 +91,14 @@ local function setRow(row: RowState, hp: number, standing: boolean)
 	row.Part:SetAttribute("Broken", not standing)
 	row.Part.Transparency = if standing then 0 else 1
 	row.Part.CanCollide = standing
+	-- Detalhes visuais da fileira (tábuas, juntas, rachaduras: WorldBuilder)
+	-- somem e voltam junto com ela. Só aparência; não têm colisão.
+	for _, child in row.Part:GetChildren() do
+		if child:IsA("BasePart") and child:GetAttribute("WallDetail") == true then
+			local base = child:GetAttribute("BaseTransparency")
+			child.Transparency = if standing then (if type(base) == "number" then base else 0) else 1
+		end
+	end
 end
 
 -- Rebuilds every row of the stage and closes the room again.

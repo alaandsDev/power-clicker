@@ -233,7 +233,7 @@ P.1. Conferir que `GameConfig.Dev.EnableAllWorldsInStudio = false` (padrão novo
 P.2. Output sem erros vermelhos no boot; `[TESTS] 222 passed, 3 failed` (ver tabela acima).
 
 ### Lobby
-L.1. Ao nascer, a câmera fica atrás do personagem **olhando para o portão do Caminho do Poder** (espada de energia no alto, placa CAMINHO DO PODER na verga).
+L.1. Ao nascer **e ao respawnar**, a câmera fica atrás do personagem, no eixo da avenida, enquadrando o portão (placa CAMINHO DO PODER legível, espada inteira no alto) e a barreira 1 ao fundo. (Correção de rodada de Studio: o servidor teleporta com PivotTo e a câmera padrão não acompanhava; agora o SpawnCameraController alinha a câmera depois do teleporte.)
 L.2. Não existe portal "🌍 Mundos" atrás do spawn.
 L.3. Áreas sem discos coloridos saturados; cada uma tem estandarte pequeno. Treino e Loja mostram só o ícone.
 L.4. Calçadas de pedra ligam a praça a Ovos, Pets, Loja, Renascer, Treino e Spawn.
@@ -246,18 +246,32 @@ L.10. Cascata no paredão sudoeste e lago a oeste não ficam em cima de nenhuma 
 L.11. Performance: Stats/MicroProfiler no celular emulado; o mapa inicial tem ~1.635 instâncias (antes ~2.315).
 
 ### Caminho do Poder
+C.0. Da entrada, a barreira 1 lê como obstáculo de madeira (tábuas, travessa em X, cintas de ferro); as outras têm tijolos, rachaduras ou placas rebitadas conforme o tema. Ao quebrar uma fileira, os detalhes dela somem junto; quando o estágio se refaz, voltam.
 C.1. Atravessar o portão: a primeira área e a barreira 1 continuam lá, em linha reta.
 C.2. Quebrar a barreira 1, pegar o pad e voltar: tudo igual a antes.
 C.3. Ir até depois da barreira 10: a praça final termina num maciço de rocha; o portal "em breve" fica de frente, com moldura, e não teleporta. Não dá para cair do fim.
 
 ### HUD
-H.1. Topo: Power, Gemas e Vitórias numa linha; nada cobre essas três pílulas.
+H.1. Topo: Power, Gemas e Vitórias numa linha; nada cobre essas três pílulas — **nem o tutorial roxo nem os avisos**, que agora aparecem logo abaixo delas.
 H.2. "Mais": abre um painel em grade **ao lado** do menu (não uma coluna até o fim da tela); o botão vira ✕ / "Fechar"; tocar num item abre o painel e fecha o "Mais".
 H.3. Badge: um item secundário com "!" (ex.: missão para resgatar) acende o "!" do "Mais".
 H.4. Melhorias: o "!" só aparece quando surge uma melhoria nova ao alcance; abrir o painel apaga.
-H.5. Rodapé: botão CLIQUE menor; acima dele uma faixa "Nv. X · COMBO xN · 🔥 %" e a barra de nível. Clicar rápido: números sobem **acima** da faixa e nada se sobrepõe.
-H.6. Auto Click (Debug): o ganho automático aparece como número flutuante à direita, sem texto fixo.
+H.5. Rodapé: botão CLIQUE do mesmo tamanho; acima dele a faixa "Nv. X · COMBO xN · 🔥 %" e a barra de nível, agora maiores e legíveis. Clicar rápido (inclusive tocando no mundo): no máximo 6 números, sobem pouco **acima** da faixa e somem rápido, sem cobrir o personagem.
+H.6. Auto Click (Debug): o ganho automático aparece somado, no máximo 1 número a cada ~0,8 s, à direita da faixa; nunca se acumula no centro.
 H.7. Overdrive: a faixa mostra "🔥 x3 · 20s" e depois a recarga.
 H.8. Chefe (esperar ou forçar pelo Debug): barra compacta **abaixo** das moedas, só no mundo onde ele está.
 H.9. Perto de uma barreira, a faixa do corredor aparece embaixo das moedas sem sobrepor buffs/treino/chefe.
 H.10. Celular (375x812 em paisagem), tablet e PC: nada cortado, CLIQUE alcançável.
+
+### Espada equipada (bug da espada inicial invisível)
+S.1. Jogador novo (Debug "Resetar dados" ou conta nova): a espada inicial aparece **na mão** ao nascer, e a UI mostra a mesma como "Equipada".
+S.2. Morrer/respawnar (resetar o personagem): a espada equipada reaparece na mão.
+S.3. Desbloquear outra espada e equipar: a da mão troca; não fica a antiga.
+S.4. Sair e entrar de novo: a última espada equipada reaparece.
+S.5. Conta com dados antigos: aparece uma espada válida.
+S.6. Equipar várias vezes rápido e respawnar em seguida: Explorer > Workspace > personagem tem **um só** `CutBlade`; Backpack vazio.
+S.7. Outro jogador (Test > 2 jogadores) vê a espada na mão do primeiro.
+
+Coberto fora do Studio: `lune run tools/lune/check_sword.luau` (ordem de eventos,
+fallback e duplicação) e `SwordEquip.spec` (qual espada vale). Solda na mão,
+visual e replicação **só no Studio**.

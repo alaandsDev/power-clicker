@@ -33,6 +33,7 @@ local SoundController = require(script.Parent.SoundController)
 local UIController = require(script.Parent.UIController)
 local DataController = require(script.Parent.DataController)
 local GameStateController = require(script.Parent.GameStateController)
+local NotificationController = require(script.Parent.NotificationController)
 
 local HudController = {}
 
@@ -297,6 +298,12 @@ function HudController.Init()
 		Padding = UDim.new(0, 6),
 		Parent = topStack,
 	})
+	-- Avisos (toasts) também entram na coluna, por último: nunca sobre as moedas.
+	local toasts = NotificationController.GetContainer()
+	if toasts then
+		toasts.LayoutOrder = 20
+		toasts.Parent = topStack
+	end
 
 	-- Buffs temporários: chip pequeno sob a fileira de moedas, não texto solto.
 	boostLabel = Build.label({
@@ -368,7 +375,7 @@ function HudController.Init()
 		local label = Build.label({
 			Name = name,
 			Font = Theme.FontDisplay,
-			TextSize = 15,
+			TextSize = 18,
 			Position = UDim2.fromScale(x, 0),
 			Size = UDim2.new(width, 0, 0, hud.StatusRow),
 			TextXAlignment = align,

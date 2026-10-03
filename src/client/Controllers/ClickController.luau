@@ -39,7 +39,21 @@ local SoundController = require(script.Parent.SoundController)
 local HudController = require(script.Parent.HudController)
 local SlashController = require(script.Parent.SlashController)
 
-local FLOAT_POOL_SIZE = 16
+--[[
+	FAIXA DE FEEDBACK. Teste no Studio: os "+X (auto)" se acumulavam no meio
+	da tela, em cima do personagem e da barra de nível. Agora:
+	- clique: no máximo FLOAT_POOL_SIZE números vivos, sobem só FLOAT_RISE
+	  pixels e somem em FLOAT_SECONDS, sempre ACIMA da faixa do rodapé;
+	- automático: o ganho é SOMADO e mostrado no máximo uma vez a cada
+	  AUTO_INTERVAL, numa trilha própria à direita do botão, com no máximo
+	  AUTO_POOL_SIZE números vivos.
+]]
+local FLOAT_POOL_SIZE = 6
+local FLOAT_RISE = 56
+local FLOAT_SECONDS = 0.55
+local AUTO_POOL_SIZE = 3
+local AUTO_INTERVAL = 0.8
+local AUTO_RISE = 34
 -- Bottom-centre layout (keeps the character visible). Reference pixels.
 -- Heights come from Theme.Hud so the level bar (built by HudController) and
 -- this stack cannot overlap.
@@ -51,7 +65,7 @@ local BOTTOM_MARGIN = Theme.Hud.ClickBottom
 -- overdrive e barra). Os números flutuantes nascem ACIMA dela.
 local STACK_BASE = 0
 local BUTTON_CORNER = UDim.new(0, 16)
-local FLOAT_SPREAD_X = 100 -- quanto os números se espalham para os lados
+local FLOAT_SPREAD_X = 90 -- quanto os números se espalham para os lados
 local FLOAT_LIFT = 26 -- folga entre a faixa e o centro do número
 -- Tap on the world counts as a click only if it's a quick, still tap.
 local TAP_MAX_SECONDS = 0.35
@@ -127,9 +141,10 @@ local function showFloat(text: string, color: Color3, tier: number?, at: Vector2
 	label.Rotation = random:NextNumber(-10, 10)
 	Anim.PopIn(label, 0.4, 0.22)
 	-- Numbers pop just above the button (or at the tap) and rise.
-	local origin = if at
-		then UDim2.fromOffset(at.X, at.Y)
-		else UDim2.new(0.5, random:NextNumber(-FLOAT_SPREAD_X, FLOAT_SPREAD_X), 1, -buttonTop - HudController.DockHeight() - FLOAT_LIFT - random:NextNumber(0, 20))
+	-- Sempre na faixa de feedback acima do rodapé, mesmo quando o clique foi
+	-- um toque no mundo: número nascendo onde se tocou cobria o personagem.
+	local _ = at
+	local origin = UDim2.new(0.5, random:NextNumber(-FLOAT_SPREAD_X, FLOAT_SPREAD_X), 1, -buttonTop - HudController.DockHeight() - FLOAT_LIFT - random:NextNumber(0, 14))
 	label.Text = text
 	Build.paint(label, "TextColor3", color)
 	label.Position = origin
@@ -139,10 +154,10 @@ local function showFloat(text: string, color: Color3, tier: number?, at: Vector2
 	local stroke = label:FindFirstChildOfClass("UIStroke")
 	if stroke then
 		stroke.Transparency = 0
-		TweenService:Create(stroke, Theme.Tween.Float, { Transparency = 1 }):Play()
+		TweenService:Create(stroke, TweenInfo.new(FLOAT_SECONDS), { Transparency = 1 }):Play()
 	end
-	local tween = TweenService:Create(label, Theme.Tween.Float, {
-		Position = origin - UDim2.fromOffset(0, 120),
+	local tween = TweenService:Create(label, TweenInfo.new(FLOAT_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = origin - UDim2.fromOffset(0, FLOAT_RISE),
 		TextTransparency = 1,
 	})
 	local previous = label:GetAttribute("Stamp")
@@ -447,7 +462,7 @@ function ClickController.Init()
 		Name = "Combo",
 		Font = Theme.FontDisplay,
 		Size = UDim2.fromScale(1, 1),
-		TextSize = 15,
+		TextSize = 18,
 		Visible = false,
 		Parent = HudController.GetComboSlot(),
 	})
@@ -465,16 +480,62 @@ function ClickController.Init()
 		do mesmo tamanho do clique manual, no meio da tela, e os dois se
 		atropelavam em cima do personagem.
 	]]
+	-- Trilha do automático: à direita do botão, na altura da faixa do rodapé.
+	local autoPool: { TextLabel } = {}
+	for i = 1, AUTO_POOL_SIZE do
+		local label = Build.label({
+			Name = "AutoFloat" .. i,
+			AnchorPoint = Vector2.new(0, 0.5),
+			Size = UDim2.fromOffset(160, 26),
+			TextSize = 18,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextColor3 = Theme.Colors.TextDim,
+			Visible = false,
+			ZIndex = 15,
+			Parent = floatLayer,
+		})
+		Build.textStroke(label, 2)
+		autoPool[i] = label
+	end
+	local autoIndex = 0
+	local autoPending = 0
+	local autoShownAt = 0
+	local function showAuto(amount: number)
+		autoIndex = (autoIndex % AUTO_POOL_SIZE) + 1
+		local label = autoPool[autoIndex]
+		local origin = UDim2.new(0.5, Theme.Hud.LevelBar.X / 2 + 16, 1, -(buttonTop + HudController.DockHeight() / 2))
+		label.Text = Text.Get("click.auto", { amount = NumberFormat.Short(amount) })
+		label.Position = origin
+		label.TextTransparency = 0
+		label.Visible = true
+		local stroke = label:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Transparency = 0
+			TweenService:Create(stroke, TweenInfo.new(FLOAT_SECONDS), { Transparency = 1 }):Play()
+		end
+		local stamp = (tonumber(label:GetAttribute("Stamp")) or 0) + 1
+		label:SetAttribute("Stamp", stamp)
+		local tween = TweenService:Create(label, TweenInfo.new(FLOAT_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = origin - UDim2.fromOffset(0, AUTO_RISE),
+			TextTransparency = 1,
+		})
+		tween.Completed:Once(function()
+			if label:GetAttribute("Stamp") == stamp then
+				label.Visible = false
+			end
+		end)
+		tween:Play()
+	end
 	GameStateController.Feedback:Connect(function(_manualGain: number, _manualClicks: number, autoGain: number)
-		if autoGain > 0 then
-			local canvasSize = UIController.GetCanvasSize()
-			showFloat(
-				Text.Get("click.auto", { amount = NumberFormat.Short(autoGain) }),
-				Theme.Colors.TextDim,
-				nil,
-				-- À direita, acima da faixa: some sozinho e não disputa com o botão.
-				Vector2.new(canvasSize.X / 2 + 120, canvasSize.Y - buttonTop - HudController.DockHeight() - FLOAT_LIFT)
-			)
+		if autoGain <= 0 then
+			return
+		end
+		autoPending += autoGain
+		local now = os.clock()
+		if now - autoShownAt >= AUTO_INTERVAL then
+			autoShownAt = now
+			showAuto(autoPending)
+			autoPending = 0
 		end
 	end)
 

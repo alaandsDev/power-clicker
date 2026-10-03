@@ -171,9 +171,11 @@ local Theme = {
 		ClickWidth = 160,
 		ClickTouchExtra = Vector2.new(36, 12),
 		-- A barra é do COMPONENTE único: nível + combo + overdrive + progresso.
-		LevelBar = Vector2.new(270, 8),
+		-- Teste no Studio: a faixa ficou pequena demais. +~25% (era 270x8 e
+		-- texto 15); o botão CLIQUE continua do mesmo tamanho.
+		LevelBar = Vector2.new(330, 11),
 		LevelGap = 6,
-		StatusRow = 18, -- linha "Nv. 12 · COMBO x8 · 🔥 55%"
+		StatusRow = 22, -- linha "Nv. 12 · COMBO x8 · 🔥 55%"
 		-- Faixa central logo abaixo das moedas: buffs, evento, chefe, treino e
 		-- a faixa do corredor entram AQUI, empilhados, em vez de cada um
 		-- escolher uma posição fixa e cair em cima das moedas ou do vizinho.

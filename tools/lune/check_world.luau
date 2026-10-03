@@ -142,18 +142,125 @@ for x = 46, L.StartX + 10, 2 do
 	end
 end
 
--- 5. Spawn olhando para a entrada do Caminho
+-- 5. Spawn e enquadramento inicial
+--[[
+	A versão anterior só comparava a direção do MARCADOR com a direção do
+	portão e deu falso positivo: no Studio o jogador não nascia olhando para
+	o portão, porque a câmera do Roblox não acompanha o PivotTo do servidor.
+	Agora a checagem é sobre o que a câmera mostra:
+	  a) SpawnLocation (spawn padrão) e marcador olham ao longo da avenida
+	     (+X) e estão no eixo dela (z ≈ 0);
+	  b) existe um controller no cliente que alinha a câmera ao marcador depois
+	     do teleporte (SpawnCameraController na ordem do ClientBootstrap);
+	  c) simulando essa câmera (14 atrás, 6 acima, FOV vertical 70°), a placa
+	     CAMINHO DO PODER e a face da barreira 1 ficam dentro do quadro e com
+	     linha de visão livre (nenhuma peça opaca no meio).
+	O comportamento real da câmera do Roblox continua exigindo o Studio.
+]]
 local spawnPart = spawnsFolder:GetChildren()[1]
-local spawnDot = 0
+local spawnLocation = model:FindFirstChildWhichIsA("SpawnLocation", true)
+local framed = "não verificado"
+local function along(cf, label)
+	local look = cf.LookVector
+	if look.X < 0.995 or math.abs(cf.Position.Z) > 1 then
+		fail(string.format("spawn: %s não está no eixo da avenida olhando +X (look %.2f,%.2f,%.2f; z=%.1f)", label, look.X, look.Y, look.Z, cf.Position.Z))
+	end
+end
 if not spawnPart then
 	fail("spawn: marcador não foi criado")
 else
-	local position = spawnPart.CFrame.Position
-	local toGate = (V3.new(L.StartX, position.Y, 0) - position).Unit
-	spawnDot = spawnPart.CFrame.LookVector:Dot(toGate)
-	if spawnDot < 0.98 then
-		fail(string.format("spawn: não olha para a entrada (dot %.2f)", spawnDot))
+	along(spawnPart.CFrame, "marcador")
+end
+if not spawnLocation then
+	fail("spawn: SpawnLocation não foi criado")
+else
+	along(spawnLocation.CFrame, "SpawnLocation")
+end
+local bootstrap = fs.readFile(E.Root .. "/src/client/ClientBootstrap.client.luau")
+if not string.find(bootstrap, '"SpawnCameraController"', 1, true) or not fs.isFile(E.Root .. "/src/client/Controllers/SpawnCameraController.luau") then
+	fail("spawn: nenhum controller alinha a câmera depois do teleporte (SpawnCameraController)")
+end
+local sign = named.GateSign
+local barrier = named["Wall_" .. WallConfig.Stages[1].Id .. "_1"]
+if spawnPart and sign and barrier then
+	-- Mesma câmera que o SpawnCameraController monta: 14 atrás, 6 acima do
+	-- peito, olhando na horizontal ao longo do marcador.
+	local look = spawnPart.CFrame.LookVector
+	local flat = V3.new(look.X, 0, look.Z).Unit
+	local eye = spawnPart.CFrame.Position + V3.new(0, 2 + 6, 0) - flat * 14
+	local forward = flat
+	local right = forward:Cross(V3.new(0, 1, 0)).Unit
+	local up = right:Cross(forward)
+	local tanV = math.tan(math.rad(35))
+	local tanH = tanV * 16 / 9
+	local opaque = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and d.Transparency < 0.5 and d:GetAttribute("WallDetail") ~= true then
+			table.insert(opaque, d)
+		end
 	end
+	-- Interseção raio × caixa orientada (slab).
+	local function hits(part, origin, direction, maxT)
+		local o = part.CFrame:PointToObjectSpace(origin)
+		local dv = part.CFrame:VectorToObjectSpace(direction)
+		local half = part.Size / 2
+		local tMin, tMax = 0, maxT
+		for _, axis in { "X", "Y", "Z" } do
+			local oo, dd, hh = o[axis], dv[axis], half[axis]
+			if math.abs(dd) < 1e-9 then
+				if math.abs(oo) > hh then
+					return false
+				end
+			else
+				local t1, t2 = (-hh - oo) / dd, (hh - oo) / dd
+				if t1 > t2 then
+					t1, t2 = t2, t1
+				end
+				tMin, tMax = math.max(tMin, t1), math.min(tMax, t2)
+				if tMin > tMax then
+					return false
+				end
+			end
+		end
+		return true
+	end
+	local function visible(target, point, label)
+		local offset = point - eye
+		local depth = offset:Dot(forward)
+		if depth <= 0 or math.abs(offset:Dot(right)) / depth > tanH or math.abs(offset:Dot(up)) / depth > tanV then
+			fail("spawn: " .. label .. " fica fora do quadro da câmera inicial")
+			return false
+		end
+		local direction = offset.Unit
+		local distance = offset.Magnitude - 0.5
+		for _, part in opaque do
+			if part ~= target and part ~= spawnPart and hits(part, eye, direction, distance) then
+				fail(string.format("spawn: %s escondido por %s", label, part.Name))
+				return false
+			end
+		end
+		return true
+	end
+	local signFront = sign.CFrame.Position + sign.CFrame.LookVector * 0.4
+	local barrierFront = barrier.CFrame.Position - V3.new(barrier.Size.X / 2 + 0.6, 0, 0)
+	local okSign = visible(sign, signFront, "placa CAMINHO DO PODER")
+	local okBarrier = visible(barrier, barrierFront, "barreira 1")
+	-- A espada inteira (até a ponta) tem de caber no quadro.
+	local okSword = true
+	for _, d in model:GetDescendants() do
+		if d.Name == "GateSwordTip" and d:IsA("BasePart") then
+			local tipTop = d.CFrame.Position + V3.new(0, d.Size.Y / 2, 0)
+			local offset = tipTop - eye
+			local depth = offset:Dot(forward)
+			if depth <= 0 or offset:Dot(up) / depth > tanV * 0.95 then
+				okSword = false
+			end
+		end
+	end
+	if not okSword then
+		fail("spawn: a ponta da espada do portão sai do quadro da câmera inicial")
+	end
+	framed = if okSign and okBarrier and okSword then "placa, espada e barreira 1 no quadro" else "FALHOU"
 end
 
 -- 6. Corredor
@@ -185,6 +292,25 @@ for _, stage in WallConfig.Stages do
 			fail("corredor: barreira fora da linha " .. stage.Id)
 		end
 		lastX = p.X
+	end
+end
+
+-- 6b. Barreiras com aparência de obstáculo: cada fileira tem detalhes na face,
+-- e nenhum detalhe colide, é consultável ou tocável (não muda a jogabilidade).
+for _, d in model:GetDescendants() do
+	if d:IsA("BasePart") and d:GetAttribute("Wall") == true then
+		local details = 0
+		for _, child in d:GetChildren() do
+			if child:IsA("BasePart") and child:GetAttribute("WallDetail") == true then
+				details += 1
+				if child.CanCollide or child.CanQuery or child.CanTouch then
+					fail("barreira: detalhe com colisão/consulta em " .. d.Name)
+				end
+			end
+		end
+		if details < 4 then
+			fail("barreira: fileira sem detalhes " .. d.Name)
+		end
 	end
 end
 
@@ -255,9 +381,10 @@ for _, name in classes do
 end
 print(string.format("Instâncias do mundo inicial: %d", total))
 print("  " .. table.concat(line, " "))
-print(string.format("Borda mais baixa: %d studs · %d pontos de borda · spawn·entrada = %.3f · %d mundos constroem", lowest, rimPoints, spawnDot, worldsOk))
+print(string.format("Borda mais baixa: %d studs · %d pontos de borda · câmera inicial: %s · %d mundos constroem", lowest, rimPoints, framed, worldsOk))
 if #problems == 0 then
-	print("OK: chão, bordas, caminho, spawn, corredor e praça final.")
+	print("OK: chão, bordas, caminho, spawn/enquadramento, corredor e praça final.")
+	print("Requer validação no Studio: câmera real ao nascer/respawnar, legibilidade da placa, leitura das barreiras.")
 	process.exit(0)
 end
 print(#problems .. " problema(s):")

@@ -65,14 +65,24 @@ function NotificationController.Show(text: string, style: Style?)
 	end)
 end
 
+--[[
+	O HudController põe este contêiner na coluna central ABAIXO das moedas
+	(HudController.GetTopStack). Antes ele ficava em y = 78, em cima de
+	Power/Gemas/Vitórias.
+]]
+function NotificationController.GetContainer(): Frame
+	return container
+end
+
 function NotificationController.Init()
 	container = Build.new("Frame", {
 		Name = "Toasts",
 		BackgroundTransparency = 1,
-		-- Top-centre, under the tutorial banner (sides belong to the HUD).
+		-- Posição provisória; HudController.Init move para a coluna central.
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, Theme.Hud.Margin + 50 + Theme.Hud.Gap),
-		Size = UDim2.fromOffset(340, 300),
+		Position = UDim2.new(0.5, 0, 0, Theme.Hud.TopBarY + Theme.Hud.PillSize.Y + 12),
+		Size = UDim2.fromOffset(340, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		ZIndex = 50,
 		Parent = UIController.GetCanvas(),
 	})

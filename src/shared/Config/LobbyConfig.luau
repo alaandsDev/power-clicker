@@ -143,6 +143,15 @@ return {
 	Areas = Areas,
 	Stations = Stations,
 
+	--[[
+		Onde o jogador nasce: NO EIXO da avenida (z = 0), olhando para +X.
+		Assim a câmera padrão, que fica atrás do personagem, enquadra a avenida,
+		o portão CAMINHO DO PODER e a barreira 1 ao fundo. (Antes o spawn ficava
+		na área "Spawn", em diagonal ao portão.) A área "Spawn" continua sendo a
+		praça das Missões e Prêmios.
+	]]
+	SpawnPoint = Vector3.new(-30, 0, 0),
+
 	-- Caminho de pedra da praça até a boca do Caminho do Poder.
 	Path = {
 		Width = 24,
@@ -164,9 +173,9 @@ return {
 		PillarWidth = 22, -- pilar quadrado
 		PillarHeight = 52,
 		PlinthHeight = 6,
-		LintelHeight = 10,
+		LintelHeight = 14, -- verga mais alta: a placa precisa ser lida da praça
 		LintelDepth = 24,
-		SwordHeight = 34, -- lâmina + empunhadura acima da verga
+		SwordHeight = 40, -- da empunhadura à ponta, acima da verga
 		Energy = Color3.fromRGB(110, 210, 255), -- cor da identidade do Caminho
 		Trim = Color3.fromRGB(255, 200, 90),
 		Stone = Color3.fromRGB(150, 146, 160),

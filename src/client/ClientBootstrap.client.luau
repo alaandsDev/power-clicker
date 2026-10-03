@@ -53,6 +53,7 @@ local CONTROLLER_ORDER = {
 	"VipController",
 	"SettingsController",
 	"WorldAmbientController", -- per-world lighting (client only)
+	"SpawnCameraController", -- aims the camera along the spawn marker after the server teleport
 	"InteractController", -- world stations (ProximityPrompts) open panels
 	"TutorialController", -- must come after every controller that adds menu buttons
 	"PetFollowController", -- world visuals of equipped pets (all players)
