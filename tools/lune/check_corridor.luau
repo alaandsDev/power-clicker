@@ -71,7 +71,9 @@ local datas = {}
 local currency = {} -- [player][currency] = total
 local notices = {} -- { {target, kind, payload} }
 local sentToSpawn = 0
+local sentBy = {} -- [player] = vezes que voltou para a praça
 local players = {}
+local spawnPosition = LobbyConfig.SpawnPoint + V3.new(0, 3, 0)
 
 E.stubs.Players = {
 	GetPlayers = function()
@@ -110,8 +112,14 @@ E.stubModules["ServerScriptService.Server.Services.CurrencyService"] = {
 	end,
 }
 E.stubModules["ServerScriptService.Server.Services.WorldService"] = {
-	SendToSpawn = function()
+	-- Como o real: leva o personagem para o spawn (aqui, só a posição).
+	SendToSpawn = function(player)
 		sentToSpawn += 1
+		sentBy[player] = (sentBy[player] or 0) + 1
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			root.CFrame = CFrame.new(spawnPosition)
+		end
 	end,
 }
 E.patches["ServerScriptService.Server.Services.WallService"] = {
@@ -228,7 +236,7 @@ check(detailsVisible(b1[1], false), "3. detalhes da fileira quebrada somem junto
 check(b1[2].CanCollide and b1[2]:GetAttribute("Broken") ~= true and detailsVisible(b1[2], true), "3. fileira seguinte continua de pé, sólida e com detalhes")
 check(#noticesOf("WallRow") >= 1, "3. aviso de fileiras restantes enviado")
 
--- 4. Abertura, pads, sem teleporte
+-- 4. Abertura e os 3 pads (normal, x2, voltar)
 moveTo(p, frontOf(b1[2], 2))
 for index = 2, #b1 do
 	moveTo(p, frontOf(b1[index], 2))
@@ -236,18 +244,41 @@ for index = 2, #b1 do
 end
 local broken = noticesOf("WallBroken")
 local announced = broken[#broken]
-check(announced ~= nil and announced[3].ById == p.UserId and announced[3].Order == first.Order, "4. quebra anunciada com quem quebrou (ById) e o estágio")
-local wins0 = (currency[p] or {}).Wins or 0
-touchHandlers["WinPad_" .. first.Id .. "_1"](p.Character.HumanoidRootPart)
-local wins1 = (currency[p] or {}).Wins or 0
-touchHandlers["WinPad_" .. first.Id .. "_1"](p.Character.HumanoidRootPart)
-touchHandlers["WinPad_" .. first.Id .. "_2"](p.Character.HumanoidRootPart)
-local wins2 = (currency[p] or {}).Wins or 0
-check(wins1 > wins0 and wins2 == wins1, "4. pad paga uma vez por abertura (segundo toque e outro pad: nada)")
-check(sentToSpawn == 0, "4. pegar o prêmio NÃO teleporta para a praça")
-touchHandlers["ReturnPad_" .. first.Id](p.Character.HumanoidRootPart)
-check(sentToSpawn == 1, "4. pad de voltar continua levando para a praça")
-check(datas[p].Tower.Cleared[first.Id] == true and datas[p].Tower.Highest == first.Order, "4. estágio 1 registrado como conquistado")
+check(announced ~= nil and announced[3].ById == p.UserId and announced[3].Order == first.Order and announced[3].FirstClear == true, "4. quebra anunciada com quem quebrou (ById), estágio e primeira conquista")
+local function wins(player)
+	return (currency[player] or {}).Wins or 0
+end
+local function touch(padName, player)
+	local root = player.Character.HumanoidRootPart
+	touchHandlers[padName](root)
+end
+local padNormal, padDouble, padBack = "WinPad_" .. first.Id .. "_1", "WinPad_" .. first.Id .. "_2", "ReturnPad_" .. first.Id
+-- B) x2 na primeira conquista: exatamente Pads[2] (o dobro do normal), e volta para casa.
+local w0 = wins(p)
+moveTo(p, V3.new(b1[#b1].CFrame.Position.X + 30, 3, 0))
+touch(padDouble, p)
+check(wins(p) - w0 == first.Pads[2] and first.Pads[2] == first.Pads[1] * 2, "B. pad x2 paga exatamente 2x a recompensa normal (+" .. first.Pads[2] .. ", não +" .. first.Pads[1] .. ")")
+check(sentBy[p] == 1, "A/B. pegar o prêmio encerra a corrida: volta para a praça")
+-- A) não recebe duas vezes na mesma abertura (nem trocando de pad).
+moveTo(p, V3.new(b1[#b1].CFrame.Position.X + 30, 3, 0))
+touch(padNormal, p)
+touch(padDouble, p)
+check(wins(p) - w0 == first.Pads[2], "A. não recebe de novo na mesma abertura (nem no outro pad)")
+-- D) outro jogador que passa pela mesma abertura escolhe o próprio pad.
+local q = newPlayer(2)
+respawn(q, V3.new(b1[#b1].CFrame.Position.X + 30, 3, 0))
+local q0 = wins(q)
+touch(padNormal, q)
+check(wins(q) - q0 == first.Pads[1] and wins(p) - w0 == first.Pads[2], "D. recompensas não vazam: B recebe +" .. first.Pads[1] .. " e A continua com +" .. first.Pads[2])
+check(sentBy[q] == 1, "A. pad normal também volta para a praça")
+-- C) Voltar: nada de prêmio, volta para a praça.
+local r = newPlayer(3)
+respawn(r, V3.new(b1[#b1].CFrame.Position.X + 30, 3, 0))
+touch(padBack, r)
+check(wins(r) == 0 and sentBy[r] == 1, "C. Voltar leva para a praça sem dar vitória normal nem x2")
+touch(padNormal, r)
+check(wins(r) > 0, "C. Voltar não consome a escolha: quem ainda não pegou prêmio pode pegar enquanto está aberto")
+check(datas[p].Tower.Cleared[first.Id] == true and datas[p].Tower.Highest == first.Order, "E. estágio 1 registrado como conquistado")
 
 -- 6. Não refaz em cima de quem está dentro
 moveTo(p, V3.new(b1[2].CFrame.Position.X, 3, 0)) -- no meio do bloco
@@ -285,6 +316,48 @@ moveTo(p, frontOf(b1[1]))
 local hpBefore = b1[1]:GetAttribute("Hp")
 WallService.OnClick(p, damage)
 check(b1[1]:GetAttribute("Hp") == hpBefore - damage, "7. depois do respawn o golpe volta a funcionar")
+
+-- B) Repetindo o estágio: o x2 continua valendo o dobro do normal (bug: 1 e 1).
+local function openAgain(player, list, hp)
+	task.wait(1.6) -- janela de 0,5 s + restauração
+	for _, row in list do
+		moveTo(player, frontOf(row, 2))
+		WallService.OnClick(player, hp)
+	end
+	moveTo(player, V3.new(list[#list].CFrame.Position.X + 30, 3, 0))
+end
+openAgain(p, b1, first.Hp)
+local before1 = wins(p)
+touch(padNormal, p)
+local normalRepeat = wins(p) - before1
+openAgain(p, b1, first.Hp)
+local before2 = wins(p)
+touch(padDouble, p)
+local doubleRepeat = wins(p) - before2
+check(normalRepeat >= 1 and doubleRepeat == normalRepeat * 2, string.format("B. repetindo, x2 paga o dobro do normal (+%d e +%d)", normalRepeat, doubleRepeat))
+
+-- D) Multiplayer: A encerrar a corrida não mexe na tentativa de B.
+task.wait(1.6)
+local attacker = newPlayer(4)
+respawn(attacker, frontOf(b2[1]))
+WallService.OnClick(attacker, damage)
+local b2Hp = b2[1]:GetAttribute("Hp")
+openAgain(p, b1, first.Hp)
+touch(padNormal, p)
+check(b2[1]:GetAttribute("Hp") == b2Hp and b2[1]:GetAttribute("Broken") ~= true, "D. A pegar o prêmio não reseta a barreira que B está atacando")
+check((sentBy[attacker] or 0) == 0, "D. só quem pegou o prêmio volta para a praça")
+WallService.OnClick(attacker, damage)
+check(b2[1]:GetAttribute("Hp") == b2Hp - damage, "D. B continua a tentativa normalmente")
+-- Quem ainda está dentro do bloco não fica preso quando a janela de A acaba.
+moveTo(attacker, V3.new(b1[2].CFrame.Position.X, 3, 0))
+openAgain(p, b1, first.Hp)
+moveTo(attacker, V3.new(b1[2].CFrame.Position.X, 3, 0))
+touch(padNormal, p)
+task.wait(1.4)
+check(b1[2]:GetAttribute("Broken") == true, "D. reconstrução espera B sair do bloco (não prende jogador)")
+moveTo(attacker, frontOf(b2[1]))
+task.wait(1.6)
+check(b1[1]:GetAttribute("Broken") ~= true and b1[1].CanCollide, "E. nova tentativa começa com a barreira inteira")
 
 -- 9. Contornar / pular: a fileira cobre a largura do corredor inteira (sem vão
 -- até as paredes laterais), e fileira e paredes laterais ficam muito acima de

@@ -62,8 +62,10 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   mochila). O `EquipTool` simulado imita o Studio: sem mão, a espada se perde.
 - **check_corridor** — o `WallService` real sobre o mapa gerado: ordem das
   barreiras; golpe de frente quebra e de trás não; detalhes somem/voltam com a
-  fileira e nunca colidem; abertura paga o pad uma vez por abertura e não
-  teleporta; gemas da primeira vez uma vez só; a barreira não se refaz com
+  fileira e nunca colidem; os 3 pads (normal = Pads[1], x2 = 2x o normal na
+  primeira vez e repetindo, Voltar sem prêmio), todos voltam para a praça,
+  um prêmio por abertura e sem vazar entre jogadores; A encerrar não mexe na
+  tentativa de B; gemas da primeira vez uma vez só; a barreira não se refaz com
   alguém dentro; respawn não perde progresso; efeitos não mexem no HP; não dá
   para contornar/pular. Imprime a distância/tempo de volta do spawn até cada
   barreira. (Adapta só no carregamento: `.Position` -> `.CFrame.Position` e

@@ -54,7 +54,7 @@ caminhada; somei a estimativa dela.
 | 0:00 | Nasce olhando a avenida, o portão e a barreira 1. Tutorial: "clique no botão". Chip de objetivo: "quebre a Barreira 1 — siga a avenida" (novo). |
 | 0:05–0:15 | 15 cliques concluem o 1º passo; o tutorial manda comprar Força do Clique (20 Power). |
 | 0:20–0:40 | Anda ~18 s até a barreira 1; a faixa mostra estágio, HP e "≈N golpes". 180 HP caem em ~10–20 s segurando. |
-| ~0:40 | "💥 BARREIRA 1 DESTRUÍDA!" + "siga para a Barreira 2". Pega o pad (+1–2 vitórias), **não é teleportado**, anda para a área 2. |
+| ~0:40 | "💥 BARREIRA 1 DESTRUÍDA!". Escolhe um pad (+1 ou +2 vitórias na primeira vez) e volta para a praça — ou passa direto pelos pads para tentar a Barreira 2. |
 | 0:40–1:00 | Corte 2 liberado (1 vitória + 250 Power). Simulação: Corte 2 aos 34 s–1 min. |
 | 1:00–2:00 | Barreira 2 (450 x 4): ativo cai aos ~46 s de jogo, casual ~2 min (+ caminhada). |
 | 2:00–5:00 | Barreira 3 (3.500 x 4): ativo ~2 min, casual ~6 min. Barreira 4 (28 mil x 4) mostra "Forte demais: treine e melhore o Corte" para quase todos até ~5–8 min. |
@@ -83,10 +83,48 @@ Problemas encontrados:
    aviso para todo mundo): **corrigido** — quem quebrou vê o anúncio grande,
    quem está perto um aviso curto, o resto nada.
 
-## 3. Transição barreira 1 → barreira 2
+## 3. Transição barreira 1 → barreira 2 (corrigido após teste no Studio)
 
-Antes: pegar o pad pagava e teleportava para a praça; para chegar à barreira 2
-era preciso voltar e quebrar a 1 de novo. Agora o pad paga e o jogador segue
-andando (o pad vermelho de voltar continua em cada estágio). Para isso não
-virar farm, o golpe só acerta a fileira À FRENTE do jogador, e a barreira não
-se refaz em cima de alguém que está dentro dela.
+O design do jogo (o mesmo do código original, antes do commit 92ef647) é:
+
+    quebrar a barreira → ESCOLHER um pad (normal ou x2) → receber → volta
+    para a praça (fim da corrida) → nova tentativa
+
+Os 3 pads de cada estágio (`WallConfig.Stages[n].Pads`):
+- **pad 1 (normal)**: `Pads[1]` vitórias (1 na madeira);
+- **pad 2 ("x2")**: `Pads[2]`, o dobro do normal na maioria dos estágios
+  (no Gelo é 8 e 15: a placa mostra o valor, sem "x2");
+- **Voltar**: sem prêmio, leva para a praça.
+
+**Não existe compra em Robux nos pads.** Nenhum Developer Product ou Game Pass
+do `ProductConfig` dá vitórias; o x2 é só o segundo pad. Se a intenção é um pad
+pago, é um sistema novo (produto a criar no site do Roblox + fluxo de
+ProcessReceipt) e fica para uma decisão separada.
+
+Para chegar à barreira 2 o jogador **passa direto pelos pads** sem pegar nenhum
+(enquanto a passagem está aberta). Pegar qualquer prêmio encerra a corrida.
+
+O commit 92ef647 tinha removido a volta para a praça; foi restaurada. Ficaram:
+golpe só na fileira à frente, a barreira não se fecha em cima de ninguém,
+anúncio só para quem quebrou, faixa de golpes, VFX e detalhes.
+
+### Bug do x2 pagando igual ao normal
+
+1. A conquista do estágio era gravada na hora da quebra, ANTES do toque no
+   pad; o pad via "já conquistado" e pagava a fração de repetição (20%) até na
+   primeira vez.
+2. Cada pad arredondava sozinho com piso 1: 1 × 0,2 e 2 × 0,2 viravam 1 e 1.
+
+Correção: `WinPadRules` (uma regra só, usada pelo servidor e pela placa).
+A primeira conquista vale por abertura e por jogador, e o pad x2 vale sempre
+(pad normal) × 2.
+
+### Multiplayer
+
+As barreiras são compartilhadas pelo servidor. "Encerrar a tentativa" é
+**por jogador**: só quem pegou o prêmio (ou pisou em Voltar) é levado para a
+praça. A barreira continua aberta para os outros até a janela acabar e só se
+refaz quando não há ninguém dentro dela. Assim A terminar não reseta nem
+prende B. Barreiras por jogador (cada um com as suas) seriam uma mudança de
+arquitetura (fileiras locais no cliente + HP por jogador no servidor) e não
+foram feitas.

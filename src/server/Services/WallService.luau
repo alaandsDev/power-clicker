@@ -35,6 +35,7 @@ local Shared = game:GetService("ReplicatedStorage").Shared
 local Logger = require(Shared.Utils.Logger)
 local Signal = require(Shared.Utils.Signal)
 local WallConfig = require(Shared.Config.WallConfig)
+local WinPadRules = require(Shared.Formulas.WinPadRules)
 
 local NetService = require(script.Parent.NetService)
 local DataService = require(script.Parent.DataService)
@@ -70,6 +71,13 @@ local stages: { [string]: StageState } = {}
 local pads: { BasePart } = {}
 -- claims[stageId][player] = the opening number already claimed
 local claims: { [string]: { [Player]: number } } = {}
+--[[
+	firstClears[stageId][player] = a abertura em que o estágio caiu pela
+	PRIMEIRA vez para esse jogador. O registro em PlayerData.Tower acontece na
+	hora da quebra, antes de o jogador pisar no pad — sem isto o pad achava
+	que já era repetição e pagava a fração de repetição na primeira vez.
+]]
+local firstClears: { [string]: { [Player]: number } } = {}
 local scanned = false
 
 local function stageById(id: any): Stage?
@@ -223,26 +231,34 @@ local function onPadTouched(pad: BasePart, hit: BasePart)
 	byStage[player] = state.Opening
 
 	--[[
-		Quanto este pad paga agora:
-		- primeira vez neste estágio: valor cheio;
-		- repetindo: `Share`, caindo `FalloffPerStage` por degrau de distância
-		  entre este estágio e o melhor que o jogador já passou.
+		Quanto este pad paga agora (WinPadRules, a mesma regra da placa):
+		- abertura da primeira conquista deste jogador: valor cheio;
+		- repetindo: fração de repetição, e o pad x2 vale sempre o dobro do
+		  normal (antes os dois arredondavam para 1 na barreira de madeira).
 	]]
-	local repeatRule = WallConfig.Repeat
-	local share = 1
-	if data.Tower.Cleared[state.Stage.Id] then
-		local behind = math.max(data.Tower.Highest - state.Stage.Order, 0)
-		share = math.max(repeatRule.Share * repeatRule.FalloffPerStage ^ behind, repeatRule.MinShare)
+	local firstOpening = (firstClears[state.Stage.Id] or {})[player]
+	local isFirstClear = firstOpening == state.Opening
+	local share = WinPadRules.Share(state.Stage, data.Tower, isFirstClear)
+	local padIndex = pad:GetAttribute("PadIndex")
+	if type(padIndex) ~= "number" then
+		padIndex = WinPadRules.IndexOf(state.Stage, amount) or 1
 	end
-	local payout = math.max(math.floor(amount * share), 1)
+	local payout = WinPadRules.Payout(state.Stage, padIndex :: number, share)
+	if payout <= 0 then
+		return
+	end
 	local granted = CurrencyService.Add(player, WallConfig.Currency, payout, "WinPad:" .. state.Stage.Id)
 	NetService.FireClient("Notify", player, "WinPad", { StageId = state.Stage.Id, Wins = granted, Share = share })
 	WallService.Claimed:Fire(player, state.Stage.Id, granted)
 	--[[
-		O prêmio NÃO manda mais o jogador para a praça: quem quebrou a barreira
-		segue andando para a próxima área ("quebrei e agora passo"). Voltar é
-		pelo pad vermelho de voltar, que continua em cada estágio.
+		Pegar o prêmio ENCERRA a corrida: o jogador volta para a praça e começa
+		uma nova tentativa de lá (design original; o commit 92ef647 tinha tirado
+		isto por engano). Quem quer chegar à barreira seguinte passa direto pelos
+		pads, sem pegar nenhum. Só o jogador que pegou o pad é movido: a
+		abertura da barreira continua valendo para os outros (barreiras são
+		compartilhadas) e se fecha sozinha quando a janela acaba.
 	]]
+	WorldService.SendToSpawn(player)
 end
 
 -- Finds the corridor once the world exists.
@@ -340,6 +356,11 @@ function WallService.OnClick(player: Player, damage: number): number
 	]]
 	local tower = data.Tower
 	local firstClear = 0
+	local isFirstClear = not tower.Cleared[state.Stage.Id]
+	if isFirstClear then
+		firstClears[state.Stage.Id] = firstClears[state.Stage.Id] or {}
+		firstClears[state.Stage.Id][player] = opening
+	end
 	if not tower.Cleared[state.Stage.Id] then
 		tower.Cleared[state.Stage.Id] = true
 		tower.Highest = math.max(tower.Highest, state.Stage.Order)
@@ -364,6 +385,7 @@ function WallService.OnClick(player: Player, damage: number): number
 		Seconds = WallConfig.OpenSeconds,
 		By = player.DisplayName,
 		ById = player.UserId,
+		FirstClear = isFirstClear,
 		FirstClearGems = firstClear,
 	})
 	WallService.Opened:Fire(player, state.Stage.Id)
@@ -374,6 +396,9 @@ end
 function WallService.Init()
 	Players.PlayerRemoving:Connect(function(player)
 		for _, byStage in claims do
+			byStage[player] = nil
+		end
+		for _, byStage in firstClears do
 			byStage[player] = nil
 		end
 	end)

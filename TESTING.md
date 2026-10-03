@@ -281,8 +281,11 @@ G.1. Jogador novo: o chip "⚔️ Objetivo: quebre a Barreira 1 — siga a aveni
 G.2. Perto da barreira 1: faixa com "⚔ Estágio 1 — Madeira", barra de HP, "≈N golpes · Prêmio". Barreira forte demais (ex.: chegar à 4 cedo) mostra "⚠ Forte demais: treine e melhore o Corte" em vermelho.
 G.3. Golpear: faísca pequena na face da barreira, no ponto mais perto do personagem, na cor da espada; a barra responde a cada golpe; nada de efeito empilhando.
 G.4. Fileira quebrando: estilhaços na cor da madeira e das tábuas; tábuas, X e cintas da fileira somem junto; não sobra nada flutuando nem parede invisível; a fileira de trás continua sólida.
-G.5. Última fileira: anúncio "💥 BARREIRA 1 DESTRUÍDA!" + "siga: Barreira 2 — Pedra Reforçada" por ~2,5 s, sem bloquear a tela. Outro jogador perto vê só "Barreira 1 aberta por X"; longe, nada.
-G.6. Pegar o pad: +vitórias e **o personagem fica onde está** (não volta para a praça). Seguir andando até a barreira 2.
+G.5. Última fileira: anúncio "💥 BARREIRA 1 DESTRUÍDA!" + "Escolha UM prêmio (volta para a praça) ou passe direto: Barreira 2" por ~2,5 s, sem bloquear a tela. Outro jogador perto vê só "Barreira 1 aberta por X"; longe, nada.
+G.6. Pads (jogador novo, primeira vez): "+1 Vitória(s)" paga +1 e leva para a praça; "x2 · +2 Vitórias" paga +2 e leva para a praça; "Voltar (sem prêmio)" leva para a praça sem pagar. Só um prêmio por abertura.
+G.6b. Repetindo a barreira 1: as placas mudam para o valor de repetição deste jogador e o x2 continua mostrando e pagando o dobro do normal.
+G.6c. Para chegar à barreira 2: quebrar a 1 e passar direto pelos pads, sem pisar em nenhum.
+G.6d. Não existe compra em Robux nos pads (nenhum prompt deve aparecer). Se aparecer, é bug.
 G.7. Ficar parado DENTRO do bloco da barreira quando os 14 s acabam: ela não se fecha em cima do personagem; fecha quando ele sai.
 G.8. Depois de passar, virar e golpear a barreira 1 por trás: não tira HP.
 G.9. Na área 2, resetar o personagem: renasce no spawn olhando a avenida, espada na mão (um `CutBlade` só), progresso igual no painel Progresso. Cronometrar a volta até a barreira 2 (estimado: ~31 s andando + quebrar a 1 de novo).

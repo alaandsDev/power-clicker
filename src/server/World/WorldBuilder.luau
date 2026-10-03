@@ -36,6 +36,7 @@ local TrainingConfig = require(Shared.Config.TrainingConfig)
 local CutLogic = require(Shared.Formulas.CutLogic)
 local ZoneRules = require(Shared.Formulas.ZoneRules)
 local WorldRules = require(Shared.Formulas.WorldRules)
+local WinPadRules = require(Shared.Formulas.WinPadRules)
 local NumberFormat = require(Shared.Utils.NumberFormat)
 local Text = require(Shared.Localization)
 
@@ -1608,7 +1609,10 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 			pad:SetAttribute("WinPad", true)
 			pad:SetAttribute("StageId", stage.Id)
 			pad:SetAttribute("Wins", amount)
-			billboard(pad, Text.Get("wall.padWins", { amount = NumberFormat.Short(amount) }), stage.Accent, 6)
+			-- 1 = prêmio normal, 2 = "x2" (o dobro). A placa mostra o valor cheio;
+			-- o cliente troca pelo que este jogador recebe (WinPadRules).
+			pad:SetAttribute("PadIndex", padIndex)
+			billboard(pad, Text.Get(if WinPadRules.IsDouble(stage, padIndex) then "wall.padWinsDouble" else "wall.padWins", { amount = NumberFormat.Short(amount) }), stage.Accent, 6)
 		end
 
 		-- Pad de voltar: ninguém fica preso no fundo do corredor.

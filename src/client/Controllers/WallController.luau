@@ -21,6 +21,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
 local WallConfig = require(Shared:WaitForChild("Config"):WaitForChild("WallConfig"))
+local WinPadRules = require(Shared:WaitForChild("Formulas"):WaitForChild("WinPadRules"))
 local Text = require(Shared:WaitForChild("Localization"))
 
 local SwordConfig = require(Shared:WaitForChild("Config"):WaitForChild("SwordConfig"))
@@ -79,6 +80,10 @@ local sparkIndex = 0
 local banner: TextLabel
 local bannerStamp = 0
 local objectiveChip: TextLabel
+-- Pads de vitória (placa reescrita com o valor deste jogador) e, por estágio,
+-- até quando vale a "primeira conquista" que acabou de acontecer.
+local winPads: { BasePart } = {}
+local firstClearUntil: { [string]: number } = {}
 
 local function stageOrder(stageId: string): number
 	for _, stage in WallConfig.Stages do
@@ -357,7 +362,11 @@ local function scan()
 		return
 	end
 	table.clear(rowsByStage)
+	table.clear(winPads)
 	for _, descendant in world:GetDescendants() do
+		if descendant:IsA("BasePart") and descendant:GetAttribute("WinPad") == true and descendant:GetAttribute("Return") ~= true then
+			table.insert(winPads, descendant)
+		end
 		if descendant:IsA("BasePart") and descendant:GetAttribute("Wall") == true then
 			local stageId = descendant:GetAttribute("StageId")
 			if type(stageId) == "string" then
@@ -423,6 +432,35 @@ local function showDestroyed(payload: any)
 	end)
 end
 
+local function stageOf(stageId: any): WallConfig.WallStage?
+	for _, stage in WallConfig.Stages do
+		if stage.Id == stageId then
+			return stage
+		end
+	end
+	return nil
+end
+
+--[[
+	A placa de cada pad mostra o que ESTE jogador recebe se pisar nele agora
+	(WinPadRules — a mesma conta do servidor): valor cheio na abertura da
+	primeira conquista, fração de repetição depois. O pad x2 é sempre o dobro.
+]]
+local function refreshPads()
+	local tower = DataController.Get("Tower")
+	for _, pad in winPads do
+		local stage = stageOf(pad:GetAttribute("StageId"))
+		local gui = pad:FindFirstChildOfClass("BillboardGui")
+		local label = if gui then gui:FindFirstChildOfClass("TextLabel") else nil
+		if stage and label then
+			local index = tonumber(pad:GetAttribute("PadIndex")) or WinPadRules.IndexOf(stage, tonumber(pad:GetAttribute("Wins")) or 0) or 1
+			local firstClear = (firstClearUntil[stage.Id] or 0) > os.clock()
+			local amount = WinPadRules.Payout(stage, index, WinPadRules.Share(stage, tower, firstClear))
+			label.Text = Text.Get(if WinPadRules.IsDouble(stage, index) then "wall.padWinsDouble" else "wall.padWins", { amount = NumberFormat.Short(amount) })
+		end
+	end
+end
+
 -- Objetivo até a primeira barreira cair: só no lobby (perto da barreira, a
 -- faixa do corredor assume) e some de vez depois do primeiro estágio.
 local function refreshObjective()
@@ -469,6 +507,7 @@ function WallController.Init()
 	task.spawn(function()
 		while true do
 			refreshObjective()
+			refreshPads()
 			task.wait(0.5)
 		end
 	end)
@@ -486,6 +525,10 @@ function WallController.Init()
 		elseif kind == "WallBroken" then
 			local local_ = Players.LocalPlayer
 			if payload.ById == local_.UserId then
+				if payload.FirstClear == true and type(payload.StageId) == "string" then
+					firstClearUntil[payload.StageId] = os.clock() + (tonumber(payload.Seconds) or WallConfig.OpenSeconds)
+				end
+				refreshPads()
 				showDestroyed(payload)
 			elseif nearStage(payload.StageId) then
 				NotificationController.Show(Text.Get("wall.openedNear", {
