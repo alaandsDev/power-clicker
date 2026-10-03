@@ -79,10 +79,18 @@ function SwordLogic.Equip(swords: SwordsData, swordId: string): (boolean, string
 	return true, nil
 end
 
--- A skin equipada, ou a padrão quando o registro está quebrado.
-function SwordLogic.Equipped(swords: SwordsData): SwordData
+-- A skin equipada, ou a padrão quando o registro está quebrado: id que não
+-- existe, skin que o jogador não possui ou registro ausente.
+function SwordLogic.Equipped(swords: SwordsData?): SwordData
+	local default = SwordConfig.Swords[SwordConfig.DefaultSword]
+	if type(swords) ~= "table" or type(swords.Owned) ~= "table" then
+		return default
+	end
 	local sword = SwordConfig.Swords[swords.Equipped]
-	return sword or SwordConfig.Swords[SwordConfig.DefaultSword]
+	if not sword or swords.Owned[sword.Id] ~= true then
+		return default
+	end
+	return sword
 end
 
 --[[

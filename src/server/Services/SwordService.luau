@@ -38,7 +38,17 @@ type RemoteResponse = Types.RemoteResponse
 
 local SWORD_NAME = "CutBlade"
 local ATTRIBUTE = "EquippedSword"
-local LIMB_TIMEOUT = 5
+local LIMB_TIMEOUT = 8
+-- Depois de equipar, confere uma vez se a espada ficou mesmo na mão.
+local VERIFY_SECONDS = 0.6
+
+--[[
+	Uma "senha" por jogador: cada publish() gera uma nova, e só a montagem com
+	a senha mais recente termina. Sem isso, o carregamento dos dados e o
+	CharacterAdded (ou duas trocas rápidas) montavam duas espadas ao mesmo
+	tempo no mesmo personagem.
+]]
+local buildTokens: { [Player]: number } = {}
 
 local log = Logger.new("Swords")
 
@@ -60,22 +70,65 @@ end
 	Parte do R15 aparece um instante depois do personagem, então esperamos o
 	Humanoid em vez de desistir na hora (era isso que deixava gente sem espada).
 ]]
-local function buildSword(player: Player, sword: Types.SwordData)
+local function handOf(character: Model): Instance?
+	return character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+end
+
+--[[
+	Espera o personagem estar MONTADO: no Workspace, com Humanoid, a mão
+	direita e o HumanoidRootPart. Bug encontrado no Studio: no primeiro
+	personagem a espada era criada assim que o Humanoid aparecia, antes da
+	mão; o EquipTool não tinha onde soldar o cabo, e a espada (solta, sem
+	colisão) caía para fora do mapa. Trocar de espada depois funcionava porque
+	aí o personagem já estava pronto.
+]]
+local function waitForBody(player: Player, character: Model): Humanoid?
+	local deadline = os.clock() + LIMB_TIMEOUT
+	while os.clock() < deadline do
+		if player.Character ~= character then
+			return nil -- respawnou no meio: a montagem do novo personagem assume
+		end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if
+			humanoid
+			and handOf(character)
+			and character:FindFirstChild("HumanoidRootPart")
+			and character:IsDescendantOf(workspace)
+		then
+			return humanoid
+		end
+		task.wait(0.1)
+	end
+	return nil
+end
+
+-- Remove qualquer espada nossa do personagem e da mochila (nunca duas).
+local function removeBlades(player: Player, character: Model)
+	for _, container in { character, player:FindFirstChildOfClass("Backpack") } do
+		if container then
+			for _, child in container:GetChildren() do
+				if child.Name == SWORD_NAME then
+					child:Destroy()
+				end
+			end
+		end
+	end
+end
+
+local function buildSword(player: Player, sword: Types.SwordData, token: number)
 	local character = player.Character
 	if not character then
 		return
 	end
-	local found: Instance? = character:FindFirstChildOfClass("Humanoid")
-		or character:WaitForChild("Humanoid", LIMB_TIMEOUT)
-	local humanoid = if found and found:IsA("Humanoid") then found else nil
+	local humanoid = waitForBody(player, character)
+	if buildTokens[player] ~= token or player.Character ~= character then
+		return -- uma montagem mais nova (troca, respawn) já assumiu
+	end
 	if not humanoid then
-		log:Warn(string.format("user=%d has no humanoid to hold the blade", player.UserId))
+		log:Warn(string.format("user=%d character never got a hand to hold the blade", player.UserId))
 		return
 	end
-	local existing = character:FindFirstChild(SWORD_NAME)
-	if existing then
-		existing:Destroy()
-	end
+	removeBlades(player, character)
 
 	local grip = SwordConfig.Grip
 	local tool = Instance.new("Tool")
@@ -161,13 +214,27 @@ local function buildSword(player: Player, sword: Types.SwordData)
 
 	tool.Parent = character
 	humanoid:EquipTool(tool)
+	-- Confere uma vez: se algo tirou a espada da mão, equipa de novo.
+	task.delay(VERIFY_SECONDS, function()
+		if buildTokens[player] == token and player.Character == character and tool.Parent ~= character and tool.Parent ~= nil then
+			humanoid:EquipTool(tool)
+		end
+	end)
 end
 
+--[[
+	Aplica a espada equipada ao personagem atual. Chamado ao carregar os
+	dados, a cada CharacterAdded (respawn), ao trocar de espada e no reset de
+	dados do Studio — sempre o mesmo caminho, então o que a UI mostra como
+	"Equipada" é o que aparece na mão.
+]]
 local function publish(player: Player, data: PlayerData)
 	local sword = SwordLogic.Equipped(data.Swords)
 	player:SetAttribute(ATTRIBUTE, sword.Id)
-	-- buildSword pode esperar por um membro do personagem: nunca na thread do sinal.
-	task.spawn(buildSword, player, sword)
+	local token = (buildTokens[player] or 0) + 1
+	buildTokens[player] = token
+	-- buildSword espera o personagem montar: nunca na thread do sinal.
+	task.spawn(buildSword, player, sword, token)
 end
 
 --[[
@@ -240,6 +307,7 @@ function SwordService.Init()
 	Players.PlayerAdded:Connect(track)
 	Players.PlayerRemoving:Connect(function(player)
 		player:SetAttribute(ATTRIBUTE, nil)
+		buildTokens[player] = nil
 	end)
 end
 
