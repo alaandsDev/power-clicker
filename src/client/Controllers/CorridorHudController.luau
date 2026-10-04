@@ -12,13 +12,13 @@
 	não tapar a barreira com painel grande. A barra de vida da fileira continua
 	flutuando sobre a própria barreira (WallController) — aqui é o resumo.
 
-	Tudo vem de atributos que o servidor já escreve nas peças; este controller
-	não decide nada.
+	O HP é o das barreiras DESTE jogador (cada um tem o próprio caminho), lido
+	do WallController, que recebe o estado do servidor; este controller não
+	decide nada.
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
@@ -30,6 +30,7 @@ local Build = require(script.Parent.Parent.UI.Build)
 local UIController = require(script.Parent.UIController)
 local GameStateController = require(script.Parent.GameStateController)
 local HudController = require(script.Parent.HudController)
+local WallController = require(script.Parent.WallController)
 
 -- A que distância da barreira a faixa aparece. Um pouco além do alcance do
 -- golpe, para o jogador já chegar lendo o que tem pela frente.
@@ -49,8 +50,6 @@ local titleLabel: TextLabel
 local statusLabel: TextLabel
 local rewardLabel: TextLabel
 local setBar: (number) -> ()
-local rows: { BasePart } = {}
-local scanned = false
 
 local function stageOf(stageId: string): WallConfig.WallStage?
 	for _, stage in WallConfig.Stages do
@@ -61,32 +60,19 @@ local function stageOf(stageId: string): WallConfig.WallStage?
 	return nil
 end
 
-local function scan()
-	local map = Workspace:FindFirstChild("Map")
-	local worlds = if map then map:FindFirstChild("Worlds") else nil
-	local world = if worlds then worlds:FindFirstChild(WallConfig.WorldId) else nil
-	if not world then
-		return
-	end
-	table.clear(rows)
-	for _, descendant in world:GetDescendants() do
-		if descendant:IsA("BasePart") and descendant:GetAttribute("Wall") == true then
-			table.insert(rows, descendant)
-		end
-	end
-	scanned = #rows > 0
-end
-
--- A fileira de pé mais próxima do jogador, se houver alguma por perto.
+-- A fileira de pé (para este jogador) mais próxima, se houver alguma por perto.
 local function nearestRow(position: Vector3): (BasePart?, number)
 	local best: BasePart? = nil
 	local bestDistance = SHOW_RANGE
-	for _, row in rows do
-		-- Só fileiras À FRENTE do jogador (o servidor só aceita golpe nelas).
-		if row:GetAttribute("Broken") ~= true and position.X < row.Position.X then
-			local distance = (row.Position - position).Magnitude
-			if distance <= bestDistance then
-				best, bestDistance = row, distance
+	for _, rows in WallController.Rows() do
+		for _, row in rows do
+			-- Só fileiras À FRENTE do jogador (o servidor só aceita golpe nelas).
+			if row.Parent and position.X < row.Position.X then
+				local _, _, broken = WallController.RowState(row)
+				local distance = (row.Position - position).Magnitude
+				if not broken and distance <= bestDistance then
+					best, bestDistance = row, distance
+				end
 			end
 		end
 	end
@@ -96,7 +82,7 @@ end
 local function refresh()
 	local character = Players.LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not scanned or not root or not root:IsA("BasePart") then
+	if not root or not root:IsA("BasePart") then
 		panel.Visible = false
 		return
 	end
@@ -113,9 +99,8 @@ local function refresh()
 	end
 	panel.Visible = true
 
-	local hp = row:GetAttribute("Hp")
-	local maxHp = row:GetAttribute("MaxHp")
-	local fraction = if type(hp) == "number" and type(maxHp) == "number" and maxHp > 0 then hp / maxHp else 1
+	local hp, maxHp = WallController.RowState(row)
+	local fraction = if maxHp > 0 then hp / maxHp else 1
 	local perClick = GameStateController.GetPowerInfo().PerClick
 
 	titleLabel.Text = Text.Get("corridor.stage", {
@@ -123,8 +108,8 @@ local function refresh()
 		name = Text.Get("wall." .. stage.Id .. ".name"),
 	})
 	statusLabel.Text = Text.Get("corridor.status", {
-		hp = NumberFormat.Short(math.max(tonumber(hp) or 0, 0)),
-		max = NumberFormat.Short(tonumber(maxHp) or 0),
+		hp = NumberFormat.Short(math.max(hp, 0)),
+		max = NumberFormat.Short(maxHp),
 		icon = Theme.Icons.Power,
 		power = NumberFormat.Short(perClick),
 	})
@@ -135,10 +120,9 @@ local function refresh()
 		sem perceber progresso.
 	]]
 	local remaining = 0
-	for _, other in rows do
-		if other:GetAttribute("StageId") == stageId and other:GetAttribute("Broken") ~= true then
-			remaining += math.max(tonumber(other:GetAttribute("Hp")) or 0, 0)
-		end
+	for _, other in WallController.Rows()[stage.Id] or {} do
+		local otherHp = WallController.RowState(other)
+		remaining += math.max(otherHp, 0)
 	end
 	local hits = if perClick > 0 then math.ceil(remaining / perClick) else math.huge
 	setBar(math.clamp(fraction, 0, 1))
@@ -221,17 +205,9 @@ function CorridorHudController.Init()
 end
 
 function CorridorHudController.Start()
-	task.spawn(function()
-		while not scanned do
-			scan()
-			if not scanned then
-				task.wait(1)
-			end
-		end
-		-- Uma varredura por quadro é mais barata (e mais simples) que um
-		-- listener por fileira, e são poucas dezenas de peças.
-		RunService.Heartbeat:Connect(refresh)
-	end)
+	-- Uma varredura por quadro é mais barata (e mais simples) que um listener
+	-- por fileira, e são poucas dezenas de peças.
+	RunService.Heartbeat:Connect(refresh)
 end
 
 return CorridorHudController

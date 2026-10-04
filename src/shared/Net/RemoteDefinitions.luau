@@ -152,6 +152,10 @@ local Remotes: { [string]: RemoteSpec } = {
 	DataChanged = { Kind = "Event", Direction = "ServerToClient" },
 	-- (kind: string, payload: table) generic notifications / toasts.
 	Notify = { Kind = "Event", Direction = "ServerToClient" },
+	-- ({ [stageId]: { Hp = { number }, Open = boolean } }) the barriers of the
+	-- Power Path AS THEY ARE FOR THIS PLAYER (each player has their own; the
+	-- shared parts in the Workspace never change on the server).
+	WallState = { Kind = "Event", Direction = "ServerToClient" },
 	-- (manualGain, manualClicks, comboStacks, autoGain) batched per flush.
 	ClickFeedback = { Kind = "Event", Direction = "ServerToClient" },
 	-- ({ PerClick, Base, Total, Layers }) when the player's multipliers change.

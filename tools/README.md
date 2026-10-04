@@ -61,16 +61,19 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   respawn, troca pelo remote, reentrada, dados migrados, equipada inválida ou
   não possuída (cai para a inicial) e corridas (uma espada só, nada na
   mochila). O `EquipTool` simulado imita o Studio: sem mão, a espada se perde.
-- **check_corridor** — o `WallService` real sobre o mapa gerado: ordem das
-  barreiras; golpe de frente quebra e de trás não; detalhes somem/voltam com a
-  fileira e nunca colidem; os 3 pads (normal = Pads[1], x2 = 2x o normal na
-  primeira vez e repetindo, Voltar sem prêmio), todos voltam para a praça,
-  um prêmio por abertura e sem vazar entre jogadores; A encerrar não mexe na
-  tentativa de B; gemas da primeira vez uma vez só; a barreira não se refaz com
-  alguém dentro; respawn não perde progresso; efeitos não mexem no HP; não dá
-  para contornar/pular. Imprime a distância/tempo de volta do spawn até cada
-  barreira. (Adapta só no carregamento: `.Position` -> `.CFrame.Position` e
-  janela aberta de 0,5 s.)
+- **check_corridor** — o `WallService` real sobre o mapa gerado, com vários
+  jogadores no mesmo servidor e um CLIENTE simulado por jogador (ambiente
+  próprio, mapa próprio e o `WallController` real recebendo só o `WallState`
+  daquele jogador). Barreiras individuais: golpe de A não muda o HP de B; só
+  quem quebrou vê a passagem e tem a fileira sem colisão no cliente; quem
+  atravessa sem ter quebrado volta para a frente da barreira e não ganha nada;
+  quem entra depois recebe o próprio estado; sair e voltar mantém o progresso
+  salvo; as peças do servidor nunca mudam. Mais o loop de sempre: ordem, golpe
+  de frente/trás, os 3 pads (normal, x2 = 2x, Voltar), prêmio volta para a
+  praça, gemas da primeira vez uma vez só, não refaz em cima do jogador, não
+  dá para contornar/pular, e a distância/tempo de volta do spawn. (Adapta só
+  no carregamento: `.Position` -> `.CFrame.Position`, janela de 0,5 s e o
+  PivotTo do "levar de volta".)
 - **check_cuts** — a vitrine dos pads de Corte (`CutShowcaseController`) e a
   camada de corte do golpe (`SlashController`) de verdade sobre o mapa: cada
   corte tem pad, pedestal, orbe e placa sem colisão e o prompt de compra

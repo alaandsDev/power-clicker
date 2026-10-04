@@ -1,16 +1,23 @@
 --!strict
 --[[
 	WallController
-	The sign on the win corridor: stage number, material name and the HP bar of
-	the row you are breaking — exactly the information the server already writes
-	on each row part ("Hp", "MaxHp", "Broken").
+	As barreiras do Caminho do Poder COMO ELAS SÃO PARA ESTE JOGADOR. Cada
+	jogador tem o próprio caminho: o servidor (WallService) guarda o HP de cada
+	fileira por jogador e manda a este cliente só o estado dele (WallState).
 
-	One sign per stage: it follows the front-most row still standing, so the
-	player always reads the row in front of them. When the stage is open the
-	sign shows the seconds left to grab a pad.
+	As peças das fileiras no Workspace são compartilhadas e ficam sempre
+	inteiras e sólidas no servidor. Aqui, e só neste cliente, a fileira que
+	ESTE jogador quebrou some e deixa de colidir (propriedades locais, que não
+	replicam): a física do personagem roda no cliente dono dele, então ele
+	atravessa e os outros continuam batendo na fileira inteira. Se a peça sair
+	e voltar pelo streaming, o estado é aplicado de novo.
 
-	Nothing here decides anything: HP, the open window and the wins are
-	WallService's.
+	Também desenha a placa de cada estágio (número, material e barra de HP da
+	fileira da frente), o flash/rachadura dos golpes, os estilhaços e o aviso
+	"BARREIRA N DESTRUÍDA!".
+
+	Nada aqui decide nada: HP, abertura, janela e vitórias são do WallService,
+	que também confere a posição de quem tenta atravessar sem ter quebrado.
 ]]
 
 local Players = game:GetService("Players")
@@ -67,11 +74,15 @@ local BANNER_SECONDS = 2.6
 
 local WallController = {}
 
-local rowsByStage: { [string]: { BasePart } } = {}
+export type StageView = { Hp: { number }, Open: boolean }
+
+-- rowsByStage[stageId][row] = peça (substituída se o streaming trocar a peça).
+local rowsByStage: { [string]: { [number]: BasePart } } = {}
+-- O estado deste jogador (WallState). Estágio sem entrada = inteiro.
+local views: { [string]: StageView } = {}
 local signs: { [string]: Sign } = {}
 local scanned = false
 local lastHitAt: { [BasePart]: number } = {}
-local lastHp: { [BasePart]: number } = {}
 local debris: { BasePart } = {}
 local debrisIndex = 0
 local debrisFolder: Folder
@@ -112,6 +123,63 @@ local function swordColor(): Color3
 	local swordId = Players.LocalPlayer:GetAttribute("EquippedSword")
 	local sword = if type(swordId) == "string" then SwordConfig.Swords[swordId] else nil
 	return if sword then sword.ArcColor else Color3.new(1, 1, 1)
+end
+
+local function stageOfId(stageId: any): WallConfig.WallStage?
+	for _, stage in WallConfig.Stages do
+		if stage.Id == stageId then
+			return stage
+		end
+	end
+	return nil
+end
+
+--[[
+	(hp, maxHp, quebrada) da fileira PARA ESTE JOGADOR. Sem estado recebido,
+	a fileira está inteira.
+]]
+function WallController.RowState(row: BasePart): (number, number, boolean)
+	local stageId = row:GetAttribute("StageId")
+	local index = row:GetAttribute("Row")
+	local stage = stageOfId(stageId)
+	local maxHp = if stage then stage.Hp else (tonumber(row:GetAttribute("MaxHp")) or 0)
+	local view = if type(stageId) == "string" then views[stageId] else nil
+	local hp = if view and type(index) == "number" then view.Hp[index] else nil
+	if type(hp) ~= "number" then
+		hp = maxHp
+	end
+	return hp :: number, maxHp, (hp :: number) <= 0
+end
+
+-- As fileiras do corredor, por estágio e número (para a faixa do corredor).
+function WallController.Rows(): { [string]: { [number]: BasePart } }
+	return rowsByStage
+end
+
+--[[
+	Aparência e colisão LOCAIS da fileira: quebrada para este jogador = some,
+	sem colisão, sem luz, detalhes escondidos. Só mexe quando difere, então
+	pode rodar a cada quadro (e reaplica se o streaming trouxer a peça de novo).
+]]
+local function applyRow(row: BasePart, broken: boolean)
+	local wantCollide = not broken
+	local wantTransparency = if broken then 1 else 0
+	if row.CanCollide == wantCollide and row.Transparency == wantTransparency then
+		return
+	end
+	row.CanCollide = wantCollide
+	row.Transparency = wantTransparency
+	if not broken then
+		row.LocalTransparencyModifier = 0
+	end
+	for _, child in row:GetChildren() do
+		if child:IsA("BasePart") and child:GetAttribute("WallDetail") == true then
+			local base = child:GetAttribute("BaseTransparency")
+			child.Transparency = if broken then 1 else (if type(base) == "number" then base else 0)
+		elseif child:IsA("Light") then
+			child.Enabled = not broken
+		end
+	end
 end
 
 --[[
@@ -274,27 +342,23 @@ end
 
 local function refresh()
 	for stageId, rows in rowsByStage do
-		local sign = signs[stageId]
-		if not sign then
-			continue
-		end
-		-- The row in front: the first one still standing.
+		-- Colisão/aparência locais de cada fileira, conforme o estado DESTE jogador.
 		local front: BasePart? = nil
-		for _, row in rows do
-			local broken = row:GetAttribute("Broken") == true
-			if broken then
-				-- Fell since the last sweep: one burst, then forget it until
-				-- the stage rebuilds.
-				if lastHp[row] ~= nil then
-					lastHp[row] = nil
-					row.LocalTransparencyModifier = 0
-					burst(row)
-				end
-			else
-				if front == nil then
+		local stage = stageOfId(stageId)
+		local count = if stage then stage.Rows else #rows
+		for index = 1, count do
+			local row = rows[index]
+			if row and row.Parent then
+				local _, _, broken = WallController.RowState(row)
+				applyRow(row, broken)
+				if not broken and front == nil then
 					front = row
 				end
 			end
+		end
+		local sign = signs[stageId]
+		if not sign then
+			continue
 		end
 		if not front then
 			sign.Gui.Enabled = false
@@ -305,21 +369,65 @@ local function refresh()
 
 		sign.Title.Text = Text.Get("wall.stage", { order = stageOrder(stageId) })
 		sign.Name.Text = stageName(stageId)
-		local hp = front:GetAttribute("Hp")
-		local maxHp = front:GetAttribute("MaxHp")
-		if type(hp) == "number" and type(maxHp) == "number" and maxHp > 0 then
+		local hp, maxHp = WallController.RowState(front :: BasePart)
+		if maxHp > 0 then
 			local fraction = math.clamp(hp / maxHp, 0, 1)
 			sign.BarFill.Size = UDim2.fromScale(fraction, 1)
 			sign.BarFill.BackgroundColor3 = Theme.Colors.Good
 			sign.BarText.Text = NumberFormat.Short(hp) .. " / " .. NumberFormat.Short(maxHp)
-			-- Took damage since the last sweep: flash and crack.
-			local previous = lastHp[front]
-			if previous and hp < previous then
-				showDamage(front, fraction)
-			end
-			lastHp[front] = hp
 		end
 	end
+end
+
+--[[
+	Novo estado DESTE jogador vindo do servidor: golpe na fileira (flash e
+	rachadura), fileira caindo (estilhaços) e barreira se refazendo.
+]]
+local function onWallState(payload: any)
+	if type(payload) ~= "table" then
+		return
+	end
+	for stageId, incoming in payload do
+		if type(stageId) ~= "string" or type(incoming) ~= "table" or type(incoming.Hp) ~= "table" then
+			continue
+		end
+		local stage = stageOfId(stageId)
+		local previous = views[stageId]
+		local rows = rowsByStage[stageId] or {}
+		for index, hp in incoming.Hp do
+			local before = if previous then previous.Hp[index] else (if stage then stage.Hp else hp)
+			local row = rows[index]
+			if row and type(hp) == "number" and type(before) == "number" then
+				if hp <= 0 and before > 0 then
+					row.LocalTransparencyModifier = 0
+					burst(row)
+				elseif hp > 0 and hp < before and stage then
+					showDamage(row, hp / stage.Hp)
+				elseif hp > before then
+					row.LocalTransparencyModifier = 0
+				end
+			end
+		end
+		views[stageId] = { Hp = table.clone(incoming.Hp), Open = incoming.Open == true }
+	end
+	refresh()
+end
+
+local function addRow(descendant: Instance)
+	if not descendant:IsA("BasePart") or descendant:GetAttribute("Wall") ~= true then
+		return
+	end
+	local stageId = descendant:GetAttribute("StageId")
+	local index = descendant:GetAttribute("Row")
+	if type(stageId) ~= "string" or type(index) ~= "number" then
+		return
+	end
+	local list = rowsByStage[stageId]
+	if not list then
+		list = {}
+		rowsByStage[stageId] = list
+	end
+	list[index] = descendant
 end
 
 local function scan()
@@ -367,38 +475,19 @@ local function scan()
 		if descendant:IsA("BasePart") and descendant:GetAttribute("WinPad") == true and descendant:GetAttribute("Return") ~= true then
 			table.insert(winPads, descendant)
 		end
-		if descendant:IsA("BasePart") and descendant:GetAttribute("Wall") == true then
-			local stageId = descendant:GetAttribute("StageId")
-			if type(stageId) == "string" then
-				local list = rowsByStage[stageId]
-				if not list then
-					list = {}
-					rowsByStage[stageId] = list
-				end
-				table.insert(list, descendant)
-			end
-		end
+		addRow(descendant)
 	end
 	for stageId, rows in rowsByStage do
-		table.sort(rows, function(a, b)
-			return (a:GetAttribute("Row") or 0) < (b:GetAttribute("Row") or 0)
-		end)
-		if not signs[stageId] then
+		if not signs[stageId] and rows[1] then
 			signs[stageId] = createSign(stageId, rows[1])
 		end
 	end
 	scanned = next(rowsByStage) ~= nil
-end
-
--- O personagem local está perto das fileiras desse estágio?
-local function nearStage(stageId: any): boolean
-	local character = Players.LocalPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	local rows = if type(stageId) == "string" then rowsByStage[stageId] else nil
-	if not root or not root:IsA("BasePart") or not rows or not rows[1] then
-		return false
+	if scanned then
+		-- Streaming: uma fileira que volta é uma peça nova; ela entra no lugar
+		-- da antiga e o próximo quadro aplica o estado deste jogador nela.
+		world.DescendantAdded:Connect(addRow)
 	end
-	return (rows[1].Position - root.Position).Magnitude <= WallConfig.HitRange * 4
 end
 
 --[[
@@ -512,6 +601,7 @@ function WallController.Init()
 		end
 	end)
 
+	ClientNet.On("WallState", onWallState)
 	ClientNet.On("Notify", function(kind: any, payload: any)
 		if type(payload) ~= "table" then
 			return
@@ -523,18 +613,13 @@ function WallController.Init()
 				icon = Theme.Icons.Wins,
 			}), "Good")
 		elseif kind == "WallBroken" then
-			local local_ = Players.LocalPlayer
-			if payload.ById == local_.UserId then
+			-- Só chega para quem quebrou: a barreira dos outros continua inteira.
+			if payload.ById == Players.LocalPlayer.UserId then
 				if payload.FirstClear == true and type(payload.StageId) == "string" then
 					firstClearUntil[payload.StageId] = os.clock() + (tonumber(payload.Seconds) or WallConfig.OpenSeconds)
 				end
 				refreshPads()
 				showDestroyed(payload)
-			elseif nearStage(payload.StageId) then
-				NotificationController.Show(Text.Get("wall.openedNear", {
-					order = tostring(payload.Order or stageOrder(tostring(payload.StageId))),
-					name = tostring(payload.By or "?"),
-				}), "Info")
 			end
 		elseif kind == "TowerCleared" then
 			-- As gemas da primeira vez entram no anúncio grande (WallBroken traz

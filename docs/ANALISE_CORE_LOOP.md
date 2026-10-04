@@ -25,8 +25,8 @@ O que pesa é voltar:
 | 10 Colosso | 2.396 | 150 s | ~6,8 bi |
 
 Leitura:
-- As barreiras são **compartilhadas pelo servidor** e se refazem 14 s depois de
-  abertas. Para chegar à barreira N, o jogador quebra de novo todas as
+- As barreiras são **individuais por jogador** (ver "Multiplayer" abaixo) e se
+  refazem, para quem abriu, 14 s depois de abertas. Para chegar à barreira N, o jogador quebra de novo todas as
   anteriores — mas com o dano de quem já chegou em N, as anteriores caem em
   poucos golpes (cada estágio pede ~8–10x o anterior). O custo real é
   **andar**: 1–2,5 min para voltar ao estágio 5–10, mais a quebra.
@@ -119,12 +119,27 @@ Correção: `WinPadRules` (uma regra só, usada pelo servidor e pela placa).
 A primeira conquista vale por abertura e por jogador, e o pad x2 vale sempre
 (pad normal) × 2.
 
-### Multiplayer
+### Multiplayer — barreiras individuais
 
-As barreiras são compartilhadas pelo servidor. "Encerrar a tentativa" é
-**por jogador**: só quem pegou o prêmio (ou pisou em Voltar) é levado para a
-praça. A barreira continua aberta para os outros até a janela acabar e só se
-refaz quando não há ninguém dentro dela. Assim A terminar não reseta nem
-prende B. Barreiras por jogador (cada um com as suas) seriam uma mudança de
-arquitetura (fileiras locais no cliente + HP por jogador no servidor) e não
-foram feitas.
+Cada jogador faz o PRÓPRIO Caminho do Poder, mesmo no mesmo servidor:
+
+- **Servidor (`WallService`)** guarda por jogador o HP de cada fileira, a
+  abertura, a janela dos pads (14 s), o prêmio da abertura e as barreiras já
+  atravessadas. O progresso salvo (`PlayerData.Tower`) já era por jogador; não
+  houve migração nem mudança de DataStore.
+- **As peças das fileiras no Workspace são compartilhadas e ficam sempre
+  inteiras e sólidas no servidor.** Cada cliente recebe só o próprio estado
+  (remote `WallState`) e o `WallController` esconde e tira a colisão das
+  fileiras que AQUELE jogador quebrou, localmente. A física do personagem roda
+  no cliente dono dele: ele atravessa, os outros continuam batendo na fileira.
+- **Anti-exploit:** o servidor confere a posição de cada jogador contra as
+  barreiras DELE a cada 0,25 s (e antes de cada golpe e pad). Quem está além de
+  uma barreira que não abriu volta para a frente dela; golpe e pad não valem.
+  Tirar a fileira no próprio cliente não dá progresso, prêmio nem acesso.
+- Não existem mais: HP global, barreira quebrada por outro, janela global,
+  reconstrução esperando "alguém" sair (só o próprio jogador conta) nem aviso
+  de quebra para o servidor inteiro.
+
+`tools/lune/check_corridor.luau` cobre os 9 cenários multiplayer (M1–M9) com o
+`WallService` real e um cliente simulado por jogador. A física real da
+passagem local REQUER VALIDAÇÃO NO ROBLOX STUDIO com 2 jogadores.
