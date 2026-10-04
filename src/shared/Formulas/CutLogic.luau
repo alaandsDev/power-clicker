@@ -71,6 +71,30 @@ function CutLogic.Best(cuts: CutsData): CutData
 	return best
 end
 
+--[[
+	O que a estação do corte mostra para este jogador. Só leitura (a vitrine
+	usa; quem decide a compra continua sendo o CanBuy no servidor):
+	- "Active":    é o melhor corte que ele tem — o que está dando dano agora
+	               (não existe "equipar": possuir é usar);
+	- "Owned":     já comprado, mas superado por um melhor;
+	- "Available": vitórias suficientes, dá para comprar (se tiver Power);
+	- "Locked":    faltam vitórias.
+]]
+export type CutState = "Active" | "Owned" | "Available" | "Locked"
+
+function CutLogic.State(cuts: CutsData?, cutId: string, wins: number?): CutState
+	local owned = if cuts and type(cuts.Owned) == "table" then cuts.Owned else { [CutConfig.StarterCut] = true }
+	local view: CutsData = { Owned = owned }
+	if owned[cutId] == true or cutId == CutConfig.StarterCut then
+		return if CutLogic.Best(view).Id == cutId then "Active" else "Owned"
+	end
+	local cut = CutConfig.Cuts[cutId]
+	if cut and (tonumber(wins) or 0) >= cut.RequiredWins then
+		return "Available"
+	end
+	return "Locked"
+end
+
 -- Flat damage the cut adds to the base of PowerFormula.
 function CutLogic.FlatBonus(cuts: CutsData): number
 	return CutLogic.Best(cuts).Flat

@@ -1,9 +1,12 @@
 --!strict
 --[[
 	SlashController
-	The arc that flashes in front of the character on every click, in the colour
-	of the cut the player bought (CutService welds the blade and mirrors the cut
-	id on the "BestCut" attribute).
+	What flashes in front of the character on every click, in two layers:
+	- the ARC, in the colour of the equipped sword skin (cosmetic, SwordConfig);
+	- the CUT, the effect of the best cut the player owns (CutService mirrors
+	  it on the "BestCut" attribute): colour, streaks, trail, glow and sparks
+	  from CutVisuals, drawn by CutFx. The cut pads' showcase plays this exact
+	  recipe, so what the pad shows is what the swing does.
 
 	Purely local: the slash is drawn on this client only, so a 9-clicks-a-second
 	hold costs the network nothing. The blade, its trail and its glow are the
@@ -19,6 +22,9 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local SwordConfig = require(Shared:WaitForChild("Config"):WaitForChild("SwordConfig"))
+local CutVisuals = require(Shared:WaitForChild("Formulas"):WaitForChild("CutVisuals"))
+
+local CutFx = require(script.Parent.Parent.Effects.CutFx)
 
 local DataController = require(script.Parent.DataController)
 
@@ -29,13 +35,20 @@ local ARC_SIZE = Vector3.new(0.25, 6.5, 1.1)
 local ARC_DISTANCE = 3.4 -- studs in front of the character
 local ARC_SECONDS = 0.16
 local MIN_INTERVAL = 0.05 -- never more than ~20 arcs a second
+-- Cut layer: at most ~10 a second, and the rig holds enough plays for the
+-- longest trail (CutVisuals: 0.16 + 0.5 s) at that rate.
+local CUT_MIN_INTERVAL = 0.1
+local CUT_PLAYS = 7
+local CUT_SPARK_COOLDOWN = 0.3 -- sparks at most ~3 times a second
 
 local SlashController = {}
 
 local pool: { BasePart } = {}
 local poolIndex = 0
 local lastAt = 0
+local lastCutAt = 0
 local folder: Folder
+local cutRig: CutFx.Rig
 
 -- A skin equipada decide a cor e o tamanho do arco (SwordService escreve o
 -- atributo). Cosmético: não há número de dano nenhum aqui.
@@ -102,6 +115,13 @@ function SlashController.Play()
 			ARC_SIZE.Z * sword.ArcScale * 0.4
 		),
 	}):Play()
+
+	if now - lastCutAt >= CUT_MIN_INTERVAL then
+		lastCutAt = now
+		local recipe = CutVisuals.ForBest(Players.LocalPlayer:GetAttribute("BestCut"))
+		local origin = root.CFrame * CFrame.new(math.random(-8, 8) / 10, 0.4, -ARC_DISTANCE - 0.3)
+		CutFx.Play(cutRig, recipe, origin, 1, math.random(-20, 20))
+	end
 end
 
 function SlashController.Init()
@@ -111,6 +131,7 @@ function SlashController.Init()
 	for index = 1, POOL_SIZE do
 		pool[index] = createArc()
 	end
+	cutRig = CutFx.NewRig("Cut", folder, CUT_PLAYS, CUT_SPARK_COOLDOWN)
 end
 
 return SlashController

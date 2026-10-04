@@ -342,11 +342,14 @@ export type CutData = {
 	Flat: number, -- added to the BASE of PowerFormula
 	Price: number, -- in CutConfig.Currency; 0 = the starter cut
 	RequiredWins: number,
-	-- Look of the blade the player carries while this is their best cut.
+	-- Look of the cut (CutVisuals): the swing and the pad showcase read these.
 	Color: Color3,
 	TrailSeconds: number, -- 0 = no trail (the starter blade)
 	LightRange: number, -- 0 = no glow
-	Neon: boolean, -- the blade itself glows
+	Neon: boolean, -- the slash itself glows
+	Slashes: number, -- streaks per swing (1, 2 = X, 3 = fan)
+	Sparks: number, -- sparks per swing (0 = none)
+	SlashScale: number, -- streak size (1 = the default swing arc)
 }
 
 -- Runes (RuneConfig): boss drops, equipped in slots.

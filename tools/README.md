@@ -37,6 +37,7 @@ lune run tools/lune/check_world.luau    # WorldBuilder + geometria do mapa
 lune run tools/lune/check_hud.luau      # layout do HUD em 5 resoluções/entradas
 lune run tools/lune/check_sword.luau    # espada equipada aplicada ao personagem (SwordService real)
 lune run tools/lune/check_corridor.luau # loop do Caminho do Poder (WallService real sobre o mapa)
+lune run tools/lune/check_cuts.luau     # vitrine dos Cortes + camada de corte do golpe (mesma config)
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
@@ -70,6 +71,16 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   para contornar/pular. Imprime a distância/tempo de volta do spawn até cada
   barreira. (Adapta só no carregamento: `.Position` -> `.CFrame.Position` e
   janela aberta de 0,5 s.)
+- **check_cuts** — a vitrine dos pads de Corte (`CutShowcaseController`) e a
+  camada de corte do golpe (`SlashController`) de verdade sobre o mapa: cada
+  corte tem pad, pedestal, orbe e placa sem colisão e o prompt de compra
+  igual; vistas da avenida (43 câmeras), placas e nomes de estações
+  diferentes não se sobrepõem na tela; estados ATIVO/COMPRADO/DISPONÍVEL/
+  BLOQUEADO; vitrine e golpe tocam a MESMA receita (`CutVisuals.For`); pausa
+  de 1,5–3 s entre demonstrações; nada toca longe, sem personagem ou com
+  efeitos reduzidos; peças não acumulam em 3 min simulados, sem conexões
+  novas por passo; nada vai ao servidor nem muda dados. (Desliga só o laço
+  de fundo do controller e usa relógio simulado.)
 - **check_hud** — inicializa os controllers do cliente na ordem do
   `ClientBootstrap` e mede o HUD com tudo visível (pior caso, incluindo
   tutorial e avisos): sem sobreposição, tudo dentro da tela; faixa de
@@ -88,6 +99,9 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
 - Legibilidade real da placa (SurfaceGui), da espada do portão e das barreiras.
 - Espada soldada na mão, visível, seguindo o braço, e replicada aos outros.
 - Tamanho real de texto no HUD (TextScaled, fontes) e sensação de leitura.
+- Vitrine dos Cortes e camada de corte do golpe: cor, brilho (Neon/PointLight),
+  faíscas (ParticleEmitter), varredura do risco e leitura real das placas
+  (SurfaceGui) e nomes (BillboardGui) — o `check_cuts` mede só geometria e lógica.
 
 ### Limites (isto NÃO substitui o Studio)
 

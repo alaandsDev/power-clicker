@@ -964,10 +964,16 @@ end
 	prompt (PromptTriggered is a server event), so the price and the wins
 	requirement are never checked on the client.
 
-	Texto em DOIS níveis (antes eram oito placas com três linhas cada, todas
-	legíveis de 120 studs — uma parede de texto na entrada do Caminho):
-	- de longe (até 55 studs) só o nome curto: "Corte 3";
-	- de perto (até 20 studs) o detalhe: dano, preço e vitórias.
+	Cada pad é uma ESTAÇÃO (vitrine), lida de quem anda pela avenida:
+	- pedestal no meio do pad e, acima dele, a âncora `CutShowcase_<id>`
+	  onde o cliente põe o orbe de energia e toca a demonstração do corte
+	  (CutShowcaseController; o efeito é o mesmo do golpe);
+	- placa baixa `CutCard_<id>` na borda do pad que dá para a avenida,
+	  virada para ela e um pouco para quem chega (CardYaw) e inclinada como um
+	  balcão (CardTilt). O cliente escreve nela bônus, requisito e estado, que
+	  dependem de cada jogador.
+	Antes eram duas placas flutuando no alto de cada pad: vistas da avenida,
+	as quatro de cada fileira se empilhavam umas sobre as outras.
 ]]
 local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 	local layout = CutConfig.Layout
@@ -976,6 +982,7 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 	local columns = layout.Columns
 	local rows = math.ceil(#cuts / columns)
 	local steel = Color3.fromRGB(104, 112, 134)
+	local slate = Color3.fromRGB(58, 62, 78)
 	for index, cut in cuts do
 		-- Grid at the foot of the gate: cheapest at the front-left.
 		local column = (index - 1) % columns
@@ -996,25 +1003,49 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 		local inset = block(model, CFrame.new(pad.CFrame.Position + Vector3.new(0, 0.55, 0)), Vector3.new(layout.PadSize - 4, 0.12, 1.2), LobbyConfig.Gate.Energy, Enum.Material.Neon, false)
 		inset.Transparency = 0.2
 
-		billboard(pad, Text.GetFor(nil, "cut." .. cut.Id .. ".name"), Color3.new(1, 1, 1), layout.SignHeight, 55, 0.6)
-		local detail = if cut.Price == 0
-			then Text.GetFor(nil, "cut.starter", { flat = NumberFormat.Short(cut.Flat) })
-			else Text.GetFor(nil, "cut.sign", {
-				flat = NumberFormat.Short(cut.Flat),
-				price = NumberFormat.Short(cut.Price),
-				wins = NumberFormat.Short(cut.RequiredWins),
-			})
-		local detailAnchor = makePart(model, {
-			Name = "CutDetail_" .. cut.Id,
+		local top = pad.CFrame.Position + Vector3.new(0, 0.5, 0)
+		-- Para que lado fica a avenida (o eixo do adro) e para onde a estação olha.
+		local inward = if offsetZ > 0 then -1 elseif offsetZ < 0 then 1 else -1
+		local yaw = math.rad(layout.CardYaw)
+		local facing = Vector3.new(-math.sin(yaw), 0, inward * math.cos(yaw))
+
+		-- Pedestal (sem colisão: o pad fica no caminho da avenida).
+		local pedestal = block(model, CFrame.new(top + Vector3.new(0, layout.PedestalHeight / 2, 0)), Vector3.new(2.4, layout.PedestalHeight, 2.4), slate, Enum.Material.Slate, false)
+		pedestal.Name = "CutPedestal_" .. cut.Id
+		block(model, CFrame.new(top + Vector3.new(0, layout.PedestalHeight + 0.15, 0)), Vector3.new(3.2, 0.3, 3.2), steel, Enum.Material.Metal, false)
+
+		local anchorPosition = top + Vector3.new(0, layout.OrbHeight, 0)
+		local anchor = makePart(model, {
+			Name = "CutShowcase_" .. cut.Id,
 			Size = Vector3.new(1, 1, 1),
-			CFrame = CFrame.new(pad.CFrame.Position + Vector3.new(0, 1, 0)),
-			Color = steel,
+			CFrame = CFrame.lookAt(anchorPosition, anchorPosition + facing),
+			Color = cut.Color,
 			CanCollide = false,
 			Transparency = 1,
+			CastShadow = false,
 		})
-		detailAnchor.CanQuery = false
-		detailAnchor.CanTouch = false
-		billboard(detailAnchor, detail, LobbyConfig.Gate.Trim, layout.SignHeight - 2.6, 20, 0.8)
+		anchor.CanQuery = false
+		anchor.CanTouch = false
+		anchor:SetAttribute("CutShowcase", true)
+		anchor:SetAttribute("CutId", cut.Id)
+
+		-- Placa-balcão na borda do pad que dá para a avenida.
+		local tilt = math.rad(layout.CardTilt)
+		local cardCentre = top
+			+ Vector3.new(0, 0.5 + layout.CardSize.Y / 2 * math.cos(tilt), inward * (layout.PadSize / 2 - layout.CardInset))
+		local card = makePart(model, {
+			Name = "CutCard_" .. cut.Id,
+			Size = Vector3.new(layout.CardSize.X, layout.CardSize.Y, 0.25),
+			CFrame = CFrame.lookAt(cardCentre, cardCentre + facing) * CFrame.Angles(tilt, 0, 0),
+			Color = Color3.fromRGB(30, 32, 46),
+			CanCollide = false,
+			CastShadow = false,
+		})
+		card.CanQuery = false
+		card.CanTouch = false
+		card:SetAttribute("CutCard", true)
+		card:SetAttribute("CutId", cut.Id)
+		block(model, CFrame.lookAt(cardCentre, cardCentre + facing) - Vector3.new(0, cardCentre.Y - top.Y - 0.25, 0), Vector3.new(layout.CardSize.X * 0.6, 0.5, 0.6), slate, Enum.Material.Slate, false)
 
 		if cut.Price > 0 then
 			local proximity = Instance.new("ProximityPrompt")

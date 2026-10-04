@@ -30,6 +30,7 @@ local CONTROLLER_ORDER = {
 	"HudController",
 	"SwordController", -- cosmetic blade skins
 	"SlashController", -- the cut arc in front of the character
+	"CutShowcaseController", -- cut pads: orb, live demo of the cut, per-player card
 	"ClickController",
 	"UpgradeController",
 	"RebirthController",
