@@ -74,7 +74,12 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
 - **check_cuts** — a vitrine dos pads de Corte (`CutShowcaseController`) e a
   camada de corte do golpe (`SlashController`) de verdade sobre o mapa: cada
   corte tem pad, pedestal, orbe e placa sem colisão e o prompt de compra
-  igual; vistas da avenida (43 câmeras), placas e nomes de estações
+  igual; ZONA LIVRE da avenida (`LobbyConfig.CutStations`, mínimo de 8
+  studs): nenhum pad, pedestal, placa, orbe, prompt, risco ou faísca da
+  demonstração entra nela; fileiras simétricas, dentro do adro e sem
+  encostar em outra peça do lobby; prompts alcançáveis da borda da avenida;
+  da câmera do spawn, nada das estações cobre a janela avenida → barreira 1;
+  vistas da avenida (43 câmeras), placas e nomes de estações
   diferentes não se sobrepõem na tela; estados ATIVO/COMPRADO/DISPONÍVEL/
   BLOQUEADO; vitrine e golpe tocam a MESMA receita (`CutVisuals.For`); pausa
   de 1,5–3 s entre demonstrações; nada toca longe, sem personagem ou com

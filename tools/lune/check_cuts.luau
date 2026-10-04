@@ -162,11 +162,14 @@ local CutConfig = E.require(E.Shared.Config.CutConfig)
 local CutLogic = E.require(E.Shared.Formulas.CutLogic)
 local CutVisuals = E.require(E.Shared.Formulas.CutVisuals)
 local SwordConfig = E.require(E.Shared.Config.SwordConfig)
+local LobbyConfig = E.require(E.Shared.Config.LobbyConfig)
+local WallConfig = E.require(E.Shared.Config.WallConfig)
 
 local map = Instance.new("Folder")
 map.Name = "Map"
 map.Parent = E.Workspace
-local model = WorldBuilder.Build(WorldConfig.Worlds[WorldConfig.DefaultWorld], V3.new(0, 0, 0), Instance.new("Folder"), Instance.new("Folder"), true)
+local spawnsFolder = Instance.new("Folder")
+local model = WorldBuilder.Build(WorldConfig.Worlds[WorldConfig.DefaultWorld], V3.new(0, 0, 0), Instance.new("Folder"), spawnsFolder, true)
 model.Parent = map
 
 local layout = CutConfig.Layout
@@ -230,6 +233,214 @@ for _, cut in ordered do
 		local cardTop = card.CFrame:PointToWorldSpace(V3.new(0, card.Size.Y / 2, 0)).Y
 		check(cardTop < anchor.CFrame.Position.Y - 1.2, cut.Id .. ": placa tapa o orbe")
 	end
+end
+
+-- 1b. Zona livre da avenida (teste no Studio: as fileiras faziam um funil).
+local stationsCfg = LobbyConfig.CutStations
+local CLEAR = stationsCfg.ClearHalfWidth
+-- Largura mínima da zona livre, independente da config: 2x o vão de 4 studs
+-- entre os pads que travou a avenida no teste do Studio.
+local MIN_CLEAR_WIDTH = 8
+check(CLEAR * 2 >= MIN_CLEAR_WIDTH, string.format("zona livre: %.1f studs (mínimo %d)", CLEAR * 2, MIN_CLEAR_WIDTH))
+local axisZ = 0
+for _, area in LobbyConfig.Areas do
+	if area.Id == layout.Area then
+		axisZ = area.Offset.Z
+	end
+end
+-- Tudo o que fica em cima de cada pad é da estação (pad, inserto, pedestal,
+-- tampa, placa, suporte, âncora).
+local stationParts = {}
+local stationSet = {}
+-- No Lune cada leitura devolve um objeto novo: a chave é a geometria.
+local function keyOf(part)
+	local p, z = part.CFrame.Position, part.Size
+	return string.format("%s|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f", part.Name, p.X, p.Y, p.Z, z.X, z.Y, z.Z)
+end
+local function corners(part)
+	local h = part.Size / 2
+	local list = {}
+	for _, sx in { -1, 1 } do
+		for _, sy in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				table.insert(list, part.CFrame:PointToWorldSpace(V3.new(sx * h.X, sy * h.Y, sz * h.Z)))
+			end
+		end
+	end
+	return list
+end
+for _, cut in ordered do
+	local pad = find("CutPad_" .. cut.Id)
+	local list = {}
+	local half = pad.Size.X / 2
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			local offset = d.CFrame.Position - pad.CFrame.Position
+			if math.abs(offset.X) <= half and math.abs(offset.Z) <= half and offset.Y >= -0.01 and offset.Y < 12 then
+				table.insert(list, d)
+				stationSet[keyOf(d)] = true
+			end
+		end
+	end
+	stationParts[cut.Id] = list
+end
+
+local innerObjects, innerPads = math.huge, math.huge
+for _, cut in ordered do
+	for _, part in stationParts[cut.Id] do
+		for _, corner in corners(part) do
+			local fromAxis = math.abs(corner.Z - axisZ)
+			if fromAxis < CLEAR - 0.01 then
+				fail(string.format("zona livre: %s (%s) entra %.2f studs na zona central", part.Name, cut.Id, CLEAR - fromAxis))
+				break
+			end
+			if part.Name == "CutPad_" .. cut.Id then
+				innerPads = math.min(innerPads, fromAxis)
+			elseif corner.Y > part.CFrame.Position.Y - 10 and part.Size.Y > 0.3 or part.Name == "CutCard_" .. cut.Id then
+				innerObjects = math.min(innerObjects, fromAxis)
+			end
+		end
+	end
+end
+
+-- Orbe (cliente), prompt e efeito da demonstração.
+local showcaseSrc = fs.readFile(E.Root .. "/src/client/Controllers/CutShowcaseController.luau")
+local fxSrc = fs.readFile(E.Root .. "/src/client/Effects/CutFx.luau")
+local ORB_SIZE = tonumber(string.match(showcaseSrc, "local ORB_SIZE = ([%d%.]+)"))
+local SHOWCASE_SCALE = tonumber(string.match(showcaseSrc, "local SHOWCASE_SCALE = ([%d%.]+)"))
+local _, maxLife = string.match(fxSrc, "Lifetime = NumberRange%.new%(([%d%.]+), ([%d%.]+)%)")
+local _, maxSpeed = string.match(fxSrc, "Speed = NumberRange%.new%(([%d%.]+), ([%d%.]+)%)")
+local drag = tonumber(string.match(fxSrc, "emitter%.Drag = ([%d%.]+)"))
+-- Distância máxima de uma faísca: v/arrasto · (1 − e^(−arrasto·vida)).
+local SPARK_REACH = tonumber(maxSpeed) / drag * (1 - math.exp(-drag * tonumber(maxLife)))
+local VFX_MARGIN = 1 -- os riscos param pelo menos 1 stud antes da zona livre
+local innerVfx, innerSparks = math.huge, math.huge
+for _, cut in ordered do
+	local anchor = find("CutShowcase_" .. cut.Id)
+	local pad = find("CutPad_" .. cut.Id)
+	local orbInner = math.abs(anchor.CFrame.Position.Z - axisZ) - ORB_SIZE / 2
+	check(orbInner >= CLEAR + VFX_MARGIN, string.format("zona livre: orbe de %s a %.2f do eixo", cut.Id, orbInner))
+	innerObjects = math.min(innerObjects, orbInner)
+	-- Prompt: no pad (fora da zona) e alcançável da borda da avenida.
+	local prompt = pad:FindFirstChildOfClass("ProximityPrompt")
+	if prompt then
+		local edge = V3.new(pad.CFrame.Position.X, pad.CFrame.Position.Y, axisZ + math.sign(pad.CFrame.Position.Z - axisZ) * CLEAR)
+		check((edge - pad.CFrame.Position).Magnitude <= prompt.MaxActivationDistance, cut.Id .. ": prompt não alcança da borda da avenida")
+		check(math.abs(pad.CFrame.Position.Z - axisZ) >= CLEAR, cut.Id .. ": prompt dentro da zona livre")
+	end
+	-- Efeito: os riscos (tamanho inicial e final, nos dois extremos da
+	-- varredura) do corte com a receita mais longa e as faíscas.
+	local origin = anchor.CFrame * E.roblox.CFrame.new(0, 0, -(ORB_SIZE / 2 + 0.3))
+	for _, other in ordered do
+		local recipe = CutVisuals.For(other.Id)
+		local length, width = recipe.Length * SHOWCASE_SCALE, recipe.Width * SHOWCASE_SCALE
+		for _, angle in CutVisuals.Angles(recipe.Slashes) do
+			for _, sweep in { -recipe.Sweep / 2, recipe.Sweep / 2 } do
+				for _, size in { V3.new(recipe.Thickness, length * 0.45, width), V3.new(recipe.Thickness, length, width * 0.4) } do
+					local cf = origin * E.roblox.CFrame.Angles(0, 0, math.rad(angle + sweep))
+					local h = size / 2
+					for _, sx in { -1, 1 } do
+						for _, sy in { -1, 1 } do
+							for _, sz in { -1, 1 } do
+								local p = cf:PointToWorldSpace(V3.new(sx * h.X, sy * h.Y, sz * h.Z))
+								innerVfx = math.min(innerVfx, math.abs(p.Z - axisZ))
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	innerSparks = math.min(innerSparks, math.abs(origin.Position.Z - axisZ) - SPARK_REACH)
+end
+check(innerVfx >= CLEAR + VFX_MARGIN, string.format("efeito: riscos da vitrine chegam a %.2f do eixo (mínimo %.2f)", innerVfx, CLEAR + VFX_MARGIN))
+check(innerSparks >= CLEAR, string.format("efeito: faíscas chegam a %.2f do eixo (zona livre %.2f)", innerSparks, CLEAR))
+
+-- Simetria das fileiras.
+local columns = layout.Columns
+for index = 1, columns do
+	local a, b = ordered[index], ordered[index + columns]
+	if a and b then
+		for _, prefix in { "CutPad_", "CutCard_", "CutShowcase_" } do
+			local pa, pb = find(prefix .. a.Id).CFrame.Position, find(prefix .. b.Id).CFrame.Position
+			check(math.abs(pa.X - pb.X) < 0.01 and math.abs((pa.Z - axisZ) + (pb.Z - axisZ)) < 0.01 and math.abs(pa.Y - pb.Y) < 0.01,
+				string.format("simetria: %s%s e %s%s não se espelham no eixo", prefix, a.Id, prefix, b.Id))
+		end
+	end
+end
+
+-- Dentro do adro (longe do paredão) e sem invadir outra coisa do lobby.
+local towerArea = LobbyConfig.Areas[layout.Area]
+local others = {}
+for _, d in model:GetDescendants() do
+	if d:IsA("BasePart") and not stationSet[keyOf(d)] and d.Transparency < 1 then
+		-- Caixa alinhada pelas 8 quinas (vale para peças giradas e discos).
+		local x0, x1, y0, y1, z0, z1 = math.huge, -math.huge, math.huge, -math.huge, math.huge, -math.huge
+		for _, c in corners(d) do
+			x0, x1, y0, y1, z0, z1 = math.min(x0, c.X), math.max(x1, c.X), math.min(y0, c.Y), math.max(y1, c.Y), math.min(z0, c.Z), math.max(z1, c.Z)
+		end
+		-- Só o que fica de pé acima do piso e na altura de uma estação.
+		if y1 > 0.8 and y0 < 12 then
+			table.insert(others, { part = d, box = { x0, x1, z0, z1 } })
+		end
+	end
+end
+for _, cut in ordered do
+	local pad = find("CutPad_" .. cut.Id)
+	local p, half = pad.CFrame.Position, pad.Size.X / 2
+	check(math.abs(p.Z - towerArea.Offset.Z) + half <= towerArea.Radius - 1, cut.Id .. ": estação sai do adro do portão")
+	for _, other in others do
+		local box = other.box
+		if box[1] < p.X + half and box[2] > p.X - half and box[3] < p.Z + half and box[4] > p.Z - half then
+			local o = other.part.CFrame.Position
+			fail(string.format("%s: estação encosta em %s (%.0f, %.0f, %.0f)", cut.Id, other.part.Name, o.X, o.Y, o.Z))
+		end
+	end
+end
+
+-- Vista do spawn: nada da estação na janela avenida → barreira 1.
+local spawnPart = spawnsFolder:GetChildren()[1]
+local barrier = byName["Wall_" .. WallConfig.Stages[1].Id .. "_1"] or model:FindFirstChild("Wall_" .. WallConfig.Stages[1].Id .. "_1", true)
+local spawnGap = 0
+if spawnPart and barrier then
+	local look = spawnPart.CFrame.LookVector
+	local flat = V3.new(look.X, 0, look.Z).Unit
+	local eye = spawnPart.CFrame.Position + V3.new(0, 8, 0) - flat * 14 -- câmera do SpawnCameraController
+	local cam = E.CFrame.lookAt(eye, eye + flat)
+	local function screen(point)
+		local q = cam:PointToObjectSpace(point)
+		return q.X / -q.Z, q.Y / -q.Z, -q.Z
+	end
+	local front = barrier.CFrame.Position.X - barrier.Size.X / 2
+	local wallTop = barrier.CFrame.Position.Y + barrier.Size.Y / 2
+	local wx0 = screen(V3.new(front, 0, axisZ - CLEAR))
+	local wx1 = screen(V3.new(front, 0, axisZ + CLEAR))
+	local _, wy1 = screen(V3.new(front, wallTop, axisZ))
+	local _, wy0 = screen(V3.new(front, 0, axisZ))
+	local left, right = -math.huge, math.huge
+	for _, cut in ordered do
+		for _, part in stationParts[cut.Id] do
+			if part.Transparency < 1 then
+				local x0, x1, y0, y1 = math.huge, -math.huge, math.huge, -math.huge
+				for _, corner in corners(part) do
+					local x, y = screen(corner)
+					x0, x1, y0, y1 = math.min(x0, x), math.max(x1, x), math.min(y0, y), math.max(y1, y)
+				end
+				if x1 > math.min(wx0, wx1) and x0 < math.max(wx0, wx1) and y1 > wy0 and y0 < wy1 then
+					fail(string.format("vista do spawn: %s (%s) cobre a janela avenida → barreira 1", part.Name, cut.Id))
+				end
+				if (part.CFrame.Position.Z - axisZ) < 0 then
+					left = math.max(left, x1)
+				else
+					right = math.min(right, x0)
+				end
+			end
+		end
+	end
+	-- Abertura entre as duas fileiras, em graus, vista da câmera do spawn.
+	spawnGap = math.deg(math.atan(right) - math.atan(left))
+else
+	fail("vista do spawn: marcador ou barreira 1 não encontrados")
 end
 
 -- 2. Leitura: projeções vistas da avenida.
@@ -618,6 +829,8 @@ print(string.format("[cuts] %d estações; %d vistas da avenida, maior sobreposi
 if worstWhere ~= "" then
 	print("[cuts]   pior caso: " .. worstWhere)
 end
+print(string.format("[cuts] zona livre: %.1f studs (pads a %.2f do eixo, objetos a %.2f, riscos a %.2f, faíscas a %.2f)", CLEAR * 2, innerPads, innerObjects, innerVfx, innerSparks))
+print(string.format("[cuts] vão entre fileiras: pads %.1f studs, objetos (pedestal/placa/orbe) %.1f studs; da câmera do spawn %.1f°", innerPads * 2, innerObjects * 2, spawnGap))
 print(string.format("[cuts] pausa entre demonstrações: %.2f–%.2f s; peças de efeito no pico: %d (orbes %d)", minGap, maxGap, maxParts, baseline))
 for _, cut in ordered do
 	local r = CutVisuals.For(cut.Id)

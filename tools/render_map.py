@@ -84,6 +84,8 @@ _spacing = re.search(r"Spacing = Vector2\.new\(([\d.]+),\s*([\d.]+)\)", cut_layo
 CUT_SPACING = (float(_spacing.group(1)), float(_spacing.group(2)))
 CUT_PAD = number(cut_layout, "PadSize")
 CUT_COUNT = len(re.findall(r"\tCut\d+ = \{", cuts))
+# Fileiras por fora da zona livre da avenida (LobbyConfig.CutStations).
+CUT_CLEAR_HALF = number(lobby.split("CutStations = {")[1], "ClearHalfWidth")
 
 
 def cut_pad_positions() -> list[tuple[float, float]]:
@@ -95,7 +97,8 @@ def cut_pad_positions() -> list[tuple[float, float]]:
         column = index % CUT_COLUMNS
         row = index // CUT_COLUMNS
         x = area["Offset"][0] + (column - (CUT_COLUMNS - 1) / 2) * CUT_SPACING[0]
-        z = area["Offset"][2] + (row - (rows - 1) / 2) * CUT_SPACING[1]
+        side = -1 if rows == 1 or row < (rows - 1) / 2 else 1
+        z = area["Offset"][2] + side * (CUT_CLEAR_HALF + CUT_PAD / 2)
         positions.append((x, z))
     return positions
 
@@ -199,8 +202,8 @@ def check() -> list[str]:
             if distance < area["Radius"] + half:
                 problems.append(f"pad de corte em ({x:.0f}, {z:.0f}) invade a area {area['Id']}")
                 break
-    if CUT_SPACING[0] < CUT_PAD or CUT_SPACING[1] < CUT_PAD:
-        problems.append("pads de corte se encostam (Spacing menor que PadSize)")
+    if CUT_SPACING[0] < CUT_PAD:
+        problems.append("pads de corte se encostam (Spacing.X menor que PadSize)")
     host = next(item for item in AREAS if item["Id"] == CUT_AREA)
     for x, z in pads:
         distance = ((x - host["Offset"][0]) ** 2 + (z - host["Offset"][2]) ** 2) ** 0.5

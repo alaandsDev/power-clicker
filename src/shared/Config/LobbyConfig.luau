@@ -172,6 +172,24 @@ return {
 	},
 
 	--[[
+		VITRINES DOS CORTES — onde as estações ficam em relação à avenida (o que
+		cada estação mostra continua no CutConfig). No teste no Studio as duas
+		fileiras, a 8,5 do eixo, faziam um funil no caminho até a barreira 1.
+		Agora a avenida manda: existe uma ZONA LIVRE central, de ClearHalfWidth
+		para cada lado do eixo, e nada da estação entra nela (pad, pedestal,
+		placa, orbe, prompt, efeito). As fileiras ficam encostadas por fora
+		dessa zona, simétricas; tools/lune/check_cuts.luau confere.
+	]]
+	CutStations = {
+		ClearHalfWidth = 4, -- zona livre de 8 studs entre os pads (antes 4)
+		CardSize = Vector2.new(6, 2.6), -- placa (antes 8 x 3,4: -25% por lado)
+		-- A placa fica DENTRO da estação: sua quina mais próxima da avenida
+		-- fica a esta distância da borda interna do pad.
+		CardEdgeGap = 1.5,
+		CardYaw = 20, -- graus virados para quem chega (antes 30)
+	},
+
+	--[[
 		PORTÃO DO CAMINHO DO PODER — o marco principal do lobby. Fica na boca do
 		corredor (WallConfig.Layout.StartX), com dois pilares que também fecham
 		o vão entre o corredor e o paredão da ilha, uma verga com a placa e uma

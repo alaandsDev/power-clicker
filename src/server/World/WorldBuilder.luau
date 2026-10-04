@@ -974,6 +974,10 @@ end
 	  dependem de cada jogador.
 	Antes eram duas placas flutuando no alto de cada pad: vistas da avenida,
 	as quatro de cada fileira se empilhavam umas sobre as outras.
+
+	Posição lateral (LobbyConfig.CutStations): as fileiras ficam por fora da
+	zona livre central da avenida, e a placa fica recuada para dentro do pad,
+	para que nada da estação avance sobre o caminho até a barreira 1.
 ]]
 local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 	local layout = CutConfig.Layout
@@ -983,12 +987,22 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 	local rows = math.ceil(#cuts / columns)
 	local steel = Color3.fromRGB(104, 112, 134)
 	local slate = Color3.fromRGB(58, 62, 78)
+	local stations = LobbyConfig.CutStations
+	local cardSize = stations.CardSize
+	local yaw = math.rad(stations.CardYaw)
+	local tilt = math.rad(layout.CardTilt)
+	-- Fileiras encostadas por fora da zona livre (simétricas em volta do eixo).
+	local rowDistance = stations.ClearHalfWidth + layout.PadSize / 2
+	-- Quanto a placa girada e inclinada avança, em z, além do seu centro.
+	local cardReach = cardSize.X / 2 * math.sin(yaw) + cardSize.Y / 2 * math.sin(tilt) * math.cos(yaw) + 0.125
+	local cardFromPadCentre = layout.PadSize / 2 - stations.CardEdgeGap - cardReach
 	for index, cut in cuts do
 		-- Grid at the foot of the gate: cheapest at the front-left.
 		local column = (index - 1) % columns
 		local row = math.floor((index - 1) / columns)
 		local offsetX = (column - (columns - 1) / 2) * layout.Spacing.X
-		local offsetZ = (row - (rows - 1) / 2) * layout.Spacing.Y
+		local side = if rows == 1 then -1 elseif row < (rows - 1) / 2 then -1 else 1
+		local offsetZ = side * rowDistance
 		local pad = makePart(model, {
 			Name = "CutPad_" .. cut.Id,
 			Size = Vector3.new(layout.PadSize, 1, layout.PadSize),
@@ -1006,7 +1020,6 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 		local top = pad.CFrame.Position + Vector3.new(0, 0.5, 0)
 		-- Para que lado fica a avenida (o eixo do adro) e para onde a estação olha.
 		local inward = if offsetZ > 0 then -1 elseif offsetZ < 0 then 1 else -1
-		local yaw = math.rad(layout.CardYaw)
 		local facing = Vector3.new(-math.sin(yaw), 0, inward * math.cos(yaw))
 
 		-- Pedestal (sem colisão: o pad fica no caminho da avenida).
@@ -1030,12 +1043,10 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 		anchor:SetAttribute("CutId", cut.Id)
 
 		-- Placa-balcão na borda do pad que dá para a avenida.
-		local tilt = math.rad(layout.CardTilt)
-		local cardCentre = top
-			+ Vector3.new(0, 0.5 + layout.CardSize.Y / 2 * math.cos(tilt), inward * (layout.PadSize / 2 - layout.CardInset))
+		local cardCentre = top + Vector3.new(0, 0.5 + cardSize.Y / 2 * math.cos(tilt), inward * cardFromPadCentre)
 		local card = makePart(model, {
 			Name = "CutCard_" .. cut.Id,
-			Size = Vector3.new(layout.CardSize.X, layout.CardSize.Y, 0.25),
+			Size = Vector3.new(cardSize.X, cardSize.Y, 0.25),
 			CFrame = CFrame.lookAt(cardCentre, cardCentre + facing) * CFrame.Angles(tilt, 0, 0),
 			Color = Color3.fromRGB(30, 32, 46),
 			CanCollide = false,
@@ -1045,7 +1056,7 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 		card.CanTouch = false
 		card:SetAttribute("CutCard", true)
 		card:SetAttribute("CutId", cut.Id)
-		block(model, CFrame.lookAt(cardCentre, cardCentre + facing) - Vector3.new(0, cardCentre.Y - top.Y - 0.25, 0), Vector3.new(layout.CardSize.X * 0.6, 0.5, 0.6), slate, Enum.Material.Slate, false)
+		block(model, CFrame.lookAt(cardCentre, cardCentre + facing) - Vector3.new(0, cardCentre.Y - top.Y - 0.25, 0), Vector3.new(cardSize.X * 0.6, 0.5, 0.6), slate, Enum.Material.Slate, false)
 
 		if cut.Price > 0 then
 			local proximity = Instance.new("ProximityPrompt")
