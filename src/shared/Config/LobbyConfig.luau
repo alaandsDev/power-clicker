@@ -181,7 +181,7 @@ return {
 		dessa zona, simétricas; tools/lune/check_cuts.luau confere.
 	]]
 	CutStations = {
-		ClearHalfWidth = 4, -- zona livre de 8 studs entre os pads (antes 4)
+		ClearHalfWidth = 6, -- zona livre de 12 studs entre os pads (era 4 antes das vitrines)
 		CardSize = Vector2.new(6, 2.6), -- placa (antes 8 x 3,4: -25% por lado)
 		-- A placa fica DENTRO da estação: sua quina mais próxima da avenida
 		-- fica a esta distância da borda interna do pad.

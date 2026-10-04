@@ -238,9 +238,9 @@ end
 -- 1b. Zona livre da avenida (teste no Studio: as fileiras faziam um funil).
 local stationsCfg = LobbyConfig.CutStations
 local CLEAR = stationsCfg.ClearHalfWidth
--- Largura mínima da zona livre, independente da config: 2x o vão de 4 studs
+-- Largura mínima da zona livre, independente da config: 3x o vão de 4 studs
 -- entre os pads que travou a avenida no teste do Studio.
-local MIN_CLEAR_WIDTH = 8
+local MIN_CLEAR_WIDTH = 12
 check(CLEAR * 2 >= MIN_CLEAR_WIDTH, string.format("zona livre: %.1f studs (mínimo %d)", CLEAR * 2, MIN_CLEAR_WIDTH))
 local axisZ = 0
 for _, area in LobbyConfig.Areas do
