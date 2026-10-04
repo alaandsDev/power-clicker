@@ -38,6 +38,7 @@ lune run tools/lune/check_hud.luau      # layout do HUD em 5 resoluções/entrad
 lune run tools/lune/check_sword.luau    # espada equipada aplicada ao personagem (SwordService real)
 lune run tools/lune/check_corridor.luau # loop do Caminho do Poder (WallService real sobre o mapa)
 lune run tools/lune/check_cuts.luau     # vitrine dos Cortes + camada de corte do golpe (mesma config)
+lune run tools/lune/check_swing.luau    # golpe da espada a cada hit, sincronizado com o corte
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
@@ -74,6 +75,14 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   dá para contornar/pular, e a distância/tempo de volta do spawn. (Adapta só
   no carregamento: `.Position` -> `.CFrame.Position`, janela de 0,5 s e o
   PivotTo do "levar de volta".)
+- **check_swing** — o golpe procedural da espada (`SwordSwing` +
+  `SwordSwingController`) e o `SlashController` reais sobre um personagem R15
+  montado no Lune, com relógio simulado: hit dispara o golpe; 9 hits/s por
+  30 s sem acumular instâncias nem criar Animation; A/B alternados (C
+  ocasional); C0 volta exatamente ao original; troca de skin e respawn no meio
+  do golpe; corte (CutFx) desenhado no impacto e na diagonal do golpe;
+  "Efeitos reduzidos" mantém o golpe; outros jogadores golpeiam perto e nada
+  longe; o golpe não lê dano/economia.
 - **check_cuts** — a vitrine dos pads de Corte (`CutShowcaseController`) e a
   camada de corte do golpe (`SlashController`) de verdade sobre o mapa: cada
   corte tem pad, pedestal, orbe e placa sem colisão e o prompt de compra

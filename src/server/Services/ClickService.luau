@@ -53,7 +53,17 @@ type ClickState = {
 	PendingAutoGain: number,
 	Dirty: boolean,
 	AutoClick: boolean,
+	SwingSignalAt: number,
 }
+
+--[[
+	Sinal VISUAL para os outros clientes de que o jogador está golpeando: o
+	atributo "SwingSeq" no jogador sobe no máximo a cada SWING_SIGNAL_SECONDS
+	(não a cada um dos ~9 cliques por segundo). SwordSwingController de cada
+	cliente transforma isso em golpes no personagem dele. Não muda nada do
+	clique, do dano nem da economia.
+]]
+local SWING_SIGNAL_SECONDS = 0.25
 
 local ClickService = {
 	-- (player, gain, isAuto) after every processed click. For quests/achievements.
@@ -75,6 +85,7 @@ local function getState(player: Player): ClickState
 			PendingAutoGain = 0,
 			Dirty = false,
 			AutoClick = false,
+			SwingSignalAt = -math.huge,
 		}
 		states[player] = state
 	end
@@ -142,6 +153,12 @@ end
 function ClickService.Init()
 	NetService.On("Click", Guard.Args(), function(player: Player)
 		processClick(player, false)
+		local state = states[player]
+		local now = os.clock()
+		if state and now - state.SwingSignalAt >= SWING_SIGNAL_SECONDS then
+			state.SwingSignalAt = now
+			player:SetAttribute("SwingSeq", (tonumber(player:GetAttribute("SwingSeq")) or 0) + 1)
+		end
 	end)
 
 	DataService.DataReset:Connect(function(player)

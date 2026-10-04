@@ -29,6 +29,7 @@ local CONTROLLER_ORDER = {
 	"MenuController",
 	"HudController",
 	"SwordController", -- cosmetic blade skins
+	"SwordSwingController", -- the character swings the blade on every hit (procedural)
 	"SlashController", -- the cut arc in front of the character
 	"CutShowcaseController", -- cut pads: orb, live demo of the cut, per-player card
 	"ClickController",
