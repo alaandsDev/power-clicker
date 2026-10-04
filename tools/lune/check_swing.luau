@@ -358,6 +358,70 @@ check(not same(joints(fresh).Shoulder.C0, freshBase.Shoulder), "9. golpe funcion
 frames(0.3)
 check(atBase(fresh, freshBase), "9. e volta à pose original dele")
 
+-- 9b. Outros formatos de personagem: R6 e R15 com "Avatar Joint Upgrade"
+-- (AnimationConstraint). Antes o golpe só reconhecia Motor6D do R15 e, em
+-- outro formato, sumia em silêncio.
+local function respawnAs(model)
+	characterRemoving:Fire(localPlayer.Character)
+	localPlayer.Character:Destroy()
+	model.Parent = E.Workspace
+	localPlayer.Character = model
+	characterAdded:Fire(model)
+end
+do
+	local r6 = Instance.new("Model")
+	r6.Name = "LocalR6"
+	part(r6, "HumanoidRootPart")
+	local torso = part(r6, "Torso")
+	local arm = part(r6, "Right Arm")
+	local shoulder = Instance.new("Motor6D")
+	shoulder.Name = "Right Shoulder"
+	shoulder.Part0 = torso
+	shoulder.Part1 = arm
+	shoulder.C0 = CF.new(1, 0.5, 0) * CF.Angles(0, math.rad(90), 0)
+	shoulder.Parent = torso
+	local base = shoulder.C0
+	respawnAs(r6)
+	check(Swing.LocalRig() ~= nil and Swing.LocalRig().Kind == "Motor6D", "9b. personagem R6: rig montado no \"Right Shoulder\"")
+	Slash.Play()
+	frames(0.04)
+	check(not same(shoulder.C0, base) and (shoulder.C0.Position - base.Position).Magnitude < 1e-6, "9b. R6: o braço golpeia (gira no ombro, sem sair do lugar)")
+	frames(0.3)
+	check(same(shoulder.C0, base), "9b. R6: volta exatamente à pose original")
+end
+do
+	local upgraded = Instance.new("Model")
+	upgraded.Name = "LocalUpgraded"
+	part(upgraded, "HumanoidRootPart")
+	local upper = part(upgraded, "UpperTorso")
+	local upperArm = part(upgraded, "RightUpperArm")
+	local rigAttachment = Instance.new("Attachment")
+	rigAttachment.Name = "RightShoulderRigAttachment"
+	rigAttachment.CFrame = CF.new(1, 0.56, 0)
+	rigAttachment.Parent = upper
+	local other = Instance.new("Attachment")
+	other.Name = "RightShoulderRigAttachment"
+	other.Parent = upperArm
+	local constraint = Instance.new("AnimationConstraint")
+	constraint.Name = "RightShoulder"
+	constraint.Attachment0 = rigAttachment
+	constraint.Attachment1 = other
+	constraint.Parent = upperArm
+	local base = rigAttachment.CFrame
+	respawnAs(upgraded)
+	check(Swing.LocalRig() ~= nil and Swing.LocalRig().Kind == "AnimationConstraint", "9b. R15 com Avatar Joint Upgrade: rig montado na AnimationConstraint")
+	Slash.Play()
+	frames(0.04)
+	check(not same(rigAttachment.CFrame, base), "9b. Joint Upgrade: o braço golpeia (pela Attachment0 da articulação)")
+	frames(0.3)
+	check(same(rigAttachment.CFrame, base), "9b. Joint Upgrade: volta exatamente à pose original")
+end
+do
+	local fresh = newCharacter("Local")
+	fresh.Parent = nil
+	respawnAs(fresh)
+end
+
 -- 10. Outro jogador: perto golpeia, longe não.
 other.Character = newCharacter("Other")
 other.Character.HumanoidRootPart.CFrame = CF.new(10, 0, 0)

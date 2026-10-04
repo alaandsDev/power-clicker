@@ -120,12 +120,23 @@ function SwordSwing.Pose(variant: Variant, t: number, from: Pose?): Pose
 	return NEUTRAL
 end
 
--- ── Rig: aplica a pose num personagem R15 ───────────────────────────────────
+-- ── Rig: aplica a pose no personagem ────────────────────────────────────────
+--[[
+	Funciona com os três formatos de personagem que o Roblox entrega:
+	- R15 clássico: Motor6D (RightShoulder, RightElbow, RightWrist, Waist) — mexe
+	  no C0;
+	- R15 com o "Avatar Joint Upgrade": as articulações viram AnimationConstraint
+	  — mexe na Attachment0 dela (o equivalente do C0);
+	- R6: só "Right Shoulder" (no Torso), com orientação própria.
+	A rotação é aplicada no espaço do TRONCO (posição * rotação * orientação
+	original), então os mesmos ângulos servem para os três.
+]]
 
-type Joint = { Motor: Motor6D, Base: CFrame }
+type Joint = { Target: Instance, Property: string, Base: CFrame }
 export type Rig = {
 	Character: Model,
 	Joints: { [string]: Joint },
+	Kind: string, -- "Motor6D" | "AnimationConstraint" (diagnóstico)
 	Variant: Variant,
 	Started: number,
 	Duration: number,
@@ -136,33 +147,53 @@ export type Rig = {
 	LastAt: number,
 }
 
-local JOINTS = {
-	Shoulder = { "RightUpperArm", "RightShoulder" },
-	Elbow = { "RightLowerArm", "RightElbow" },
-	Wrist = { "RightHand", "RightWrist" },
-	Waist = { "UpperTorso", "Waist" },
+local JOINTS: { [string]: { string } } = {
+	Shoulder = { "RightShoulder", "Right Shoulder" },
+	Elbow = { "RightElbow" },
+	Wrist = { "RightWrist" },
+	Waist = { "Waist" },
 }
 
 local function rotation(degrees: Vector3): CFrame
 	return CFrame.Angles(math.rad(degrees.X), math.rad(degrees.Y), math.rad(degrees.Z))
 end
 
--- Monta o rig de um personagem R15 (nil se não for R15 ou faltar o ombro).
-function SwordSwing.NewRig(character: Model): Rig?
-	local joints: { [string]: Joint } = {}
-	for key, path in JOINTS do
-		local part = character:FindFirstChild(path[1])
-		local motor = if part then part:FindFirstChild(path[2]) else nil
-		if motor and motor:IsA("Motor6D") then
-			joints[key] = { Motor = motor, Base = motor.C0 }
+local function findJoint(character: Model, names: { string }): Joint?
+	local constraint: Joint? = nil
+	for _, name in names do
+		for _, item in character:GetDescendants() do
+			if item.Name == name then
+				if item:IsA("Motor6D") and (item :: any).Enabled ~= false then
+					return { Target = item, Property = "C0", Base = (item :: Motor6D).C0 }
+				elseif item.ClassName == "AnimationConstraint" and not constraint then
+					local attachment = (item :: any).Attachment0
+					if attachment and attachment:IsA("Attachment") then
+						constraint = { Target = attachment, Property = "CFrame", Base = attachment.CFrame }
+					end
+				end
+			end
 		end
 	end
-	if not joints.Shoulder then
+	return constraint
+end
+
+-- Monta o rig (nil se o personagem não tiver ombro direito reconhecível).
+function SwordSwing.NewRig(character: Model): Rig?
+	local joints: { [string]: Joint } = {}
+	for key, names in JOINTS do
+		local joint = findJoint(character, names)
+		if joint then
+			joints[key] = joint
+		end
+	end
+	local shoulder = joints.Shoulder
+	if not shoulder then
 		return nil
 	end
 	return {
 		Character = character,
 		Joints = joints,
+		Kind = if shoulder.Property == "C0" then "Motor6D" else "AnimationConstraint",
 		Variant = "A",
 		Started = 0,
 		Duration = SwordSwing.SLOW_SECONDS,
@@ -174,12 +205,20 @@ function SwordSwing.NewRig(character: Model): Rig?
 	}
 end
 
+-- A pose de uma articulação: rotação no espaço do tronco, mantendo a posição.
+function SwordSwing.Posed(base: CFrame, degrees: Vector3): CFrame
+	if degrees == ZERO then
+		return base
+	end
+	return CFrame.new(base.Position) * rotation(degrees) * (base - base.Position)
+end
+
 local function apply(rig: Rig, pose: Pose)
 	rig.Current = pose
 	for key, joint in rig.Joints do
-		if joint.Motor.Parent then
-			local degrees = (pose :: any)[key] :: Vector3
-			joint.Motor.C0 = if degrees == ZERO then joint.Base else joint.Base * rotation(degrees)
+		if joint.Target.Parent then
+			local degrees = (pose :: any)[key] :: Vector3;
+			(joint.Target :: any)[joint.Property] = SwordSwing.Posed(joint.Base, degrees)
 		end
 	end
 end

@@ -76,6 +76,8 @@ local function buildRig(character: Model): SwordSwing.Rig?
 	return nil
 end
 
+local warned = false
+
 local function onLocalCharacter(character: Model)
 	if localRig then
 		SwordSwing.Reset(localRig :: SwordSwing.Rig)
@@ -85,6 +87,10 @@ local function onLocalCharacter(character: Model)
 		local rig = buildRig(character)
 		if rig and Players.LocalPlayer.Character == character then
 			localRig = rig
+		elseif not rig and Players.LocalPlayer.Character == character and not warned then
+			-- Sem isto o golpe sumia em silêncio (foi o que aconteceu no Studio).
+			warned = true
+			warn("[SwordSwing] nenhuma articulação de ombro direito reconhecida no personagem (Motor6D R15/R6 ou AnimationConstraint): o golpe da espada ficou desligado")
 		end
 	end)
 end
