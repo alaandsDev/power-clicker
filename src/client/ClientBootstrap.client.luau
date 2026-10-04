@@ -43,6 +43,7 @@ local CONTROLLER_ORDER = {
 	"TrainingController", -- "treinando" chip while on a machine
 	"WallController", -- win corridor: row HP bars and stage signs
 	"CorridorHudController", -- stage/damage strip while at a barrier
+	"CombatFxController", -- impact, cracks, break, camera and damage numbers at the barriers
 	"EventController", -- world boss bar + orb notices
 	"RewardsController",
 	"QuestController",

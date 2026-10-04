@@ -8,7 +8,7 @@
 
 	Um "rig" é um conjunto fixo de peças criado uma vez: `plays` grupos de
 	CutVisuals.MAX_SLASHES riscos, reaproveitados em rodízio, mais uma peça
-	invisível com a luz e o emissor de faíscas. Tocar o efeito só muda
+	invisível com a luz e o emissor de faíscas e um anel de onda de choque. Tocar o efeito só muda
 	propriedades e dispara tweens; nada é criado nem destruído por golpe, e
 	Destroy apaga tudo de uma vez (sem conexões: não há nenhuma).
 ]]
@@ -23,6 +23,7 @@ export type Rig = {
 	Slots: { { BasePart } },
 	Index: number,
 	Core: BasePart,
+	Ring: BasePart, -- onda de choque dos cortes fortes (Recipe.Shock)
 	Light: PointLight,
 	Emitter: ParticleEmitter,
 	SparkCooldown: number,
@@ -68,6 +69,8 @@ function CutFx.NewRig(name: string, parent: Instance, plays: number, sparkCooldo
 
 	local core = newStreak(folder, "Core")
 	core.Size = Vector3.new(0.2, 0.2, 0.2)
+	local ring = newStreak(folder, "Ring")
+	ring.Shape = Enum.PartType.Cylinder
 	local light = Instance.new("PointLight")
 	light.Enabled = false
 	light.Shadows = false
@@ -90,6 +93,7 @@ function CutFx.NewRig(name: string, parent: Instance, plays: number, sparkCooldo
 		Slots = slots,
 		Index = 0,
 		Core = core,
+		Ring = ring,
 		Light = light,
 		Emitter = emitter,
 		SparkCooldown = sparkCooldown or 0,
@@ -144,10 +148,30 @@ function CutFx.Play(rig: Rig, recipe: CutVisuals.Recipe, origin: CFrame, scale: 
 		rig.Light.Enabled = false
 	end
 
+	--[[
+		Onda de choque: anel no plano do corte, crescendo e sumindo. Cortes em X
+		ganham um anel curto; o leque de 3, uma onda; o último corte, a SUPREMA
+		(maior, mais clara e mais lenta).
+	]]
+	if recipe.Shock > 0 then
+		local ring = rig.Ring
+		local reach = (1.2 + recipe.Shock * 1.1) * size
+		ring.Color = if recipe.Shock >= 3 then recipe.Color:Lerp(Color3.new(1, 1, 1), 0.35) else recipe.Color
+		ring.Material = Enum.Material.Neon
+		ring.CFrame = origin * CFrame.Angles(0, math.rad(90), 0)
+		ring.Size = Vector3.new(0.12, reach * 0.3, reach * 0.3)
+		ring.Transparency = if recipe.Shock >= 3 then 0.05 else 0.35
+		TweenService:Create(ring, TweenInfo.new(recipe.FadeSeconds + 0.04 * recipe.Shock, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(0.05, reach * 2, reach * 2),
+			Transparency = 1,
+		}):Play()
+	end
+
 	local now = os.clock()
 	if recipe.Sparks > 0 and now - rig.LastSparkAt >= rig.SparkCooldown then
 		rig.LastSparkAt = now
 		rig.Emitter.Color = ColorSequence.new(recipe.Color)
+		rig.Emitter.Size = NumberSequence.new(recipe.SparkSize * size, 0)
 		rig.Emitter:Emit(recipe.Sparks)
 	end
 end

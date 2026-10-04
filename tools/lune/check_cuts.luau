@@ -151,6 +151,15 @@ end })
 
 -- O laço de fundo da vitrine (task.wait de 0,25 s) fica desligado: o teste
 -- chama CutShowcaseController.Tick com relógio e posição simulados.
+-- O Lune não expõe BasePart.Position: o impacto do golpe (CombatFx) lê a posição.
+E.patches["StarterPlayer.Client.Controllers.CombatFxController"] = {
+	{ "row.Position", "row.CFrame.Position", "all" },
+	{ "root.Position", "root.CFrame.Position", "all" },
+}
+E.patches["StarterPlayer.Client.Controllers.WallController"] = {
+	{ "row.Position", "row.CFrame.Position", "all" },
+	{ "root.Position", "root.CFrame.Position", "all" },
+}
 E.patches["StarterPlayer.Client.Controllers.CutShowcaseController"] = {
 	{ "		while true do\n			task.wait(TICK_SECONDS)", "		while false do\n			task.wait(TICK_SECONDS)" },
 }
@@ -702,7 +711,7 @@ for _, g in gaps do
 end
 check(minGap >= 1.5 - 1e-6, string.format("laço: pausa mínima %.2f s (< 1,5 s: pisca)", minGap))
 check(maxGap <= 3 + 0.25 + 1e-6, string.format("laço: pausa máxima %.2f s (> 3 s + passo)", maxGap))
-local rigParts = #ordered * (CutVisuals.MAX_SLASHES + 1)
+local rigParts = #ordered * (CutVisuals.MAX_SLASHES + 2) -- riscos + núcleo + anel
 check(maxParts <= baseline + rigParts, string.format("limpeza: %d peças (limite %d)", maxParts, baseline + rigParts))
 check(countParts() == partsAfter60, string.format("limpeza: peças mudaram entre 1 min (%s) e 3 min (%d) — acumulando", tostring(partsAfter60), countParts()))
 check(connects == connectsBefore, string.format("conexões: %d novas durante o laço", connects - connectsBefore))

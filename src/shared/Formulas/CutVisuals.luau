@@ -30,8 +30,15 @@ export type Recipe = {
 	FadeSeconds: number,
 	Sweep: number, -- graus que o risco varre enquanto some (o "trail")
 	Sparks: number,
+	SparkSize: number, -- tamanho das faíscas (cresce com o tier)
 	LightRange: number,
 	Glow: boolean,
+	-- Onda de choque do golpe: 0 nenhuma, 1 anel curto (cortes em X),
+	-- 2 onda (leque de 3), 3 SUPREMA (o último corte).
+	Shock: number,
+	-- Força do impacto na barreira (1 = corte inicial); BarrierFx escala por ela.
+	Impact: number,
+	Tier: number, -- Order do corte (1..)
 }
 
 local CutVisuals = {}
@@ -60,6 +67,15 @@ function CutVisuals.Angles(slashes: number): { number }
 	return ANGLES[math.clamp(slashes, 1, CutVisuals.MAX_SLASHES)]
 end
 
+-- Order do último corte (o "supremo").
+function CutVisuals.TopOrder(): number
+	local top = 0
+	for _, cut in CutConfig.Cuts do
+		top = math.max(top, cut.Order)
+	end
+	return top
+end
+
 -- Receita do efeito real do corte `cutId` (nil para id desconhecido).
 function CutVisuals.For(cutId: string): Recipe?
 	local cut = CutConfig.Cuts[cutId]
@@ -72,13 +88,18 @@ function CutVisuals.For(cutId: string): Recipe?
 		Slashes = math.clamp(cut.Slashes, 1, CutVisuals.MAX_SLASHES),
 		Length = CutVisuals.BASE_LENGTH * cut.SlashScale,
 		Width = CutVisuals.BASE_WIDTH * cut.SlashScale,
-		Thickness = CutVisuals.THICKNESS,
+		-- Corte que brilha (Neon) é um risco mais grosso, não só outra cor.
+		Thickness = CutVisuals.THICKNESS * (if cut.Neon then 1.7 else 1),
 		FadeSeconds = CutVisuals.FLASH_SECONDS + cut.TrailSeconds,
 		-- Sem trail o risco é seco; com trail ele varre um pouco ao sumir.
 		Sweep = cut.TrailSeconds * 60,
 		Sparks = math.clamp(cut.Sparks, 0, CutVisuals.MAX_SPARKS),
+		SparkSize = 0.3 + 0.05 * (cut.Order - 1),
 		LightRange = cut.LightRange,
 		Glow = cut.Neon,
+		Shock = if cut.Order == CutVisuals.TopOrder() then 3 elseif cut.Slashes >= 3 then 2 elseif cut.Slashes == 2 then 1 else 0,
+		Impact = cut.SlashScale / 0.8,
+		Tier = cut.Order,
 	}
 end
 
@@ -97,6 +118,7 @@ function CutVisuals.Locked(recipe: Recipe): Recipe
 	copy.Sparks = math.floor(recipe.Sparks / 3)
 	copy.LightRange = 0
 	copy.Glow = false
+	copy.Shock = 0
 	return copy
 end
 

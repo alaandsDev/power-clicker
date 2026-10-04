@@ -39,6 +39,7 @@ lune run tools/lune/check_sword.luau    # espada equipada aplicada ao personagem
 lune run tools/lune/check_corridor.luau # loop do Caminho do Poder (WallService real sobre o mapa)
 lune run tools/lune/check_cuts.luau     # vitrine dos Cortes + camada de corte do golpe (mesma config)
 lune run tools/lune/check_swing.luau    # golpe da espada a cada hit, sincronizado com o corte
+lune run tools/lune/check_fx.luau       # efeitos de combate: impacto, rachaduras, quebra, câmera, números
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
@@ -83,6 +84,15 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   do golpe; corte (CutFx) desenhado no impacto e na diagonal do golpe;
   "Efeitos reduzidos" mantém o golpe; outros jogadores golpeiam perto e nada
   longe; o golpe não lê dano/economia.
+- **check_fx** — os controllers reais do combate (`WallController`,
+  `SwordSwingController`, `SlashController`, `CombatFxController`) sobre o
+  mapa, com um "servidor" mínimo mandando o `WallState` do jogador e relógio
+  simulado: golpe, corte e impacto no mesmo instante e no ponto de contato;
+  tema por barreira; evolução dos Cortes; rachaduras pelo HP; hit forte,
+  câmera por nível, hit stop e quebra final/Colosso; números agrupados (≤ 4);
+  "Efeitos reduzidos"; golpe de outro jogador sem impacto na minha barreira;
+  spam 9 hits/s (30 s + 6 barreiras x Cortes 1/2/4/8, ligado e reduzido) sem
+  acumular instâncias, emissores ou luzes; respawn e troca de espada.
 - **check_cuts** — a vitrine dos pads de Corte (`CutShowcaseController`) e a
   camada de corte do golpe (`SlashController`) de verdade sobre o mapa: cada
   corte tem pad, pedestal, orbe e placa sem colisão e o prompt de compra
@@ -116,6 +126,8 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
 - Legibilidade real da placa (SurfaceGui), da espada do portão e das barreiras.
 - Espada soldada na mão, visível, seguindo o braço, e replicada aos outros.
 - Tamanho real de texto no HUD (TextScaled, fontes) e sensação de leitura.
+- Combate: golpe por cima da pose do Animator, rastro, impacto, rachaduras,
+  quebra, tremor de câmera (enjoo), números na tela e FPS com 2+ jogadores.
 - Vitrine dos Cortes e camada de corte do golpe: cor, brilho (Neon/PointLight),
   faíscas (ParticleEmitter), varredura do risco e leitura real das placas
   (SurfaceGui) e nomes (BillboardGui) — o `check_cuts` mede só geometria e lógica.

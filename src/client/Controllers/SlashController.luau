@@ -28,6 +28,7 @@ local CutFx = require(script.Parent.Parent.Effects.CutFx)
 
 local DataController = require(script.Parent.DataController)
 local SwordSwingController = require(script.Parent.SwordSwingController)
+local CombatFxController = require(script.Parent.CombatFxController)
 
 local POOL_SIZE = 4
 -- A thin, wide streak. A cylinder read as a round blob from the front, which
@@ -108,24 +109,32 @@ local function draw(variant: string?)
 		),
 	}):Play()
 
+	local recipe = CutVisuals.ForBest(Players.LocalPlayer:GetAttribute("BestCut"))
 	if now - lastCutAt >= CUT_MIN_INTERVAL then
 		lastCutAt = now
-		local recipe = CutVisuals.ForBest(Players.LocalPlayer:GetAttribute("BestCut"))
 		local origin = root.CFrame * CFrame.new(math.random(-8, 8) / 10, 0.4, -ARC_DISTANCE - 0.3)
 		CutFx.Play(cutRig, recipe, origin, 1, roll - 45)
 	end
+	-- No mesmo instante: o impacto na barreira (se o golpe acertou uma).
+	CombatFxController.OnSwingImpact(recipe)
 end
 
 --[[
 	Um hit do jogador local: o personagem golpeia (SwordSwingController) e, no
 	momento do impacto do golpe, o arco da espada e o corte (CutFx) aparecem.
 	Seguro a cada clique: limita a própria frequência e reusa as peças.
-	"Efeitos reduzidos" tira o arco e o corte, mas NÃO o golpe da espada.
+	"Efeitos reduzidos" tira o arco e o corte, mas NÃO o golpe da espada nem
+	a indicação básica do impacto (o flash no ponto de contato).
 ]]
 function SlashController.Play()
 	local impact, variant = SwordSwingController.Swing()
 	local settings = DataController.Get("Settings")
 	if settings and settings.ReducedEffects == true then
+		if impact > 0 then
+			task.delay(impact, CombatFxController.OnSwingImpact, nil)
+		else
+			CombatFxController.OnSwingImpact(nil)
+		end
 		return
 	end
 	local now = os.clock()

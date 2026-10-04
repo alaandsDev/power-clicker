@@ -76,6 +76,15 @@ local function runDelayed()
 end
 
 -- O Lune não expõe BasePart.Position (só CFrame).
+-- O Lune não expõe BasePart.Position: o impacto do golpe (CombatFx) lê a posição.
+E.patches["StarterPlayer.Client.Controllers.CombatFxController"] = {
+	{ "row.Position", "row.CFrame.Position", "all" },
+	{ "root.Position", "root.CFrame.Position", "all" },
+}
+E.patches["StarterPlayer.Client.Controllers.WallController"] = {
+	{ "row.Position", "row.CFrame.Position", "all" },
+	{ "root.Position", "root.CFrame.Position", "all" },
+}
 E.patches["StarterPlayer.Client.Controllers.SwordSwingController"] = { { ".Position", ".CFrame.Position", "all" } }
 
 local settings = { ReducedEffects = false }
@@ -154,6 +163,9 @@ local other = {
 	UserId = 2,
 	Character = nil,
 	CharacterRemoving = Signal.new(),
+	GetAttribute = function()
+		return nil
+	end,
 	GetAttributeChangedSignal = function(_, name)
 		return if name == "SwingSeq" then otherSwing else Sig
 	end,

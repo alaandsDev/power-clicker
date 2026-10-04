@@ -23,6 +23,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local SwordSwing = require(script.Parent.Parent.Effects.SwordSwing)
+local SwordTrail = require(script.Parent.Parent.Effects.SwordTrail)
 
 local REMOTE_DISTANCE = 80
 -- Um sinal do servidor (a cada ~0,25 s de cliques) vira golpes por este tempo.
@@ -36,6 +37,27 @@ local SwordSwingController = {}
 
 local localRig: SwordSwing.Rig? = nil
 local remotes: { [Player]: Remote } = {}
+-- Rastro ligado enquanto o golpe dura: personagem -> a lâmina com rastro
+-- ligado (uma lâmina nova, de troca de skin, ganha o rastro na hora).
+local trailOn: { [Model]: Instance } = {}
+
+local function bladeOf(character: Model): Instance?
+	local tool = character:FindFirstChild("CutBlade")
+	return if tool then tool:FindFirstChild("Blade") else nil
+end
+
+local function setTrail(character: Model, swordId: any, moving: boolean)
+	if moving then
+		local blade = bladeOf(character)
+		if blade and trailOn[character] ~= blade then
+			trailOn[character] = blade
+			SwordTrail.Set(character, swordId, true)
+		end
+	elseif trailOn[character] then
+		trailOn[character] = nil
+		SwordTrail.Set(character, swordId, false)
+	end
+end
 
 local function now(): number
 	return os.clock()
@@ -78,7 +100,19 @@ function SwordSwingController.Swing(): (number, SwordSwing.Variant?)
 		return 0, nil
 	end
 	local variant, impact = SwordSwing.Start(rig, now())
+	setTrail(rig.Character, Players.LocalPlayer:GetAttribute("EquippedSword"), true)
 	return impact, variant
+end
+
+--[[
+	"Hit stop" VISUAL: segura a pose do golpe por `seconds` (0,03–0,06) no
+	impacto da quebra. Só o braço deste cliente; servidor e jogo seguem.
+]]
+function SwordSwingController.HitStop(seconds: number)
+	local rig = localRig
+	if rig and rig.Active then
+		rig.Started += math.clamp(seconds, 0, 0.08)
+	end
 end
 
 function SwordSwingController.LocalRig(): SwordSwing.Rig?
@@ -116,11 +150,12 @@ local function track(player: Player)
 	table.insert(remote.Connections, player:GetAttributeChangedSignal("SwingSeq"):Connect(function()
 		onRemoteSwing(player)
 	end))
-	table.insert(remote.Connections, player.CharacterRemoving:Connect(function()
+	table.insert(remote.Connections, player.CharacterRemoving:Connect(function(character: Model)
 		if remote.Rig then
 			SwordSwing.Reset(remote.Rig :: SwordSwing.Rig)
 		end
 		remote.Rig = nil
+		trailOn[character] = nil
 	end))
 end
 
@@ -133,24 +168,33 @@ local function untrack(player: Player)
 		connection:Disconnect()
 	end
 	if remote.Rig then
+		trailOn[(remote.Rig :: SwordSwing.Rig).Character] = nil
 		SwordSwing.Reset(remote.Rig :: SwordSwing.Rig)
 	end
 	remotes[player] = nil
 end
 
+local function stepRig(rig: SwordSwing.Rig, at: number, swordId: any)
+	local wasActive = rig.Active
+	local moving = SwordSwing.Step(rig, at)
+	if moving or wasActive then
+		setTrail(rig.Character, swordId, moving)
+	end
+end
+
 -- Um quadro para todos os rigs (exposto para os testes).
 function SwordSwingController.Step(at: number)
 	if localRig then
-		SwordSwing.Step(localRig :: SwordSwing.Rig, at)
+		stepRig(localRig :: SwordSwing.Rig, at, Players.LocalPlayer:GetAttribute("EquippedSword"))
 	end
-	for _, remote in remotes do
+	for player, remote in remotes do
 		local rig = remote.Rig
 		if rig then
 			if at < remote.BurstUntil and at >= remote.NextAt then
 				remote.NextAt = at + REMOTE_SWING_SPACING
 				SwordSwing.Start(rig, at)
 			end
-			SwordSwing.Step(rig, at)
+			stepRig(rig, at, player:GetAttribute("EquippedSword"))
 		end
 	end
 end
@@ -158,11 +202,12 @@ end
 function SwordSwingController.Init()
 	local player = Players.LocalPlayer
 	player.CharacterAdded:Connect(onLocalCharacter)
-	player.CharacterRemoving:Connect(function()
+	player.CharacterRemoving:Connect(function(character: Model)
 		if localRig then
 			SwordSwing.Reset(localRig :: SwordSwing.Rig)
 		end
 		localRig = nil
+		trailOn[character] = nil
 	end)
 	if player.Character then
 		onLocalCharacter(player.Character)

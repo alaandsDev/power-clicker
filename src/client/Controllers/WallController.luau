@@ -22,11 +22,11 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
+local Signal = require(Shared:WaitForChild("Utils"):WaitForChild("Signal"))
 local WallConfig = require(Shared:WaitForChild("Config"):WaitForChild("WallConfig"))
 local WinPadRules = require(Shared:WaitForChild("Formulas"):WaitForChild("WinPadRules"))
 local Text = require(Shared:WaitForChild("Localization"))
@@ -57,22 +57,23 @@ local SIGN_HEIGHT = 12
 -- anything less than that keeps the sign INSIDE the stone.
 local SIGN_OFFSET = WallConfig.Layout.WallHeight / 2 + SIGN_HEIGHT / 2 + 2
 local SCAN_RETRY_SECONDS = 1
--- Impacto: a fileira pisca na cor da espada quando toma dano, e racha mais
--- conforme o HP cai. Tudo local e com teto de frequência — a 9 cliques por
--- segundo, um efeito por golpe derrubaria o FPS de um celular.
+-- A superfície da fileira pisca quando toma dano (com teto de frequência). O
+-- resto do impacto, as rachaduras e a quebra são do CombatFxController, que
+-- escuta os sinais abaixo.
 local HIT_FLASH_SECONDS = 0.08
 local HIT_MIN_INTERVAL = 0.09
-local BREAK_PIECES = 8
-local BREAK_SECONDS = 0.5
--- Faísca no PONTO atingido (só para os golpes do próprio jogador, perto da
--- barreira): 3 lascas pequenas, pool fixo, nunca peças físicas.
-local SPARK_PIECES = 3
-local SPARK_SECONDS = 0.22
-local SPARK_RANGE = WallConfig.HitRange + 6
 -- Anúncio "BARREIRA N DESTRUÍDA!": curto, no topo, não bloqueia nada.
 local BANNER_SECONDS = 2.6
 
-local WallController = {}
+local WallController = {
+	-- Eventos das fileiras DESTE jogador (vindos do WallState próprio):
+	-- (row, stageId, hpAntes, hpDepois) quando toma dano e continua de pé.
+	RowDamaged = Signal.new() :: Signal.Signal<BasePart, string, number, number>,
+	-- (row, stageId, final) quando cai; final = era a última fileira de pé.
+	RowBroken = Signal.new() :: Signal.Signal<BasePart, string, boolean>,
+	-- (row, stageId) quando volta inteira (a barreira se refez).
+	RowRestored = Signal.new() :: Signal.Signal<BasePart, string>,
+}
 
 export type StageView = { Hp: { number }, Open: boolean }
 
@@ -83,11 +84,6 @@ local views: { [string]: StageView } = {}
 local signs: { [string]: Sign } = {}
 local scanned = false
 local lastHitAt: { [BasePart]: number } = {}
-local debris: { BasePart } = {}
-local debrisIndex = 0
-local debrisFolder: Folder
-local sparks: { BasePart } = {}
-local sparkIndex = 0
 local banner: TextLabel
 local bannerStamp = 0
 local objectiveChip: TextLabel
@@ -183,56 +179,48 @@ local function applyRow(row: BasePart, broken: boolean)
 end
 
 --[[
-	Faísca no ponto da face da fileira mais perto do personagem local: só se
-	ele estiver perto (os golpes de outros jogadores longe não geram nada).
+	O ponto da face da fileira em que um golpe de quem está em `position` bate
+	(a face voltada para a praça, na altura do peito, alinhado ao jogador).
 ]]
-local function spark(row: BasePart)
-	local character = Players.LocalPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not root or not root:IsA("BasePart") or #sparks == 0 then
-		return
-	end
-	local position = root.Position
-	if (row.Position - position).Magnitude > SPARK_RANGE or position.X >= row.Position.X then
-		return
-	end
-	SoundController.Play("WallHit")
+function WallController.ContactPoint(row: BasePart, position: Vector3): Vector3
 	local half = row.Size / 2
-	local hit = Vector3.new(
+	return Vector3.new(
 		row.Position.X - half.X - 0.3,
 		math.clamp(position.Y + 1, row.Position.Y - half.Y + 1, row.Position.Y + half.Y - 1),
 		math.clamp(position.Z, row.Position.Z - half.Z + 1, row.Position.Z + half.Z - 1)
 	)
-	local colour = swordColor()
-	for _ = 1, SPARK_PIECES do
-		sparkIndex = (sparkIndex % #sparks) + 1
-		local piece = sparks[sparkIndex]
-		piece.Color = colour
-		piece.Transparency = 0
-		piece.Size = Vector3.new(0.7, 0.7, 0.7)
-		piece.CFrame = CFrame.new(hit)
-		local fly = hit + Vector3.new(-math.random(10, 30) / 10, math.random(-20, 25) / 10, math.random(-25, 25) / 10)
-		TweenService:Create(piece, TweenInfo.new(SPARK_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			CFrame = CFrame.new(fly),
-			Transparency = 1,
-			Size = Vector3.new(0.2, 0.2, 0.2),
-		}):Play()
-	end
 end
 
 --[[
-	Rachadura progressiva: quanto menos HP, mais a fileira escurece e fica
-	transparente. Não é textura de rachadura (seria um asset por material);
-	é a leitura mais honesta que dá para fazer só com propriedades da peça.
+	A fileira que um golpe de quem está em `position` acerta AGORA, pela mesma
+	regra do servidor: de pé para este jogador, À FRENTE dele e a até
+	WallConfig.HitRange. Só para o efeito do impacto sair junto com o golpe; o
+	dano de verdade continua sendo decidido no servidor.
 ]]
-local function showDamage(row: BasePart, fraction: number)
+function WallController.TargetRow(position: Vector3): BasePart?
+	local best: BasePart? = nil
+	local bestDistance = WallConfig.HitRange
+	for _, rows in rowsByStage do
+		for _, row in rows do
+			if row.Parent and position.X < row.Position.X then
+				local _, _, broken = WallController.RowState(row)
+				local distance = (row.Position - position).Magnitude
+				if not broken and distance <= bestDistance then
+					best, bestDistance = row, distance
+				end
+			end
+		end
+	end
+	return best
+end
+
+-- A superfície reage ao dano: um flash curto na cor da espada (cosmético).
+local function flashSurface(row: BasePart)
 	local now = os.clock()
 	if now - (lastHitAt[row] or 0) < HIT_MIN_INTERVAL then
 		return
 	end
 	lastHitAt[row] = now
-	row.LocalTransparencyModifier = (1 - fraction) * 0.35
-	spark(row)
 	local flash = swordColor()
 	local original = row.Color
 	row.Color = original:Lerp(flash, 0.5)
@@ -241,41 +229,6 @@ local function showDamage(row: BasePart, fraction: number)
 			row.Color = original
 		end
 	end)
-end
-
--- Estilhaços quando a fileira cai: peças locais, recicladas de um pool. Metade
--- na cor da fileira, metade na cor dos detalhes (tábuas, juntas) ou cinza de
--- poeira, para ler como algo se despedaçando e não como um bloco sumindo.
-local function burst(row: BasePart)
-	SoundController.Play("WallBreak")
-	local detailColour = Color3.fromRGB(150, 146, 140)
-	for _, child in row:GetChildren() do
-		if child:IsA("BasePart") and child:GetAttribute("WallDetail") == true then
-			detailColour = child.Color
-			break
-		end
-	end
-	local pieceIndex = 0
-	local colour = row.Color
-	for _ = 1, BREAK_PIECES do
-		debrisIndex = (debrisIndex % #debris) + 1
-		local piece = debris[debrisIndex]
-		pieceIndex += 1
-		piece.Color = if pieceIndex % 2 == 0 then detailColour else colour
-		piece.Transparency = 0.1
-		piece.CFrame = row.CFrame
-			* CFrame.new(
-				math.random(-30, 30) / 10,
-				math.random(-120, 120) / 10,
-				math.random(-30, 30) / 10
-			)
-		local target = piece.CFrame * CFrame.new(math.random(-60, 60) / 10, math.random(-40, 20) / 10, math.random(10, 40) / 10)
-		TweenService:Create(piece, TweenInfo.new(BREAK_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			CFrame = target,
-			Transparency = 1,
-			Size = piece.Size * 0.4,
-		}):Play()
-	end
 end
 
 local function createSign(stageId: string, row: BasePart): Sign
@@ -400,11 +353,20 @@ local function onWallState(payload: any)
 			if row and type(hp) == "number" and type(before) == "number" then
 				if hp <= 0 and before > 0 then
 					row.LocalTransparencyModifier = 0
-					burst(row)
+					SoundController.Play("WallBreak")
+					local standing = 0
+					for _, other in incoming.Hp do
+						if type(other) == "number" and other > 0 then
+							standing += 1
+						end
+					end
+					WallController.RowBroken:Fire(row, stageId, standing == 0)
 				elseif hp > 0 and hp < before and stage then
-					showDamage(row, hp / stage.Hp)
+					flashSurface(row)
+					WallController.RowDamaged:Fire(row, stageId, before, hp)
 				elseif hp > before then
 					row.LocalTransparencyModifier = 0
+					WallController.RowRestored:Fire(row, stageId)
 				end
 			end
 		end
@@ -431,38 +393,6 @@ local function addRow(descendant: Instance)
 end
 
 local function scan()
-	if not debrisFolder then
-		debrisFolder = Instance.new("Folder")
-		debrisFolder.Name = "WallDebris"
-		debrisFolder.Parent = Workspace.CurrentCamera or Workspace
-		for index = 1, BREAK_PIECES * 2 do
-			local piece = Instance.new("Part")
-			piece.Name = "Debris" .. index
-			piece.Size = Vector3.new(2.2, 2.2, 2.2)
-			piece.Anchored = true
-			piece.CanCollide = false
-			piece.CanQuery = false
-			piece.CanTouch = false
-			piece.CastShadow = false
-			piece.Transparency = 1
-			piece.Parent = debrisFolder
-			debris[index] = piece
-		end
-		for index = 1, SPARK_PIECES * 3 do
-			local piece = Instance.new("Part")
-			piece.Name = "Spark" .. index
-			piece.Size = Vector3.new(0.7, 0.7, 0.7)
-			piece.Material = Enum.Material.Neon
-			piece.Anchored = true
-			piece.CanCollide = false
-			piece.CanQuery = false
-			piece.CanTouch = false
-			piece.CastShadow = false
-			piece.Transparency = 1
-			piece.Parent = debrisFolder
-			sparks[index] = piece
-		end
-	end
 	local map = Workspace:FindFirstChild("Map")
 	local worlds = if map then map:FindFirstChild("Worlds") else nil
 	local world = if worlds then worlds:FindFirstChild(WallConfig.WorldId) else nil
