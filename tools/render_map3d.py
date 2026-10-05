@@ -230,4 +230,6 @@ if __name__ == "__main__":
         station_views("rebirth", "RebirthCore", (-altar["p"][0], -altar["p"][2]), 7, 26)
     station_views("training", "GymGateBeam", (0, -1), 6, 34)
     station_views("eggs", "EggHeaderStone", (0, 1), 8, 84)
+    # Circulação lateral: na altura do olho, cruzando a praça entre as áreas.
+    render(parts, Cam([-30, 6, 70], [60, 4, -40], fov=72), out_prefix + "_circulation.png", f"{label} - circulacao lateral (altura do jogador)")
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")

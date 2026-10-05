@@ -1120,6 +1120,26 @@ do
 	end
 end
 
+-- ── F. INTEGRAÇÃO ──────────────────────────────────────────────────────────
+do
+	-- Cada estação física já diz o nome: nada de estandarte repetido.
+	for _, id in { "Pets", "Rebirth", "Training", "Eggs" } do
+		check(world:FindFirstChild("AreaSign_" .. id, true) == nil, "F. sem estandarte repetido na área " .. id .. " (a estação já tem placa)")
+	end
+	-- Nenhuma estação acende luz constante.
+	local lights = 0
+	for _, item in world:GetDescendants() do
+		if item:IsA("Model") and string.find(item.Name, "_Machine", 1, true) then
+			for _, child in item:GetDescendants() do
+				if child:IsA("Light") then
+					lights += 1
+				end
+			end
+		end
+	end
+	check(lights == 0, string.format("F. estações sem PointLight/SpotLight (%d)", lights))
+end
+
 if #problems > 0 then
 	print(#problems .. " problema(s).")
 	process.exit(1)

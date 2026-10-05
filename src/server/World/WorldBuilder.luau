@@ -1269,6 +1269,14 @@ local function bannerReplaced(areaId: string): boolean
 		return LobbyConfig.TrainingCenter == true
 	elseif areaId == "Eggs" then
 		return LobbyConfig.IncubationArea == true
+	elseif areaId == "Rebirth" then
+		return LobbyConfig.RebirthStation == "Altar"
+	elseif areaId == "Pets" then
+		for _, station in LobbyConfig.Stations do
+			if station.Area == "Pets" and station.Style == "PetLab" then
+				return true
+			end
+		end
 	end
 	return false
 end
