@@ -196,6 +196,13 @@ return {
 		norte de pads (fora da avenida), virada para ela. Os Cortes continuam
 		sendo comprados nos pads; a forja não tem prompt. Para tirar: nil.
 	]]
+	--[[
+		ALTAR DO RENASCIMENTO: "Altar" = o altar circular de pedra, halo e
+		cristal (World/StationMachines); nil = o altar antigo de discos e orbe.
+		O prompt de Renascer é o mesmo nos dois.
+	]]
+	RebirthStation = "Altar",
+
 	CutForge = {
 		Position = Vector3.new(130, 0, -28),
 		Facing = Vector3.new(0, 0, 1), -- para a avenida (z = 0)

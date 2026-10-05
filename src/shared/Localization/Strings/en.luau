@@ -34,6 +34,8 @@ return {
 	["station.cuts.name"] = "Cuts",
 	["station.cuts.subtitle"] = "MASTER YOUR CUT",
 	["station.pets.subtitle"] = "YOUR COMPANIONS",
+	["station.rebirth.name"] = "Rebirth",
+	["station.rebirth.subtitle"] = "REBORN STRONGER",
 	["menu.rebirth"] = "Rebirth",
 
 	["upgrades.title"] = "{icon} Upgrades",

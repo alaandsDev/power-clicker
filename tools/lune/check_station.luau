@@ -341,9 +341,20 @@ E.stubs.Players = { GetPlayers = function()
 	return { { Character = character } }
 end, LocalPlayer = localPlayer }
 local settings = { ReducedEffects = false }
-E.stubModules["StarterPlayer.Client.Controllers.DataController"] = { Get = function(key)
-	return if key == "Settings" then settings else nil
-end }
+local statsChanged = nil
+E.stubModules["StarterPlayer.Client.Controllers.DataController"] = {
+	Get = function(key)
+		return if key == "Settings" then settings else nil
+	end,
+	Changed = { Connect = function(_, fn)
+		statsChanged = fn
+		return { Disconnect = function() end }
+	end },
+}
+local emitted = {}
+roblox.implementMethod("ParticleEmitter", "Emit", function(emitter, count)
+	emitted[emitter.Name] = (emitted[emitter.Name] or 0) + (count or 1)
+end)
 E.stubs.Workspace = setmetatable({ CurrentCamera = camera }, { __index = E.Workspace })
 -- O Lune não expõe BasePart.Position (só CFrame).
 E.patches["StarterPlayer.Client.Controllers.StationFxController"] = {
@@ -354,6 +365,7 @@ E.patches["StarterPlayer.Client.Controllers.StationFxController"] = {
 	{ "screen.Part.Position", "screen.Part.CFrame.Position", "all" },
 	{ "flash.Part.Position", "flash.Part.CFrame.Position", "all" },
 	{ "holo.Part.Position", "holo.Part.CFrame.Position", "all" },
+	{ "(mine - part.Position)", "(mine - part.CFrame.Position)", "all" },
 }
 local Fx = E.require(E.Client.Controllers.StationFxController)
 Fx.Init()
@@ -600,6 +612,116 @@ do
 			Fx.Step(t)
 		end
 		check(art and Fx.Engagement(terminal:FindFirstChild("TerminalScreen") or lab:FindFirstChild("TerminalScreen")) > 0.8 and art.ImageTransparency < farArt, "B. jogador na pegada: a estação acorda (hologramas mais nítidos)")
+	end
+end
+
+-- ── R. ALTAR DO RENASCIMENTO ───────────────────────────────────────────────
+do
+	local altar = world:FindFirstChild("Station_Rebirth_Machine", true)
+	check(altar ~= nil, "R. altar do Renascimento construído")
+	if altar then
+		local rebirthPrompts = {}
+		for _, d in world:GetDescendants() do
+			if d:IsA("ProximityPrompt") and d:GetAttribute("OpenPanel") == "Rebirth" then
+				table.insert(rebirthPrompts, d)
+			end
+		end
+		local core = rebirthPrompts[1] and rebirthPrompts[1].Parent
+		check(#rebirthPrompts == 1 and core and core.Name == "RebirthCore" and core:IsDescendantOf(altar) and rebirthPrompts[1]:GetAttribute("TextKey") == "world.prompt.rebirth", "R. um só prompt de Renascer (o de sempre), no núcleo do altar")
+		local parts, lights, bills = 0, 0, 0
+		local centre = LobbyConfig.Areas.Rebirth.Offset
+		local reach, top = 0, 0
+		for _, d in altar:GetDescendants() do
+			if d:IsA("BasePart") then
+				parts += 1
+				for _, c in corners(d) do
+					reach = math.max(reach, (V3.new(c.X, 0, c.Z) - V3.new(centre.X, 0, centre.Z)).Magnitude)
+					top = math.max(top, c.Y)
+				end
+			elseif d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
+				lights += 1
+			elseif d:IsA("BillboardGui") then
+				bills += 1
+			end
+		end
+		check(parts >= 50 and parts <= 110, string.format("R. orçamento: %d peças (%d instâncias)", parts, #altar:GetDescendants()))
+		check(lights == 0 and bills == 0, "R. sem luz (o orbe antigo tinha PointLight 18/2) e sem BillboardGui")
+		check(reach <= LobbyConfig.Areas.Rebirth.Radius - 4 and top <= 19, string.format("R. círculo de %.1f studs de raio dentro da área (%d), %.1f de altura", reach, LobbyConfig.Areas.Rebirth.Radius, top))
+		local toPlazaR = (V3.zero - V3.new(centre.X, 0, centre.Z)).Unit
+		local ramp = altar:FindFirstChild("AltarRamp")
+		check(ramp and (ramp.CFrame.Position - V3.new(centre.X, ramp.CFrame.Position.Y, centre.Z)):Dot(toPlazaR) > 5, "R. rampa de acesso virada para a praça (frente aberta)")
+		local pillar = altar:FindFirstChild("CorePillar")
+		local crystalR = altar:FindFirstChild("RebirthCrystal")
+		local half = crystalR.Size.X / 2 * math.sqrt(2)
+		check(pillar and pillar.CanCollide and half <= pillar.Size.Y / 2 + 0.6, "R. núcleo sobre um pilar sólido: quem sobe no altar não fica dentro do cristal")
+		local worstWalkR = math.huge
+		for _, d in altar:GetDescendants() do
+			if d:IsA("BasePart") then
+				for _, c in corners(d) do
+					local flat = V3.new(c.X, 0, c.Z)
+					for _, a in LobbyConfig.Areas do
+						if a.Id ~= "Tower" and a.Id ~= "Rebirth" then
+							worstWalkR = math.min(worstWalkR, segmentDistance(flat, V3.zero, V3.new(a.Offset.X, 0, a.Offset.Z)))
+						end
+					end
+				end
+			end
+		end
+		check(worstWalkR >= 5, string.format("R. fora das calçadas das outras áreas (%.1f studs)", worstWalkR))
+		-- Cálculo intacto: o visual não conhece o renascimento.
+		local fsR = require("@lune/fs")
+		local cleanR = true
+		for _, path in { "src/server/World/StationMachines.luau", "src/client/Controllers/StationFxController.luau" } do
+			local source = fsR.readFile(E.Root .. "/" .. path)
+			for _, word in { "RebirthLogic", "RebirthService", "RebirthConfig", "Invoke(" } do
+				if string.find(source, word, 1, true) then
+					cleanR = false
+					print("      " .. path .. " usa " .. word)
+				end
+			end
+		end
+		check(cleanR, "R. nenhum cálculo de renascimento no visual (só lê Stats.Rebirths para a rajada)")
+		-- Reverter.
+		local style = LobbyConfig.RebirthStation
+		LobbyConfig.RebirthStation = nil
+		local oldR = build()
+		local orb = oldR:FindFirstChild("RebirthOrb", true)
+		check(oldR:FindFirstChild("Station_Rebirth_Machine", true) == nil and orb and orb:FindFirstChildOfClass("ProximityPrompt"), "R. RebirthStation = nil volta o altar antigo, com o mesmo prompt")
+		LobbyConfig.RebirthStation = style
+		-- Cliente: partículas sobem mais com o jogador perto; rajada só ao renascer.
+		local rise = altar:FindFirstChild("RebirthRise", true)
+		while rise and not rise:IsA("ParticleEmitter") do
+			rise = rise:FindFirstChildWhichIsA("ParticleEmitter")
+		end
+		camera.CFrame = CF.new(core.CFrame.Position + toPlazaR * 20 + V3.new(0, 4, 0))
+		playerRoot.CFrame = CF.new(core.CFrame.Position + toPlazaR * 40)
+		for _ = 1, 90 do
+			t += 1 / 60
+			Fx.Step(t)
+		end
+		local idleRate = rise.Rate
+		playerRoot.CFrame = CF.new(ramp.CFrame.Position + V3.new(0, 3, 0))
+		for _ = 1, 90 do
+			t += 1 / 60
+			Fx.Step(t)
+		end
+		check(idleRate <= 1.5 and rise.Rate >= 5, string.format("R. jogador chega: fragmentos começam a subir (%.1f → %.1f por segundo)", idleRate, rise.Rate))
+		check(statsChanged ~= nil, "R. escuta Stats do DataController (nenhum remote novo)")
+		emitted = {}
+		statsChanged("Stats", { Rebirths = 3 })
+		statsChanged("Stats", { Rebirths = 3 })
+		check((emitted.RebirthBurst or 0) == 0, "R. sem renascer: nada de rajada")
+		statsChanged("Stats", { Rebirths = 4 })
+		check((emitted.RebirthBurst or 0) > 0, "R. renasceu (Stats.Rebirths subiu): rajada local no altar")
+		settings.ReducedEffects = true
+		t += 1.1
+		Fx.Step(t)
+		emitted = {}
+		statsChanged("Stats", { Rebirths = 5 })
+		check((emitted.RebirthBurst or 0) == 0, "R. \"Efeitos reduzidos\": sem rajada")
+		settings.ReducedEffects = false
+		t += 1.1
+		Fx.Step(t)
 	end
 end
 

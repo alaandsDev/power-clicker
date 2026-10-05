@@ -55,6 +55,9 @@ StationMachines.TAG_PARTICLES = "StationParticles" -- emissor desligado com "Efe
 StationMachines.TAG_CUT_TINT = "StationCutTint" -- peça/emissor na cor do Corte do jogador local
 StationMachines.TAG_FLASH = "StationFlash" -- de tempos em tempos um clarão curto (mini-impacto)
 StationMachines.TAG_HOLO = "StationHolo" -- holograma (BillboardGui) que flutua e respira
+StationMachines.TAG_ENGAGE = "StationEngage" -- ponto de uso (jogador perto = a estação "acorda")
+StationMachines.TAG_RISE = "StationRise" -- emissor: poucos idle, mais com o jogador perto (IdleRate/EngagedRate)
+StationMachines.TAG_BURST = "StationBurst" -- emissor: rajada local quando o jogador renasce de verdade
 
 export type Theme = {
 	Stone: Color3,
@@ -89,6 +92,17 @@ StationMachines.Themes = {
 		Energy = Color3.fromRGB(170, 116, 255),
 		Crystal = Color3.fromRGB(176, 150, 255),
 		Core = Color3.fromRGB(126, 226, 255),
+	} :: Theme,
+	-- Renascer: altar ritual dourado + violeta + luz clara (sem ciano).
+	Rebirth = {
+		Stone = Color3.fromRGB(150, 144, 160),
+		StoneDark = Color3.fromRGB(92, 86, 104),
+		Metal = Color3.fromRGB(56, 50, 66),
+		Plate = Color3.fromRGB(72, 66, 84),
+		Gold = Color3.fromRGB(206, 168, 90),
+		Energy = Color3.fromRGB(176, 120, 255),
+		Crystal = Color3.fromRGB(190, 150, 255),
+		Core = Color3.fromRGB(255, 232, 186),
 	} :: Theme,
 	-- Cortes: forja de energia vermelho/laranja (o slash pega a cor do Corte
 	-- do jogador no cliente).
@@ -879,6 +893,126 @@ function StationMachines.BuildPetLab(parent: Instance, base: CFrame, panel: stri
 	model:SetAttribute("Prototype", "StationMachine")
 	model.Parent = parent
 	return model, head
+end
+
+-- ── Altar do Renascimento ───────────────────────────────────────────────────
+
+--[[
+	ALTAR DO RENASCIMENTO. Ritual, não loja nem máquina: um dais CIRCULAR em
+	degraus com runas douradas e uma rampa na frente, o círculo ritual
+	violeta no topo, quatro obeliscos nas diagonais (a frente fica aberta),
+	e um HALO vertical de pedra com filetes violeta virado para a praça — a
+	silhueta "◎" de longe —, com a placa "♻ RENASCER" no alto. No centro, um
+	cristal violeta com brilho claro por dentro flutua sobre um pilar, com
+	fragmentos orbitando. Sem console: o prompt de Renascer de sempre fica
+	no próprio núcleo.
+
+	Movimento (cliente): círculo pulsa devagar, núcleo gira, fragmentos
+	orbitam; com o jogador perto, partículas sobem do círculo; quando ele
+	RENASCE de verdade (Stats.Rebirths sobe), uma rajada local sobe do altar.
+	Referência local: -Z = frente (para a praça).
+]]
+function StationMachines.BuildRebirthAltar(parent: Instance, base: CFrame, options: PlateOptions, floorTop: number): (Model, BasePart)
+	local model = Instance.new("Model")
+	model.Name = "Station_Rebirth_Machine"
+	local theme = StationMachines.Themes.Rebirth
+	local kit: Kit = { Parent = model, Base = base, Theme = theme, Count = 0 }
+	local Slate, Metal, Neon, Marble = Enum.Material.Slate, Enum.Material.Metal, Enum.Material.Neon, Enum.Material.Marble
+
+	-- Dais circular em três degraus + rampa de frente.
+	local step1 = floorTop + 0.6
+	local step2 = step1 + 0.6
+	local top = step2 + 0.6
+	upright(kit, "AltarRing", Vector3.new(0, floorTop + 0.3, 0), 0.6, 19, theme.StoneDark, Slate, true)
+	upright(kit, "AltarRim", Vector3.new(0, step1 + 0.01, 0), 0.04, 19.4, theme.Gold, Metal, false)
+	upright(kit, "AltarStep", Vector3.new(0, step1 + 0.3, 0), 0.6, 14, theme.Stone, Slate, true)
+	upright(kit, "AltarTop", Vector3.new(0, step2 + 0.3, 0), 0.6, 9.2, Color3.fromRGB(226, 220, 232), Marble, true)
+	local circle = upright(kit, "RitualCircle", Vector3.new(0, top + 0.03, 0), 0.06, 7, theme.Energy, Neon, false, 0.55)
+	circle:AddTag(StationMachines.TAG_CORE)
+	wedge(kit, "AltarRamp", Vector3.new(4.6, top - floorTop, 5.6), CFrame.new(0, (top + floorTop) / 2, -7.2), theme.Stone, Slate)
+	-- Runas douradas no primeiro degrau (fora da rampa).
+	for index = 0, 7 do
+		local angle = (index + 0.5) * math.pi / 4
+		if math.abs(math.cos(angle) * 8.2) > 2.8 or math.sin(angle) > 0 then
+			local at = Vector3.new(math.cos(angle) * 8.2, step1 + 0.05, math.sin(angle) * 8.2)
+			piece(kit, "Rune", Vector3.new(1.1, 0.08, 0.6), CFrame.new(at) * CFrame.Angles(0, -angle, 0), theme.Gold, Metal, false)
+		end
+	end
+	-- Canais do pé dos obeliscos até o círculo (a energia converge).
+	for index, angle in { math.rad(45), math.rad(135), math.rad(225), math.rad(315) } do
+		local from = Vector3.new(math.cos(angle) * 6.6, step2 + 0.62, math.sin(angle) * 6.6)
+		local to = Vector3.new(math.cos(angle) * 3.4, top + 0.04, math.sin(angle) * 3.4)
+		local length = (to - from).Magnitude
+		local channel = piece(kit, "RebirthChannel", Vector3.new(0.3, 0.06, length), CFrame.lookAt((from + to) / 2, to), theme.Energy, Neon, false, 0.55)
+		channel:SetAttribute("Order", 1 + (index % 2))
+		channel:AddTag(StationMachines.TAG_PULSE)
+	end
+
+	-- Quatro obeliscos nas diagonais: pedra, capitel dourado, cristal violeta.
+	for _, angle in { math.rad(45), math.rad(135), math.rad(225), math.rad(315) } do
+		local at = Vector3.new(math.cos(angle) * 8, 0, math.sin(angle) * 8)
+		piece(kit, "Obelisk", Vector3.new(1.4, 6.4, 1.4), CFrame.new(at.X, step1 + 3.2, at.Z) * CFrame.Angles(0, angle, 0), theme.StoneDark, Slate, true)
+		piece(kit, "ObeliskCap", Vector3.new(1.7, 0.4, 1.7), CFrame.new(at.X, step1 + 6.6, at.Z) * CFrame.Angles(0, angle, 0), theme.Gold, Metal, false)
+		crystal(kit, "ObeliskCrystal", Vector3.new(at.X, step1 + 7.8, at.Z), 1.9, Vector3.new(0, 0, 0), theme.Crystal)
+	end
+
+	-- Halo vertical virado para a praça, sobre dois pés, com a placa no alto.
+	local haloCentre = Vector3.new(0, top + 7.2, 2.4)
+	local haloRadius = 6.6
+	for index = 0, 7 do
+		local angle = index * math.pi / 4 + math.pi / 8
+		local frame = CFrame.new(haloCentre) * CFrame.Angles(0, 0, angle) * CFrame.new(haloRadius, 0, 0)
+		local length = 2 * haloRadius * math.tan(math.pi / 8) + 0.5
+		piece(kit, "HaloSegment", Vector3.new(1.1, length, 1.1), frame, theme.Stone, Slate, false)
+		piece(kit, "HaloGlow", Vector3.new(0.14, length - 0.4, 0.5), frame * CFrame.new(-0.62, 0, -0.2), theme.Energy, Neon, false, 0.45)
+	end
+	for _, side in { -1, 1 } do
+		strut(kit, "HaloFoot", Vector3.new(side * 3.6, step2, 2.4), Vector3.new(side * 2.4, top + 1.2, 2.4), 1.0, 1.0, theme.StoneDark, Slate, true)
+	end
+	local crestY = haloCentre.Y + haloRadius + 1.3
+	piece(kit, "HaloCrest", Vector3.new(9.4, 1.8, 1.4), CFrame.new(0, crestY, 2.4), theme.StoneDark, Slate, false)
+	nameplate(kit, CFrame.new(0, crestY + 0.1, 1.62), options.Title, options.Subtitle, 7.6)
+
+	-- Núcleo: pilar central (ninguém fica dentro do cristal), cristal violeta
+	-- com brilho claro por dentro, e fragmentos orbitando.
+	upright(kit, "CorePillar", Vector3.new(0, top + 1.0, 0), 2.0, 2.4, theme.Stone, Marble, true)
+	upright(kit, "CorePillarCap", Vector3.new(0, top + 2.05, 0), 0.2, 2.8, theme.Gold, Metal, false)
+	local coreCentre = Vector3.new(0, top + 6.4, 0)
+	local shell = piece(kit, "RebirthCrystal", Vector3.new(2.2, 3.8, 2.2), CFrame.new(coreCentre) * CFrame.Angles(0, math.rad(45), 0), theme.Crystal, Enum.Material.Glass, false, 0.35)
+	shell:SetAttribute("SpinSpeed", 16)
+	shell:AddTag(StationMachines.TAG_SPIN)
+	local core = piece(kit, "RebirthCore", Vector3.new(1.3, 2.4, 1.3), CFrame.new(coreCentre) * CFrame.Angles(0, math.rad(20), 0), theme.Core, Neon, false, 0.1)
+	core:SetAttribute("SpinSpeed", -22)
+	core:AddTag(StationMachines.TAG_SPIN)
+	core:AddTag(StationMachines.TAG_CORE)
+	local shards = Instance.new("Model")
+	shards.Name = "RebirthShards"
+	for index = 0, 5 do
+		local angle = index * math.pi / 3
+		local at = coreCentre + Vector3.new(math.cos(angle) * 3, math.sin(index * 1.7) * 0.5, math.sin(angle) * 3)
+		piece(kit, "Shard", Vector3.new(0.4, 0.9, 0.4), CFrame.new(at) * CFrame.Angles(math.rad(20), angle, math.rad(15)), if index % 2 == 0 then theme.Gold else theme.Crystal, if index % 2 == 0 then Metal else Enum.Material.Glass, false, if index % 2 == 0 then 0 else 0.2, nil, shards)
+	end
+	shards:SetAttribute("SpinSpeed", 18)
+	shards:SetAttribute("Centre", (base * CFrame.new(coreCentre)).Position)
+	shards:SetAttribute("Axis", (base * CFrame.new(coreCentre)).UpVector)
+	atomic(shards)
+	shards.Parent = model
+	shards:AddTag(StationMachines.TAG_RING)
+
+	-- Partículas: poucas subindo do círculo (mais com o jogador perto) e a
+	-- rajada do renascimento (só quando acontece).
+	local rise = emitter(circle, "RebirthRise", theme.Crystal, 1, NumberRange.new(1.5, 2.6), NumberRange.new(1.4, 2.2), 0.2, 15, Vector3.new(0, 1.0, 0))
+	rise:SetAttribute("IdleRate", 1)
+	rise:SetAttribute("EngagedRate", 7)
+	rise:AddTag(StationMachines.TAG_RISE)
+	local burst = emitter(circle, "RebirthBurst", theme.Core, 0, NumberRange.new(6, 10), NumberRange.new(0.8, 1.3), 0.35, 40, Vector3.new(0, 2, 0))
+	burst:AddTag(StationMachines.TAG_BURST)
+	core:AddTag(StationMachines.TAG_ENGAGE)
+
+	model:SetAttribute("PartCount", kit.Count)
+	model:SetAttribute("Prototype", "StationMachine")
+	model.Parent = parent
+	return model, core
 end
 
 return StationMachines

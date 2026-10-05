@@ -21,7 +21,13 @@
 	- StationFlash: um clarão curto de tempos em tempos (mini-impacto);
 	- StationHolo: hologramas de pet (só imagem) flutuam e respiram de leve,
 	  mais nítidos com o jogador no terminal — mexe só no StudsOffset;
-	- "Efeitos reduzidos" desliga as partículas das estações (StationParticles).
+	- "Efeitos reduzidos" desliga as partículas das estações (StationParticles);
+	- StationEngage: ponto de uso sem tela (o núcleo do altar);
+	- StationRise: emissor com poucas partículas em repouso e mais com o
+	  jogador perto (atributos IdleRate/EngagedRate);
+	- StationBurst: rajada local quando o jogador RENASCE de verdade — lido
+	  do Stats.Rebirths que o DataController já recebe (nenhuma lógica nova:
+	  só reage ao número subir).
 
 	Peças achadas pelas tags (CollectionService) que o servidor põe; funciona
 	com StreamingEnabled (peça que chega/sai é registrada/esquecida). Só mexe
@@ -70,6 +76,9 @@ local TAGS = {
 	CutTint = "StationCutTint",
 	Flash = "StationFlash",
 	Holo = "StationHolo",
+	Engage = "StationEngage",
+	Rise = "StationRise",
+	Burst = "StationBurst",
 }
 
 -- Estado de cada estação (o Model "..._Machine", pela chave = caminho dele):
@@ -97,6 +106,11 @@ local tints: { [Instance]: Instance } = {}
 local flashes: { [Instance]: Flash } = {}
 local emitters: { [Instance]: ParticleEmitter } = {}
 local holos: { [Instance]: Holo } = {}
+local anchors: { [Instance]: { Part: BasePart, Station: string? } } = {}
+local risers: { [Instance]: { Emitter: ParticleEmitter, Idle: number, Engaged: number, Station: string? } } = {}
+local bursts: { [Instance]: ParticleEmitter } = {}
+local lastRebirths: number? = nil
+local BURST_COUNT = 40
 local reducedNow = false
 local nextSettings = 0
 local stations: { [string]: Station } = {}
@@ -177,6 +191,12 @@ local function register(tag: string, item: Instance)
 	elseif tag == TAGS.Particles and item:IsA("ParticleEmitter") then
 		emitters[item] = item
 		item.Enabled = not reducedNow
+	elseif tag == TAGS.Engage and item:IsA("BasePart") then
+		anchors[item] = { Part = item, Station = stationOf(item) }
+	elseif tag == TAGS.Rise and item:IsA("ParticleEmitter") then
+		risers[item] = { Emitter = item, Idle = numberAttribute(item, "IdleRate", 1), Engaged = numberAttribute(item, "EngagedRate", 6), Station = stationOf(item) }
+	elseif tag == TAGS.Burst and item:IsA("ParticleEmitter") then
+		bursts[item] = item
 	elseif tag == TAGS.Holo and item:IsA("BasePart") then
 		local gui = item:FindFirstChildOfClass("BillboardGui")
 		if gui then
@@ -234,6 +254,9 @@ local function forget(item: Instance)
 	tints[item] = nil
 	flashes[item] = nil
 	holos[item] = nil
+	anchors[item] = nil
+	risers[item] = nil
+	bursts[item] = nil
 	emitters[item] = nil
 end
 
@@ -305,10 +328,20 @@ function StationFxController.Step(at: number)
 	local localCharacter = Players.LocalPlayer and Players.LocalPlayer.Character
 	local localRoot = if localCharacter then localCharacter:FindFirstChild("HumanoidRootPart") else nil
 	local mine = if localRoot and localRoot:IsA("BasePart") then localRoot.Position else nil
-	for _, screen in screens do
-		local state = stateOf(screen.Station)
-		local engaged = mine ~= nil and (mine - screen.Part.Position).Magnitude <= ENGAGE_DISTANCE
+	local function engage(part: BasePart, station: string?)
+		local state = stateOf(station)
+		local engaged = mine ~= nil and (mine - part.Position).Magnitude <= ENGAGE_DISTANCE
 		state.Weight += ((if engaged then 1 else 0) - state.Weight) * (1 - math.exp(-ENGAGE_RATE * dt))
+	end
+	for _, screen in screens do
+		engage(screen.Part, screen.Station)
+	end
+	for _, anchor in anchors do
+		engage(anchor.Part, anchor.Station)
+	end
+	for _, riser in risers do
+		local weight = stateOf(riser.Station).Weight
+		riser.Emitter.Rate = riser.Idle + (riser.Engaged - riser.Idle) * weight
 	end
 	for _, state in stations do
 		local cycle = ARROW_CYCLE + (ENGAGE_ARROWS - ARROW_CYCLE) * state.Weight
@@ -379,6 +412,28 @@ function StationFxController.Step(at: number)
 	end
 end
 
+-- Rajada local do renascimento (só visual).
+function StationFxController.RebirthBurst()
+	if reducedNow then
+		return
+	end
+	for _, particles in bursts do
+		particles:Emit(BURST_COUNT)
+	end
+end
+
+-- O número de renascimentos subiu? (Stats vem do servidor, como sempre.)
+function StationFxController.OnStats(stats: any)
+	local rebirths = if type(stats) == "table" and type(stats.Rebirths) == "number" then stats.Rebirths else nil
+	if rebirths == nil then
+		return
+	end
+	if lastRebirths ~= nil and rebirths > lastRebirths then
+		StationFxController.RebirthBurst()
+	end
+	lastRebirths = rebirths
+end
+
 -- Para os testes.
 function StationFxController.Counts(): { [string]: number }
 	local function count(list: { [Instance]: any }): number
@@ -399,6 +454,9 @@ function StationFxController.Counts(): { [string]: number }
 		Flash = count(flashes),
 		Particles = count(emitters),
 		Holo = count(holos),
+		Engage = count(anchors),
+		Rise = count(risers),
+		Burst = count(bursts),
 	}
 end
 
@@ -422,6 +480,12 @@ function StationFxController.Init()
 	if player then
 		player:GetAttributeChangedSignal("BestCut"):Connect(StationFxController.RefreshCutTint)
 	end
+	StationFxController.OnStats(DataController.Get("Stats"))
+	DataController.Changed:Connect(function(key: string, value: any)
+		if key == "Stats" then
+			StationFxController.OnStats(value)
+		end
+	end)
 end
 
 function StationFxController.Start()

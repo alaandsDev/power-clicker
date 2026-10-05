@@ -529,6 +529,16 @@ end
 
 local function buildAltar(model: Model, origin: Vector3, palette: Palette)
 	local base = origin + areaOf("Rebirth").Offset
+	if LobbyConfig.RebirthStation == "Altar" then
+		-- Altar do Renascimento (o prompt de sempre, no núcleo).
+		local facing = CFrame.lookAt(base, Vector3.new(origin.X, base.Y, origin.Z))
+		local _, core = StationMachines.BuildRebirthAltar(model, facing, {
+			Title = "♻️ " .. string.upper(Text.GetFor(nil, "station.rebirth.name")),
+			Subtitle = Text.GetFor(nil, "station.rebirth.subtitle"),
+		}, 0.35)
+		prompt(core, "Rebirth", "world.prompt.rebirth")
+		return
+	end
 	disc(model, base + Vector3.new(0, 1, 0), 10, 1, palette.Rim, Enum.Material.Marble)
 	for step = 1, 3 do
 		disc(model, base + Vector3.new(0, 1 + step * 1.2, 0), 10 - step * 2, 1.2, palette.Pad, Enum.Material.Marble)

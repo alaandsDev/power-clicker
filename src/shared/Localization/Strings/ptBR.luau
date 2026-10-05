@@ -40,6 +40,8 @@ return {
 	["station.cuts.name"] = "Cortes",
 	["station.cuts.subtitle"] = "DOMINE SEU CORTE",
 	["station.pets.subtitle"] = "SEUS COMPANHEIROS",
+	["station.rebirth.name"] = "Renascer",
+	["station.rebirth.subtitle"] = "RENASÇA MAIS FORTE",
 	["menu.rebirth"] = "Renascer",
 
 	-- Painel de melhorias
