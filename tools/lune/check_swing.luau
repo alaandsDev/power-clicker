@@ -1,8 +1,8 @@
 --[[
 	check_swing.luau — o golpe da espada (SwordSwing + SwordSwingController) e
 	a sincronia com o arco/corte (SlashController + CutFx), de verdade, sobre
-	um personagem R15 montado aqui (ombro, cotovelo, punho, cintura, Tool com
-	RightGrip), com relógio simulado.
+	um personagem R15 montado aqui (ombros, cotovelos, punho, cintura,
+	pescoço, Tool com lâmina e RightGrip), com relógio simulado.
 
 		lune run tools/lune/check_swing.luau [raiz]
 
@@ -11,7 +11,8 @@
 	  2. spam a 9 hits/s por 30 s: nenhuma instância nova acumulando, nenhuma
 	     Animation/AnimationTrack, um golpe por vez;
 	  3. variações A/B alternadas (e um C ocasional);
-	  4. a espada volta: C0 de cada articulação EXATAMENTE o original;
+	  4. o golpe volta para a POSTURA de combate (e, sem espada, cada C0 volta
+	     EXATAMENTE ao original);
 	  5. trocar a skin (a Tool inteira) no meio do golpe não quebra nada e o
 	     RightGrip não é tocado;
 	  6. o golpe não lê nada de dano/economia;
@@ -20,6 +21,14 @@
 	  9. morrer/respawnar no meio do golpe: nada quebrado, golpe no corpo novo;
 	 10. outros jogadores: o sinal do servidor (SwingSeq) faz golpes curtos no
 	     personagem deles por perto, e nada longe.
+	  P. POSTURA DE COMBATE (parado com espada): espada baixa e para o lado
+	     (nem vertical, nem atravessando o corpo), braço esquerdo afastado,
+	     tronco assimétrico com a cabeça para frente, respiração sutil;
+	     andando/correndo/pulando vira "carregar" (sem tronco/braço esquerdo);
+	     transições sem tranco (parado↔andando, golpe→postura, equipar/
+	     desequipar, trocar de espada); lâminas grandes não tocam o chão
+	     (modelo no plano do corpo, toda skin do SwordConfig); R6 e Joint
+	     Upgrade também; respawn começa limpo; outros jogadores perto também.
 
 	Adaptação SÓ AQUI: `.Position` -> `.CFrame.Position` no controller.
 
@@ -111,6 +120,14 @@ local function part(model, name)
 	p.Parent = model
 	return p
 end
+local function newTool(bladeLength)
+	local tool = Instance.new("Tool")
+	tool.Name = "CutBlade"
+	part(tool, "Handle")
+	local blade = part(tool, "Blade")
+	blade.Size = V3.new(0.22, bladeLength, 0.9)
+	return tool
+end
 local function newCharacter(name)
 	local model = Instance.new("Model")
 	model.Name = name
@@ -120,14 +137,19 @@ local function newCharacter(name)
 	local upperArm = part(model, "RightUpperArm")
 	local lowerArm = part(model, "RightLowerArm")
 	local hand = part(model, "RightHand")
+	local leftUpper = part(model, "LeftUpperArm")
+	local leftLower = part(model, "LeftLowerArm")
+	local head = part(model, "Head")
 	motor(lower, "Root", root, lower, CF.new(0, -1, 0))
 	motor(upper, "Waist", lower, upper, CF.new(0, 0.2, 0))
 	motor(upperArm, "RightShoulder", upper, upperArm, CF.new(1, 0.56, 0))
 	motor(lowerArm, "RightElbow", upperArm, lowerArm, CF.new(0, -0.33, 0))
 	motor(hand, "RightWrist", lowerArm, hand, CF.new(0, -0.5, 0))
-	local tool = Instance.new("Tool")
-	tool.Name = "CutBlade"
-	local handle = part(tool, "Handle")
+	motor(leftUpper, "LeftShoulder", upper, leftUpper, CF.new(-1, 0.56, 0))
+	motor(leftLower, "LeftElbow", leftUpper, leftLower, CF.new(0, -0.33, 0))
+	motor(head, "Neck", upper, head, CF.new(0, 0.8, 0))
+	local tool = newTool(4.2)
+	local handle = tool.Handle
 	tool.Parent = model
 	local grip = Instance.new("Weld")
 	grip.Name = "RightGrip"
@@ -209,6 +231,9 @@ local function joints(character)
 		Elbow = character.RightLowerArm.RightElbow,
 		Wrist = character.RightHand.RightWrist,
 		Waist = character.UpperTorso.Waist,
+		Neck = character.Head.Neck,
+		LShoulder = character.LeftUpperArm.LeftShoulder,
+		LElbow = character.LeftLowerArm.LeftElbow,
 	}
 end
 local function same(a, b): boolean
@@ -228,6 +253,31 @@ local function atBase(character, base): boolean
 		end
 	end
 	return true
+end
+-- Cada articulação exatamente na pose `pose` (graus somados ao C0 original).
+local function close(a, b): boolean
+	-- C0 é float32: 1e-4 de folga depois de compor rotações.
+	return (a.Position - b.Position).Magnitude < 1e-4 and (a.LookVector - b.LookVector).Magnitude < 1e-4 and (a.UpVector - b.UpVector).Magnitude < 1e-4
+end
+local function atPose(character, base, pose): boolean
+	for key, m in joints(character) do
+		if not close(m.C0, SwordSwing.Posed(base[key], pose[key])) then
+			return false
+		end
+	end
+	return true
+end
+-- Na postura atual do rig (golpe terminado, corpo de volta à postura).
+local function atRest(character, base, rig): boolean
+	return rig ~= nil and not rig.Active and atPose(character, base, rig.Rest)
+end
+-- Ângulo (graus) entre duas orientações.
+local function angle(a, b): number
+	-- Pela corda (|u - v|): estável em float32 para ângulos pequenos.
+	local function between(u, v)
+		return math.deg(2 * math.asin(math.clamp((u - v).Magnitude / 2, 0, 1)))
+	end
+	return math.max(between(a.LookVector, b.LookVector), between(a.UpVector, b.UpVector), between(a.RightVector, b.RightVector))
 end
 local function frames(seconds: number)
 	local steps = math.max(math.floor(seconds * 60 + 0.5), 1)
@@ -271,8 +321,8 @@ check(math.abs((cutPlays[1].At - 1000) - impact) <= 1 / 60 + 1e-6, string.format
 check(cutPlays[1].CutId == "Cut4", "7. o corte desenhado é o do melhor Corte (CutVisuals), não o da espada")
 check(cutPlays[1].Roll >= -10 and cutPlays[1].Roll <= 10, "7. variação A: corte na diagonal do golpe A")
 
--- 4. Volta exata.
-check(atBase(character, base), "4. depois do golpe, cada articulação volta EXATAMENTE ao C0 original")
+-- 4. Volta para a postura.
+check(atRest(character, base, rig) and not atBase(character, base), "4. depois do golpe, o corpo volta EXATAMENTE para a postura de combate (espada na mão)")
 
 -- 3. Alternância.
 local variants = {}
@@ -315,7 +365,7 @@ check(hits >= 268, string.format("2. %d hits em 30 s (~9/s)", hits))
 check(countInstances() == before, string.format("2. nenhuma instância acumulando (%d antes, %d depois)", before, countInstances()))
 check(countKind("Animation") == 0 and countKind("Animator") == 0, "2. nenhuma Animation/AnimationTrack criada (golpe procedural)")
 check(Swing.LocalRig().Duration == SwordSwing.FAST_SECONDS, "2. em spam o golpe usa a versão curta (" .. SwordSwing.FAST_SECONDS .. " s)")
-check(atBase(character, base), "2/4. depois do spam, o braço volta exatamente à pose original")
+check(atRest(character, base, Swing.LocalRig()), "2/4. depois do spam, o corpo volta exatamente para a postura")
 
 -- 8. Efeitos reduzidos: sem arco/corte, com golpe.
 settings.ReducedEffects = true
@@ -330,12 +380,10 @@ settings.ReducedEffects = false
 Slash.Play()
 frames(0.04)
 character.CutBlade:Destroy()
-local tool = Instance.new("Tool")
-tool.Name = "CutBlade"
-part(tool, "Handle")
+local tool = newTool(4.2)
 tool.Parent = character
 frames(0.3)
-check(atBase(character, base), "5/10. trocar a skin no meio do golpe: o braço volta ao normal")
+check(atRest(character, base, Swing.LocalRig()), "5/10. trocar a skin no meio do golpe: o corpo volta para a postura")
 check(same(character.RightHand.RightGrip.C0, gripBefore), "5. o golpe nunca mexe no RightGrip (a pegada da espada)")
 Slash.Play()
 check(Swing.LocalRig().Active, "5. depois da troca o golpe continua funcionando (mesma lógica para toda skin)")
@@ -345,7 +393,7 @@ frames(0.3)
 Slash.Play()
 frames(0.04)
 characterRemoving:Fire(character)
-check(Swing.LocalRig() == nil and atBase(character, base), "9. personagem saindo no meio do golpe: rig descartado e C0 devolvido")
+check(Swing.LocalRig() == nil and atBase(character, base), "9. personagem saindo no meio do golpe: rig descartado e C0 devolvido EXATO")
 character:Destroy()
 local fresh = newCharacter("Local")
 localPlayer.Character = fresh
@@ -356,7 +404,7 @@ Slash.Play()
 frames(0.04)
 check(not same(joints(fresh).Shoulder.C0, freshBase.Shoulder), "9. golpe funciona no personagem novo")
 frames(0.3)
-check(atBase(fresh, freshBase), "9. e volta à pose original dele")
+check(atRest(fresh, freshBase, Swing.LocalRig()), "9. e volta para a postura dele")
 
 -- 9b. Outros formatos de personagem: R6 e R15 com "Avatar Joint Upgrade"
 -- (AnimationConstraint). Antes o golpe só reconhecia Motor6D do R15 e, em
@@ -430,11 +478,230 @@ otherSwing:Fire()
 frames(0.05)
 check(not same(joints(other.Character).Shoulder.C0, otherBase.Shoulder), "10. o sinal do servidor faz o outro jogador golpear no meu cliente")
 frames(0.6)
-check(atBase(other.Character, otherBase), "10. a sequência dele é curta e volta à pose original")
+check(atRest(other.Character, otherBase, Swing.RemoteRig(other)) and not atBase(other.Character, otherBase), "10. a sequência dele é curta e volta para a postura de combate dele")
 other.Character.HumanoidRootPart.CFrame = CF.new(500, 0, 0)
+frames(0.6)
 otherSwing:Fire()
 frames(0.05)
-check(atBase(other.Character, otherBase), "10. jogador longe: nada é animado")
+check(Swing.RemoteRig(other) == nil and atBase(other.Character, otherBase), "10. jogador longe: rig descartado, C0 EXATO e nada é animado")
+other.Character.HumanoidRootPart.CFrame = CF.new(10, 0, 0)
+frames(0.6)
+check(Swing.RemoteRig(other) ~= nil and atPose(other.Character, otherBase, Swing.RemoteRig(other).Rest) and not atBase(other.Character, otherBase), "P. outro jogador perto, parado com espada: postura de combate também no meu cliente")
+
+-- ── P. POSTURA DE COMBATE ──────────────────────────────────────────────────
+do
+	local me = localPlayer.Character
+	local root = me.HumanoidRootPart
+	local rigP = Swing.LocalRig()
+	-- O C0 original é o que o rig guardou ao montar (a postura já está aplicada).
+	local meBase = {}
+	for key, joint in rigP.Joints do
+		meBase[key] = joint.Base
+	end
+	frames(1.5)
+	local rest = rigP.Rest
+	local stance = SwordSwing.Stance(4.2, true, true)
+	local pitch = SwordSwing.SwordPitch(stance)
+	check(rigP.Idle > 0.95 and rigP.Armed > 0.95, "P1. parado com espada: postura de combate ativa")
+	check(atPose(me, meBase, rest) and not atBase(me, meBase), "P1. o corpo está na postura (C0 = original + postura)")
+	check(pitch >= 70 and pitch <= 100, string.format("P1. espada baixa, perto da horizontal (inclinação %.0f°; 90 = horizontal, 180 = em pé)", pitch))
+	check(stance.Shoulder.Y <= 0 and stance.Shoulder.Z > 0, "P1. braço da espada aberto para fora: a espada não cruza o corpo")
+	check(stance.LShoulder.Z < 0 and stance.LShoulder ~= V3.zero, "P1. braço esquerdo levemente afastado")
+	check(stance.Waist.Y ~= 0 and math.abs(stance.Neck.Y + stance.Waist.Y) < 1e-6, "P1. tronco assimétrico, cabeça compensada (olhando para frente)")
+	-- Respiração: sutil e contínua.
+	local minW, maxW, maxShoulder, maxStep = math.huge, -math.huge, 0, 0
+	local last = me.UpperTorso.Waist.C0
+	local s0 = rigP.Rest.Shoulder
+	for _ = 1, 60 * 8 do
+		now += 1 / 60
+		renderStep()
+		local waist = rigP.Rest.Waist.X
+		minW = math.min(minW, waist)
+		maxW = math.max(maxW, waist)
+		maxShoulder = math.max(maxShoulder, (rigP.Rest.Shoulder - s0).Magnitude)
+		maxStep = math.max(maxStep, angle(last, me.UpperTorso.Waist.C0))
+		last = me.UpperTorso.Waist.C0
+	end
+	check(maxW - minW > 1 and maxW - minW < 4, string.format("P1. respiração: tronco oscila %.1f° (sutil, entre 1 e 4)", maxW - minW))
+	check(maxShoulder < 4 and maxStep < 0.3, string.format("P1. sem balançar demais (ombro ±%.1f°, no máximo %.2f° por quadro)", maxShoulder, maxStep))
+
+	-- Andando / correndo / pulando: "carregar", sem tranco.
+	local function moveFor(seconds, velocity)
+		local worst = 0
+		local previous = {}
+		for key, m in joints(me) do
+			previous[key] = m.C0
+		end
+		for _ = 1, math.floor(seconds * 60 + 0.5) do
+			now += 1 / 60
+			root.CFrame = root.CFrame + velocity / 60
+			renderStep()
+			for key, m in joints(me) do
+				worst = math.max(worst, angle(previous[key], m.C0))
+				previous[key] = m.C0
+			end
+		end
+		return worst
+	end
+	local carry = SwordSwing.Carry(4.2, true, true)
+	local jump = moveFor(1, V3.new(16, 0, 0))
+	check(rigP.Idle < 0.05 and atPose(me, meBase, rigP.Rest), "P2. andando (16 studs/s): o corpo vai para \"carregar\"")
+	check((rigP.Rest.Shoulder - carry.Shoulder).Magnitude < 1 and rigP.Rest.Waist.Magnitude < 0.5 and rigP.Rest.LShoulder.Magnitude < 0.5, "P2. andando: só o braço da espada; tronco e braço esquerdo ficam com a locomoção")
+	check(SwordSwing.SwordPitch(carry) > pitch and carry.Shoulder.Z > 0, string.format("P2. andando: espada mais alta (%.0f°) e afastada das pernas", SwordSwing.SwordPitch(carry)))
+	check(jump < 5, string.format("P5. parado → andando sem tranco (maior passo %.2f° por quadro)", jump))
+	local run = moveFor(1, V3.new(0, 0, 30))
+	check(rigP.Idle < 0.05 and run < 5, "P3. correndo (30 studs/s): continua carregando, sem tranco")
+	local stopped = moveFor(1.5, V3.zero)
+	check(rigP.Idle > 0.95 and stopped < 5, string.format("P5. andando → parado: volta à postura sem tranco (maior passo %.2f°)", stopped))
+	local up = moveFor(0.3, V3.new(0, 25, 0))
+	local down = moveFor(0.3, V3.new(0, -25, 0))
+	check(rigP.Idle < 0.5 and up < 5 and down < 5, "P4. pulando/caindo: carregar, sem tranco")
+	moveFor(1.5, V3.zero)
+	local teleport = root.CFrame
+	root.CFrame = root.CFrame + V3.new(400, 0, 0)
+	frames(0.1)
+	check(rigP.Idle > 0.9, "P4. teleporte não conta como correr")
+	root.CFrame = teleport
+
+	-- Golpe a partir da postura e de volta (sem tranco no começo e no fim).
+	frames(1)
+	local from = rigP.Current
+	for _, variant in { "A", "B", "C" } do
+		local p0 = SwordSwing.Pose(variant, 0, from, rigP.Rest)
+		local pEnd = SwordSwing.Pose(variant, 0.9999, from, rigP.Rest)
+		local p1 = SwordSwing.Pose(variant, 1, from, rigP.Rest)
+		local startsAt, endsAt = 0, 0
+		for _, key in SwordSwing.Keys() do
+			startsAt = math.max(startsAt, (p0[key] - from[key]).Magnitude)
+			endsAt = math.max(endsAt, (pEnd[key] - p1[key]).Magnitude, (p1[key] - rigP.Rest[key]).Magnitude)
+		end
+		check(startsAt < 1e-6 and endsAt < 0.01, "P6. golpe " .. variant .. ": começa na postura e termina na postura (sem salto)")
+	end
+	Slash.Play()
+	local swingVariant = rigP.Variant
+	frames(0.3)
+	check(atRest(me, meBase, rigP), "P6. IDLE → golpe " .. swingVariant .. " → IDLE: de volta à postura")
+	-- Golpe tem prioridade: durante o golpe a pose é a do golpe, não a postura.
+	Slash.Play()
+	frames(0.03)
+	check(rigP.Active and not atPose(me, meBase, rigP.Rest), "P6. o golpe tem prioridade sobre a postura")
+	frames(0.3)
+
+	-- Trocar de espada (lâmina maior): a ponta sobe, sem tranco.
+	me.CutBlade:Destroy()
+	newTool(6.6).Parent = me
+	local swap = moveFor(1, V3.zero)
+	local big = SwordSwing.Stance(6.6, true, true)
+	check(SwordSwing.SwordPitch(big) > pitch and (rigP.Rest.Wrist - big.Wrist).Magnitude < 1 and swap < 5, string.format("P8. trocar para lâmina grande: ponta mais alta (%.0f° → %.0f°), sem tranco", pitch, SwordSwing.SwordPitch(big)))
+
+	-- Sem espada: tudo volta EXATAMENTE ao original e para de escrever.
+	me.CutBlade:Destroy()
+	local unequip = moveFor(1.5, V3.zero)
+	check(rigP.Armed == 0 and atBase(me, meBase) and not rigP.Applied and unequip < 5, "P9. guardar a espada: volta suave e EXATA ao C0 original")
+	local shoulder = me.RightUpperArm.RightShoulder
+	local c0 = shoulder.C0
+	frames(0.2)
+	check(same(shoulder.C0, c0), "P9. sem espada e parado: nada é escrito por quadro")
+	newTool(4.2).Parent = me
+	local equip = moveFor(1.5, V3.zero)
+	check(rigP.Armed > 0.95 and equip < 5, "P9. equipar de novo: entra na postura sem tranco")
+
+	-- Lâminas: nenhuma skin toca o chão (modelo no plano do corpo: ombro a 4,5
+	-- studs, braço+antebraço 2,2 (R15) ou braço 2 (R6), cabo 0,6; margem de
+	-- 20° de inclinação extra do encaixe). REQUER VALIDAÇÃO NO STUDIO.
+	local SwordConfig = E.require(E.Shared.Config.SwordConfig)
+	local worst = math.huge
+	local worstName = ""
+	for id, sword in SwordConfig.Swords do
+		local length = 0.6 + sword.BladeSize.Y
+		for _, kind in { "R15", "R6" } do
+			local r15 = kind == "R15"
+			for _, pose in { SwordSwing.Stance(sword.BladeSize.Y, r15, r15), SwordSwing.Carry(sword.BladeSize.Y, r15, r15) } do
+				local arm = math.rad(90 + pose.Shoulder.X)
+				local fore = math.rad(90 + pose.Shoulder.X + pose.Elbow.X)
+				local hand = if r15 then 4.5 - 1.1 * math.cos(arm) - 1.1 * math.cos(fore) else 4.5 - 2 * math.cos(arm)
+				local tip = hand - length * math.cos(math.rad(SwordSwing.SwordPitch(pose) - 20))
+				if tip < worst then
+					worst = tip
+					worstName = id .. " " .. kind
+				end
+			end
+		end
+	end
+	check(worst > 0.2, string.format("P13. nenhuma lâmina toca o chão parada/andando (ponta mais baixa %.2f studs: %s)", worst, worstName))
+
+	-- R6 e Joint Upgrade: postura também.
+	local r6 = Instance.new("Model")
+	r6.Name = "LocalR6Stance"
+	part(r6, "HumanoidRootPart")
+	local torso = part(r6, "Torso")
+	local function r6motor(name, x)
+		local m = Instance.new("Motor6D")
+		m.Name = name
+		m.Part0 = torso
+		m.Part1 = part(r6, name .. "Part")
+		m.C0 = CF.new(x, 0.5, 0) * CF.Angles(0, math.rad(if x > 0 then 90 else -90), 0)
+		m.Parent = torso
+		return m
+	end
+	local rs, ls = r6motor("Right Shoulder", 1), r6motor("Left Shoulder", -1)
+	local neck = Instance.new("Motor6D")
+	neck.Name = "Neck"
+	neck.C0 = CF.new(0, 1, 0)
+	neck.Parent = torso
+	local rsBase, lsBase, neckBase = rs.C0, ls.C0, neck.C0
+	newTool(4.2).Parent = r6
+	respawnAs(r6)
+	frames(1.5)
+	local r6rig = Swing.LocalRig()
+	check(r6rig and not r6rig.HasWrist and not same(rs.C0, rsBase) and not same(ls.C0, lsBase) and same(neck.C0, neckBase), "P11. R6: postura nos dois ombros (sem cotovelo/punho; pescoço fica com o Roblox)")
+	check(r6rig and SwordSwing.SwordPitch(r6rig.Rest) >= 80 and SwordSwing.SwordPitch(r6rig.Rest) <= 110 and (rs.C0.Position - rsBase.Position).Magnitude < 1e-6, string.format("P11. R6: espada baixa só pelo ombro (%.0f°), sem sair do lugar", if r6rig then SwordSwing.SwordPitch(r6rig.Rest) else 0))
+	Slash.Play()
+	frames(0.3)
+	check(r6rig and not r6rig.Active and close(rs.C0, SwordSwing.Posed(rsBase, r6rig.Rest.Shoulder)), "P11. R6: golpe → volta para a postura")
+
+	local upgraded = Instance.new("Model")
+	upgraded.Name = "LocalUpgradedStance"
+	part(upgraded, "HumanoidRootPart")
+	local upper = part(upgraded, "UpperTorso")
+	local function constraint(name, x)
+		local a0 = Instance.new("Attachment")
+		a0.Name = name .. "RigAttachment"
+		a0.CFrame = CF.new(x, 0.56, 0)
+		a0.Parent = upper
+		local c = Instance.new("AnimationConstraint")
+		c.Name = name
+		c.Attachment0 = a0
+		c.Parent = upper
+		return a0
+	end
+	local ra, la = constraint("RightShoulder", 1), constraint("LeftShoulder", -1)
+	local raBase, laBase = ra.CFrame, la.CFrame
+	newTool(4.2).Parent = upgraded
+	respawnAs(upgraded)
+	frames(1.5)
+	check(Swing.LocalRig() and Swing.LocalRig().Kind == "AnimationConstraint" and not same(ra.CFrame, raBase) and not same(la.CFrame, laBase), "P12. Joint Upgrade: postura pelas Attachment0 (ombro direito e esquerdo)")
+	upgraded.CutBlade:Destroy()
+	frames(1.5)
+	check(same(ra.CFrame, raBase) and same(la.CFrame, laBase), "P12. Joint Upgrade: sem espada, volta EXATA ao original")
+
+	-- Respawn: o corpo novo começa limpo e entra na postura suave.
+	local fresh = newCharacter("Local")
+	fresh.Parent = nil
+	respawnAs(fresh)
+	local freshRig = Swing.LocalRig()
+	check(freshRig ~= rigP and freshRig.Armed == 0 and freshRig.Count == 0, "P10. respawn: rig novo, sem estado do anterior")
+	local freshBaseP = baseOf(fresh)
+	renderStep()
+	local firstStep = 0
+	for key, m in joints(fresh) do
+		firstStep = math.max(firstStep, angle(freshBaseP[key], m.C0))
+	end
+	check(firstStep < 8, string.format("P10. respawn: entra na postura sem estalo (primeiro quadro %.1f°)", firstStep))
+	frames(1.5)
+	check(atPose(fresh, freshBaseP, freshRig.Rest) and freshRig.Armed > 0.95, "P10. e chega à postura")
+	check(countKind("Animation") == 0 and countKind("AnimationTrack") == 0, "P7. nenhuma Animation/AnimationTrack em nenhuma etapa")
+end
 
 -- 6. O golpe não lê dano nem economia.
 local sources = {

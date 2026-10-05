@@ -38,7 +38,7 @@ lune run tools/lune/check_hud.luau      # layout do HUD em 5 resoluções/entrad
 lune run tools/lune/check_sword.luau    # espada equipada aplicada ao personagem (SwordService real)
 lune run tools/lune/check_corridor.luau # loop do Caminho do Poder (WallService real sobre o mapa)
 lune run tools/lune/check_cuts.luau     # vitrine dos Cortes + camada de corte do golpe (mesma config)
-lune run tools/lune/check_swing.luau    # golpe da espada a cada hit, sincronizado com o corte
+lune run tools/lune/check_swing.luau    # postura de combate + golpe da espada a cada hit, sincronizado com o corte
 lune run tools/lune/check_fx.luau       # efeitos de combate: impacto, rachaduras, quebra, câmera, números
 lune run tools/lune/check_polish.luau   # sem luz constante no personagem; pets menores em formação atrás
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
@@ -81,10 +81,17 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   `SwordSwingController`) e o `SlashController` reais sobre um personagem R15
   montado no Lune, com relógio simulado: hit dispara o golpe; 9 hits/s por
   30 s sem acumular instâncias nem criar Animation; A/B alternados (C
-  ocasional); C0 volta exatamente ao original; troca de skin e respawn no meio
-  do golpe; corte (CutFx) desenhado no impacto e na diagonal do golpe;
-  "Efeitos reduzidos" mantém o golpe; outros jogadores golpeiam perto e nada
-  longe; o golpe não lê dano/economia.
+  ocasional); o golpe volta para a postura (e, sem espada, o C0 volta
+  exatamente ao original); troca de skin e respawn no meio do golpe; corte
+  (CutFx) desenhado no impacto e na diagonal do golpe; "Efeitos reduzidos"
+  mantém o golpe; outros jogadores golpeiam perto e nada longe; o golpe não
+  lê dano/economia. POSTURA DE COMBATE (bloco P): espada baixa e para o lado
+  (nem vertical, nem cruzando o corpo), braço esquerdo afastado, cabeça para
+  frente, respiração sutil; andando/correndo/pulando vira "carregar";
+  transições sem tranco (máx. por quadro) em parado↔andando, golpe→postura,
+  equipar/guardar, trocar de lâmina e respawn; nenhuma skin encosta a ponta
+  no chão (modelo no plano do corpo); R6 e Joint Upgrade; outros jogadores
+  perto também ficam na postura.
 - **check_fx** — os controllers reais do combate (`WallController`,
   `SwordSwingController`, `SlashController`, `CombatFxController`) sobre o
   mapa, com um "servidor" mínimo mandando o `WallState` do jogador e relógio
