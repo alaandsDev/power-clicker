@@ -47,8 +47,6 @@ local comboSlot: Frame -- centro da faixa: o ClickController põe o combo aqui
 local topStack: Frame -- coluna central abaixo das moedas (ver Theme.Hud.TopStackWidth)
 local setLevelBar: (number) -> ()
 local lastLevel = -1
-local boostLabel: TextLabel
-local boostsReceivedAt = 0
 local powerIcon: GuiObject
 local questChip: TextButton
 -- Level bar: directly above the click button. ClickController reserves this
@@ -195,26 +193,6 @@ end
 
 
 -- Active boosts with a local countdown (server resyncs "Boosts" periodically).
-local function refreshBoosts()
-	local boosts = DataController.Get("Boosts")
-	local remaining = if boosts then boosts.Remaining else nil
-	if not remaining or next(remaining) == nil then
-		boostLabel.Text = ""
-		return
-	end
-	local elapsed = os.clock() - boostsReceivedAt
-	local parts = {}
-	for boostId, seconds in remaining do
-		local left = seconds - elapsed
-		if left > 0 then
-			table.insert(parts, Text.Get("hud.boost", { name = Text.Get("boost." .. boostId .. ".name"), time = NumberFormat.Duration(left) }))
-		end
-	end
-	table.sort(parts)
-	boostLabel.Text = table.concat(parts, "   ")
-	boostLabel.Visible = #parts > 0
-end
-
 --[[
 	Coluna central logo abaixo das moedas. Quem precisa de espaço no topo
 	(buffs, evento, chefe, treino, faixa do corredor) entra aqui com um
@@ -305,22 +283,8 @@ function HudController.Init()
 		toasts.Parent = topStack
 	end
 
-	-- Buffs temporários: chip pequeno sob a fileira de moedas, não texto solto.
-	boostLabel = Build.label({
-		Name = "Boosts",
-		TextSize = 15,
-		TextColor3 = Theme.Colors.Good,
-		BackgroundColor3 = hud.Surface,
-		BackgroundTransparency = 0.25,
-		Text = "",
-		Size = UDim2.fromOffset(0, 24),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Visible = false,
-		LayoutOrder = 1,
-		Parent = topStack,
-	})
-	Build.corner(boostLabel, UDim.new(1, 0))
-	Build.new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = boostLabel })
+	-- Buffs ativos: BuffController (chips compactos à esquerda das moedas, fora
+	-- desta coluna central, que é dos recursos e do combate).
 
 	--[[
 		Chip de missões no lugar do painel de metas. O painel grande mostrava
@@ -339,6 +303,11 @@ function HudController.Init()
 		Parent = canvas,
 	})
 	Build.corner(questChip, UDim.new(1, 0))
+	-- Mesma família visual dos chips de buff (fundo, transparência, borda fina).
+	questChip.BackgroundTransparency = 0.25
+	questChip.Font = Theme.FontDisplay
+	questChip.TextSize = 15
+	Build.stroke(questChip, 1.5, hud.Border)
 	questChip.Activated:Connect(function()
 		UIController.TogglePanel("Quests")
 	end)
@@ -408,15 +377,6 @@ function HudController.Init()
 	DataController.Changed:Connect(function(key: string)
 		if key == "Currencies" or key == "Stats" or key == "Quests" then
 			refresh()
-		elseif key == "Boosts" then
-			boostsReceivedAt = os.clock()
-			refreshBoosts()
-		end
-	end)
-	task.spawn(function()
-		while true do
-			task.wait(1)
-			refreshBoosts()
 		end
 	end)
 	-- O overdrive conta segundos: a linha de status precisa acompanhar.

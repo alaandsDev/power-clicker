@@ -31,6 +31,12 @@ local Anim = require(script.Parent.Parent.UI.Anim)
 local Text = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Localization"))
 local UIController = require(script.Parent.UIController)
 
+-- Badge "!": visível, mas sem dominar a interface (antes 24 px, vermelho
+-- forte e pulsando para sempre). Pulsa só ao aparecer, por BADGE_PULSE_SECONDS.
+local BADGE_SIZE = 18
+local BADGE_COLOR = Color3.fromRGB(226, 92, 80)
+local BADGE_PULSE_SECONDS = 4
+
 local MenuController = {}
 
 local TOOLTIP_HEIGHT = 30
@@ -192,10 +198,10 @@ function MenuController.AddButton(name: string, icon: string, color: Color3, ord
 	local badge = Build.label({
 		Name = "Badge",
 		Text = "!",
-		TextSize = 18,
-		BackgroundColor3 = Theme.Colors.Bad,
-		BackgroundTransparency = 0,
-		Size = UDim2.fromOffset(24, 24),
+		TextSize = 13,
+		BackgroundColor3 = BADGE_COLOR,
+		BackgroundTransparency = 0.05,
+		Size = UDim2.fromOffset(BADGE_SIZE, BADGE_SIZE),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.9, 0.1),
 		Visible = false,
@@ -292,10 +298,10 @@ function MenuController.GetSecondaryMenu(): Frame
 		local moreBadge = Build.label({
 			Name = "Badge",
 			Text = "!",
-			TextSize = 18,
-			BackgroundColor3 = Theme.Colors.Bad,
-			BackgroundTransparency = 0,
-			Size = UDim2.fromOffset(24, 24),
+			TextSize = 13,
+			BackgroundColor3 = BADGE_COLOR,
+			BackgroundTransparency = 0.05,
+			Size = UDim2.fromOffset(BADGE_SIZE, BADGE_SIZE),
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.9, 0.1),
 			Visible = false,
@@ -345,7 +351,15 @@ function MenuController.SetBadge(button: TextButton, visible: boolean)
 	end
 	if visible and not badge.Visible then
 		Anim.PopIn(badge, 0.3)
-		badgePulses[badge] = Anim.Pulse(badge, 1.2, 1)
+		local pulse = Anim.Pulse(badge, 1.1, 1.4)
+		badgePulses[badge] = pulse
+		task.delay(BADGE_PULSE_SECONDS, function()
+			if badgePulses[badge] == pulse then
+				pulse:Cancel()
+				badgePulses[badge] = nil
+				Anim.ScaleOf(badge).Scale = 1
+			end
+		end)
 	elseif not visible then
 		local pulse = badgePulses[badge]
 		if pulse then

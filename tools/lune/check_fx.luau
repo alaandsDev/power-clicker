@@ -173,7 +173,16 @@ local function giveSword(model)
 	local tool = Instance.new("Tool")
 	tool.Name = "CutBlade"
 	part(tool, "Handle")
-	part(tool, "Blade", V3.new(0.2, 4.2, 0.8))
+	local blade = part(tool, "Blade", V3.new(0.2, 4.2, 0.8))
+	-- Como o SwordService monta: luz contida parada, fio de energia apagado.
+	local glow = Instance.new("PointLight")
+	glow.Brightness = 0.35
+	glow:SetAttribute("IdleBrightness", 0.35)
+	glow:SetAttribute("SwingBrightness", 1.6)
+	glow.Parent = blade
+	local edge = part(tool, "BladeEdge", V3.new(0.2, 4, 0.14))
+	edge.Transparency = 0.4
+	edge:SetAttribute("IdleTransparency", 0.4)
 	tool.Parent = model
 	return tool
 end
@@ -541,6 +550,25 @@ local impactsBefore2, numbersBefore = #impacts, DamageNumbers.Visible(numbers)
 otherSwing:Fire()
 frames(0.5)
 check(#impacts == impactsBefore2 and DamageNumbers.Visible(numbers) <= numbersBefore, "10. o golpe de outro jogador anima o personagem dele, mas não gera impacto nem dano na MINHA barreira")
+
+-- 12. Espada parada = contida; atacando = forte (luz, fio e rastro).
+local function near(a, b)
+	return math.abs(a - b) < 1e-4 -- propriedades float32
+end
+do
+	frames(0.5)
+	local tool = localPlayer.Character.CutBlade
+	local glow = tool.Blade:FindFirstChildOfClass("PointLight")
+	check(near(glow.Brightness, 0.35) and near(tool.BladeEdge.Transparency, 0.4), "12. espada parada: luz contida e fio de energia apagado")
+	goTo("Wood")
+	Slash.Play()
+	frames(0.03)
+	local trail = tool.Blade:FindFirstChildOfClass("Trail")
+	check(near(glow.Brightness, 1.6) and near(tool.BladeEdge.Transparency, 0) and trail and trail.Enabled, "12. no golpe: luz forte, fio aceso e rastro ligado")
+	frames(0.5)
+	check(near(glow.Brightness, 0.35) and near(tool.BladeEdge.Transparency, 0.4) and not trail.Enabled, "12. depois do golpe: volta ao repouso contido")
+	restoreStage("Wood")
+end
 
 -- 9/11. Spam de 30 s por barreira e Corte, efeitos ligados e reduzidos.
 local function count(className)

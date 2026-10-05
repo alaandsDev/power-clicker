@@ -43,7 +43,15 @@ local items: { Item } = {}
 local prices: { [string]: number } = {}
 local tabs: { [string]: { Button: TextButton, List: ScrollingFrame } } = {}
 local autoClickButton: TextButton
-local autoClickOn = true
+-- Estado real do Auto Clique, publicado pelo servidor (ClickService); o
+-- botão da Loja e o do lado do CLIQUE! (AutoClickController) leem o mesmo.
+local function autoClickOn(): boolean
+	local value = Players.LocalPlayer:GetAttribute("AutoClickOn")
+	if type(value) == "boolean" then
+		return value
+	end
+	return Players.LocalPlayer:GetAttribute("Pass_AutoClick") == true
+end
 local busy = false
 
 local function isOwned(item: Item): boolean
@@ -73,7 +81,7 @@ local function refreshItems()
 		end
 	end
 	autoClickButton.Visible = Players.LocalPlayer:GetAttribute("Pass_AutoClick") == true
-	autoClickButton.Text = Text.Get(if autoClickOn then "shop.autoClickOn" else "shop.autoClickOff")
+	autoClickButton.Text = Text.Get(if autoClickOn() then "shop.autoClickOn" else "shop.autoClickOff")
 end
 
 --[[
@@ -213,10 +221,9 @@ function ShopController.Init()
 			return
 		end
 		busy = true
-		local response = ClientNet.Invoke("SetAutoClick", not autoClickOn)
+		local response = ClientNet.Invoke("SetAutoClick", not autoClickOn())
 		busy = false
 		if response.Ok then
-			autoClickOn = not autoClickOn
 			refreshItems()
 		else
 			NotificationController.Show(Messages.ForCode(response.Code), "Bad")
@@ -239,7 +246,7 @@ function ShopController.Init()
 
 	local player = Players.LocalPlayer
 	player.AttributeChanged:Connect(function(name: string)
-		if string.sub(name, 1, 5) == "Pass_" or string.sub(name, 1, 6) == "Offer_" then
+		if string.sub(name, 1, 5) == "Pass_" or string.sub(name, 1, 6) == "Offer_" or name == "AutoClickOn" then
 			refreshItems()
 		end
 	end)

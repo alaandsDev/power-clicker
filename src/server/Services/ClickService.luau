@@ -143,6 +143,9 @@ end
 
 function ClickService.SetAutoClick(player: Player, enabled: boolean)
 	getState(player).AutoClick = enabled
+	-- Só para a HUD mostrar o estado real (botão AUTO e Loja); quem decide
+	-- continua sendo o servidor.
+	player:SetAttribute("AutoClickOn", enabled)
 end
 
 function ClickService.IsAutoClickEnabled(player: Player): boolean

@@ -314,7 +314,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 	-- Pior caso: tudo que pode aparecer, visível ao mesmo tempo.
 	-- Inclui tutorial e avisos: a versão anterior deixava os dois de fora e
 	-- declarou "OK" enquanto o tutorial cobria as moedas no Studio.
-	for _, n in { "TutorialBanner", "Toast1", "WallBanner", "ObjectiveChip", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "Combo", "QuestChip", "MenuSecondary" } do
+	for _, n in { "TutorialBanner", "Toast1", "WallBanner", "ObjectiveChip", "Buffs", "BuffBanner", "BuffDetail", "AutoClick", "BossBar", "TrainingChip", "CorridorHud", "Combo", "QuestChip", "MenuSecondary" } do
 		local g = find(n)
 		if g then
 			g.Visible = true
@@ -322,7 +322,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 			table.insert(problems, "elemento não encontrado: " .. n)
 		end
 	end
-	for _, n in { "Boosts", "HappyHour", "ObjectiveChip" } do -- AutomaticSize X: largura plausível
+	for _, n in { "ObjectiveChip" } do -- AutomaticSize X: largura plausível
 		local g = find(n)
 		if g then
 			g.Size = roblox.UDim2.fromOffset(260, g.Size.Y.Offset)
@@ -339,7 +339,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 	end
 
 	local items = {}
-	for _, n in { "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "WallBanner", "ObjectiveChip", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" } do
+	for _, n in { "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "WallBanner", "ObjectiveChip", "Buffs", "BuffBanner", "BuffDetail", "AutoClick", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" } do
 		local g = find(n)
 		if g then
 			local p, s = rectOf(g)
@@ -350,7 +350,7 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 		return a.x < b.x + b.w - 0.5 and b.x < a.x + a.w - 0.5 and a.y < b.y + b.h - 0.5 and b.y < a.y + a.h - 0.5
 	end
 	for _, group in {
-		{ "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "WallBanner", "ObjectiveChip", "Boosts", "HappyHour", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "ClickButton" },
+		{ "Power", "Gems", "Wins", "TutorialBanner", "Toasts", "WallBanner", "ObjectiveChip", "Buffs", "BuffBanner", "BuffDetail", "AutoClick", "BossBar", "TrainingChip", "CorridorHud", "QuestChip", "Menu", "MenuSecondary", "ClickStatus", "ClickButton" },
 		{ "Level", "ComboSlot", "Overdrive", "Fill", "ClickButton" },
 	} do
 		for i = 1, #group do
@@ -421,6 +421,62 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 			if lane.x < 0 or lane.x + lane.w > CW then
 				table.insert(problems, string.format("feedback (%s): sai da tela", label))
 			end
+		end
+	end
+	--[[
+		Buffs: chips compactos (ícone + multiplicador + tempo), fora da coluna
+		central (moedas → faixa da barreira), no máximo 3 + "+N", destaque só
+		quando um buff começa.
+	]]
+	local Buffs = loaded.BuffController
+	if Buffs then
+		local bar, banner = find("Buffs"), find("BuffBanner")
+		local corridor, coins = items.CorridorHud, items.Power
+		if bar and corridor and coins then
+			local p, s = rectOf(bar)
+			local barRect = { x = p.X, y = p.Y, w = s.X, h = s.Y }
+			if overlap(barRect, corridor) or barRect.x + barRect.w > coins.x + 1 then
+				table.insert(problems, "buffs: invadem a coluna central (moedas/faixa da barreira)")
+			end
+			if barRect.y > coins.y + coins.h then
+				table.insert(problems, "buffs: abaixo das moedas (empurrariam a faixa da barreira)")
+			end
+		end
+		banner.Visible = false
+		Buffs.Set("Boost:Power2x", "⚡", 2, 3548, "2x Poder")
+		local chip1 = find("Buff1")
+		if not (chip1 and chip1.Visible and string.match(chip1.Text, "^⚡ x2 ") and banner.Visible) then
+			table.insert(problems, "buffs: 1 buff não virou chip compacto \"⚡ x2 tempo\" com destaque de início")
+		end
+		banner.Visible = false
+		Buffs.Set("Boost:Power2x", "⚡", 2, 3500, "2x Poder")
+		if banner.Visible then
+			table.insert(problems, "buffs: o destaque repetiu num buff que já estava ativo")
+		end
+		Buffs.SetEvent("HappyHour", 2, 61)
+		Buffs.Set("Boost:Luck2x", "🍀", 2, 272, "2x Sorte")
+		Buffs.Set("Boost:Power5x", "⚡", 5, 600, "5x Poder")
+		Buffs.Set("Boost:Extra", "⚡", 3, 900, "Extra")
+		local visibleChips = 0
+		for index = 1, 3 do
+			local chip = find("Buff" .. index)
+			if chip and chip.Visible then
+				visibleChips += 1
+			end
+		end
+		local more = find("BuffMore")
+		if visibleChips ~= 3 or not more or not more.Visible or more.Text ~= "+2" then
+			table.insert(problems, string.format("buffs: 5 ativos deveriam ser 3 chips + \"+2\" (%d chips, %s)", visibleChips, more and more.Text or "sem +N"))
+		end
+		if not string.match(find("Buff1").Text, "^🔥 x2 ") then
+			table.insert(problems, "buffs: o evento (Hora Feliz) deveria vir primeiro")
+		end
+		Buffs.SetEvent(nil, 1, 0)
+		for _, key in { "Boost:Power2x", "Boost:Luck2x", "Boost:Power5x", "Boost:Extra" } do
+			Buffs.Set(key, "⚡", 2, 0, "")
+		end
+		if find("Buffs").Visible then
+			table.insert(problems, "buffs: sem buff ativo a barra deveria sumir")
 		end
 	end
 	return problems, initFailures

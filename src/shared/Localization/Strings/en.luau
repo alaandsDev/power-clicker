@@ -250,7 +250,13 @@ return {
 	["ranking.Power"] = "Total Power",
 	["ranking.local"] = "Local ranking (Studio): players in this server only.",
 	["ranking.empty"] = "Loading ranking...",
-	["hud.boost"] = "{name} {time}",
+	["autoClick.on"] = "AUTO\nON",
+	["autoClick.off"] = "AUTO\nOFF",
+	["autoClick.locked"] = "🔒 AUTO",
+	["autoClick.buy"] = "Buy",
+	["autoClick.close"] = "Close",
+	["buff.started"] = "{icon} {name}!\nPOWER x{mult} FOR {minutes} MIN",
+	["buff.happyHour"] = "Happy hour",
 	["code.NotYet"] = "Not yet! Come back later.",
 	["code.InvalidCode"] = "Invalid code.",
 	["code.CodeExpired"] = "That code has expired.",
@@ -361,7 +367,6 @@ return {
 	["cosmetic.status"] = "⭐ {rebirths} · {place}",
 	["cosmetic.plaza"] = "Plaza",
 	-- Happy hour and playtime chests
-	["event.chip"] = "⚡ HAPPY HOUR x{mult} · {time}",
 	["session.chest"] = "{minutes} min chest: +{amount} ⚡",
 	-- Season pass
 	["menu.season"] = "Pass",

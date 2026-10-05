@@ -38,6 +38,7 @@ local GameStateController = require(script.Parent.GameStateController)
 local SoundController = require(script.Parent.SoundController)
 local HudController = require(script.Parent.HudController)
 local SlashController = require(script.Parent.SlashController)
+local CorridorHudController = require(script.Parent.CorridorHudController)
 
 --[[
 	FAIXA DE FEEDBACK. Teste no Studio: os "+X (auto)" se acumulavam no meio
@@ -279,7 +280,26 @@ local function updateOverdriveVisuals(active: boolean)
 end
 
 -- Per-frame text updates (cheap: a few property writes).
+--[[
+	Hierarquia contextual: perto de uma barreira a prioridade da tela é a
+	barreira, o HP e o Corte — o CLIQUE! continua lá e funcionando, só mais
+	discreto (um pouco transparente). No lobby ele volta ao normal.
+]]
+local inCombat = false
+local function updateCombatEmphasis()
+	local combat = CorridorHudController.IsActive()
+	if combat == inCombat or not button then
+		return
+	end
+	inCombat = combat
+	TweenService:Create(button, TweenInfo.new(0.25), {
+		BackgroundTransparency = if combat then 0.35 else 0,
+		TextTransparency = if combat then 0.15 else 0,
+	}):Play()
+end
+
 local function onRenderStep()
+	updateCombatEmphasis()
 	if holding > 0 then
 		local now = os.clock()
 		if now >= nextHold then

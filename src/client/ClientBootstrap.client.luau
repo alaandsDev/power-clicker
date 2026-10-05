@@ -28,11 +28,13 @@ local CONTROLLER_ORDER = {
 	"GameStateController", -- power info, overdrive, combo mirror
 	"MenuController",
 	"HudController",
+	"BuffController", -- active buffs as compact chips beside the currencies
 	"SwordController", -- cosmetic blade skins
 	"SwordSwingController", -- the character swings the blade on every hit (procedural)
 	"SlashController", -- the cut arc in front of the character
 	"CutShowcaseController", -- cut pads: orb, live demo of the cut, per-player card
 	"ClickController",
+	"AutoClickController", -- AUTO on/off (or the pass offer) beside the CLICK button
 	"UpgradeController",
 	"RebirthController",
 	"PetController",

@@ -200,7 +200,7 @@ return {
 		PillarWidth = 22, -- pilar quadrado
 		PillarHeight = 52,
 		PlinthHeight = 6,
-		LintelHeight = 14, -- verga mais alta: a placa precisa ser lida da praça
+		LintelHeight = 18, -- verga mais alta: a placa precisa ser lida da praça (era 14; no jogo real a placa ficou pequena para o portão)
 		LintelDepth = 24,
 		SwordHeight = 40, -- da empunhadura à ponta, acima da verga
 		Energy = Color3.fromRGB(110, 210, 255), -- cor da identidade do Caminho

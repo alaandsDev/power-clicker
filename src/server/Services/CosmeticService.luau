@@ -81,6 +81,17 @@ local function clear(character: Model)
 	end
 end
 
+--[[
+	A aura de poder no personagem. ANTES: anel Neon nos pés + PointLight
+	(alcance 10–22) + contorno forte — no jogo real isso estourava o avatar
+	(roupa e silhueta sumiam num clarão branco/ciano). AGORA o poder é
+	PARTÍCULA, não holofote:
+	- pontinhos de energia subindo devagar em volta do corpo (na cor do tier);
+	- um anel FINO e quase transparente no chão (ForceField, sem brilho);
+	- nenhuma luz constante; contorno (tiers altos) bem suave.
+	Tiers maiores ganham partícula mais viva (mais pontos, faíscas), não mais
+	luz. Os valores do tier (RingSize etc.) continuam vindo do config.
+]]
 local function buildAura(character: Model, root: BasePart, tier: AuraTier)
 	if tier.RingSize <= 0 then
 		return
@@ -88,15 +99,16 @@ local function buildAura(character: Model, root: BasePart, tier: AuraTier)
 	local ring = Instance.new("Part")
 	ring.Name = AURA_NAME
 	ring.Shape = Enum.PartType.Cylinder
-	ring.Size = Vector3.new(RING_THICKNESS, tier.RingSize, tier.RingSize)
+	ring.Size = Vector3.new(0.1, tier.RingSize * 0.8, tier.RingSize * 0.8)
 	ring.Color = tier.Color
-	ring.Material = Enum.Material.Neon
-	ring.Transparency = 0.35
+	ring.Material = Enum.Material.ForceField
+	ring.Transparency = 0.55
 	ring.CanCollide = false
 	ring.CanQuery = false
 	ring.CanTouch = false
 	ring.Massless = true
-	ring.CFrame = root.CFrame * CFrame.new(0, -2.6, 0) * CFrame.Angles(0, 0, math.rad(90))
+	ring.CastShadow = false
+	ring.CFrame = root.CFrame * CFrame.new(0, -2.9, 0) * CFrame.Angles(0, 0, math.rad(90))
 	ring.Parent = character
 
 	local weld = Instance.new("WeldConstraint")
@@ -104,18 +116,50 @@ local function buildAura(character: Model, root: BasePart, tier: AuraTier)
 	weld.Part1 = root
 	weld.Parent = ring
 
-	local light = Instance.new("PointLight")
-	light.Color = tier.Color
-	light.Range = tier.LightRange
-	light.Brightness = 1.4
-	light.Shadows = false
-	light.Parent = ring
+	-- Energia: pontos pequenos subindo do chão em volta do corpo e sumindo.
+	local level = math.clamp((tier.RingSize - 5) / 5, 0, 1) -- 0 (primeiro tier) .. 1 (último)
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "PowerMotes"
+	motes.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	motes.Color = ColorSequence.new(tier.Color, Color3.new(1, 1, 1):Lerp(tier.Color, 0.6))
+	motes.Rate = 3 + math.floor(level * 5)
+	motes.Lifetime = NumberRange.new(0.9, 1.5)
+	motes.Speed = NumberRange.new(1.2, 2.4)
+	motes.SpreadAngle = Vector2.new(12, 12)
+	motes.EmissionDirection = Enum.NormalId.Right -- o eixo do anel aponta para cima
+	motes.Shape = Enum.ParticleEmitterShape.Disc
+	motes.ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface
+	motes.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.2, 0.18 + level * 0.08),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	motes.Transparency = NumberSequence.new(0.1, 1)
+	motes.LightEmission = 0.35
+	motes.LightInfluence = 0.4
+	motes.Parent = ring
+	if level >= 0.5 then
+		-- Tiers altos: algumas faíscas rápidas, não mais brilho.
+		local sparks = Instance.new("ParticleEmitter")
+		sparks.Name = "PowerSparks"
+		sparks.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		sparks.Color = ColorSequence.new(tier.Color)
+		sparks.Rate = 2 + math.floor(level * 2)
+		sparks.Lifetime = NumberRange.new(0.25, 0.45)
+		sparks.Speed = NumberRange.new(3, 6)
+		sparks.SpreadAngle = Vector2.new(40, 40)
+		sparks.EmissionDirection = Enum.NormalId.Right
+		sparks.Shape = Enum.ParticleEmitterShape.Disc
+		sparks.Size = NumberSequence.new(0.14, 0)
+		sparks.LightEmission = 0.6
+		sparks.Parent = ring
+	end
 
 	if tier.Outline then
 		local highlight = Instance.new("Highlight")
 		highlight.FillTransparency = 1
 		highlight.OutlineColor = tier.Color
-		highlight.OutlineTransparency = 0.15
+		highlight.OutlineTransparency = 0.6
 		highlight.Parent = character
 	end
 end

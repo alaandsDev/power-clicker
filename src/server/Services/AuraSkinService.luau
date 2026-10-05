@@ -1,8 +1,10 @@
 --!strict
 --[[
 	AuraSkinService
-	As auras cosméticas no personagem: partículas, anel e (nas duas raridades
-	mais altas) um brilho.
+	As auras cosméticas no personagem: partículas e anel fino. Raridade é
+	efeito mais INTERESSANTE (segunda camada de faíscas nas raras), não mais
+	luz: nenhuma PointLight constante (ela estourava o avatar no jogo real; o
+	LightRange do config fica sem uso de propósito).
 
 	Cosmético de verdade: este serviço não registra nenhum provedor no
 	PowerService, então é impossível uma aura daqui mexer na economia por
@@ -109,7 +111,8 @@ local function buildAura(player: Player, skin: AuraSkinConfig.AuraSkinData)
 			NumberSequenceKeypoint.new(0, 0.2),
 			NumberSequenceKeypoint.new(1, 1),
 		})
-		emitter.LightEmission = 0.5
+		emitter.LightEmission = 0.25
+		emitter.LightInfluence = 0.4
 		emitter.SpreadAngle = Vector2.new(35, 35)
 		emitter.Parent = holder
 	end
@@ -120,8 +123,8 @@ local function buildAura(player: Player, skin: AuraSkinConfig.AuraSkinData)
 		ring.Shape = Enum.PartType.Cylinder
 		ring.Size = Vector3.new(0.3, AuraSkinConfig.RingSize, AuraSkinConfig.RingSize)
 		ring.Color = skin.Color
-		ring.Material = Enum.Material.Neon
-		ring.Transparency = 0.45
+		ring.Material = Enum.Material.ForceField
+		ring.Transparency = 0.55
 		ring.CanCollide = false
 		ring.CanQuery = false
 		ring.CanTouch = false
@@ -135,13 +138,20 @@ local function buildAura(player: Player, skin: AuraSkinConfig.AuraSkinData)
 		ringWeld.Parent = ring
 	end
 
+	-- As auras que antes ganhavam luz (as mais raras) ganham uma segunda
+	-- camada: faíscas finas na cor secundária, subindo rápido.
 	if skin.LightRange > 0 then
-		local glow = Instance.new("PointLight")
-		glow.Color = skin.Color
-		glow.Range = skin.LightRange
-		glow.Brightness = 1.4
-		glow.Shadows = false
-		glow.Parent = holder
+		local twinkle = Instance.new("ParticleEmitter")
+		twinkle.Name = "AuraTwinkle"
+		twinkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		twinkle.Color = ColorSequence.new(skin.SecondaryColor, skin.Color)
+		twinkle.Rate = 4
+		twinkle.Lifetime = NumberRange.new(0.5, 0.9)
+		twinkle.Speed = NumberRange.new(2, 4)
+		twinkle.SpreadAngle = Vector2.new(25, 25)
+		twinkle.Size = NumberSequence.new(0.16, 0)
+		twinkle.LightEmission = 0.6
+		twinkle.Parent = holder
 	end
 end
 

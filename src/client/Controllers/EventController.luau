@@ -24,6 +24,7 @@ local DataController = require(script.Parent.DataController)
 local SoundController = require(script.Parent.SoundController)
 local NotificationController = require(script.Parent.NotificationController)
 local HudController = require(script.Parent.HudController)
+local BuffController = require(script.Parent.BuffController)
 
 -- Compacta: título + tempo numa linha e a barra embaixo. Mora na coluna
 -- central ABAIXO das moedas (HudController.GetTopStack) — antes ficava em
@@ -33,7 +34,6 @@ local BAR_SIZE = Vector2.new(396, 14) -- estreita: com tudo aberto, não encosta
 local EventController = {}
 
 local panel: Frame
-local eventChip: TextLabel
 local titleLabel: TextLabel
 local timerLabel: TextLabel
 local setBar: (number) -> ()
@@ -105,41 +105,15 @@ function EventController.Init()
 	Build.stroke(bar, 2)
 	setBar = set
 
-	eventChip = Build.label({
-		Name = "HappyHour",
-		Text = "",
-		Font = Theme.FontDisplay,
-		TextSize = 18,
-		TextColor3 = Theme.Colors.Power,
-		BackgroundColor3 = Theme.Hud.Surface,
-		BackgroundTransparency = 0.15,
-		Size = UDim2.fromOffset(0, 28),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Visible = false,
-		ZIndex = 17,
-		LayoutOrder = 2,
-		Parent = HudController.GetTopStack(),
-	})
-	Build.corner(eventChip, UDim.new(1, 0))
-	Build.new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), Parent = eventChip })
-
 	ClientNet.On("EventState", function(payload: any)
 		if type(payload) ~= "table" then
 			return
 		end
+		-- Hora Feliz: chip compacto na barra de buffs (BuffController), com um
+		-- destaque curto quando começa — não mais uma faixa no centro da tela.
 		local multiplier = tonumber(payload.Multiplier) or 1
-		if type(payload.EventId) ~= "string" or multiplier <= 1 then
-			eventChip.Visible = false
-			return
-		end
-		eventChip.Text = Text.Get("event.chip", {
-			mult = NumberFormat.Short(multiplier),
-			time = NumberFormat.Duration(tonumber(payload.SecondsLeft) or 0),
-		})
-		if not eventChip.Visible then
-			eventChip.Visible = true
-			Anim.PopIn(eventChip, 0.35)
-		end
+		local active = type(payload.EventId) == "string" and multiplier > 1
+		BuffController.SetEvent(if active then payload.EventId else nil, multiplier, tonumber(payload.SecondsLeft) or 0)
 	end)
 
 	ClientNet.On("BossState", function(payload: any)

@@ -215,12 +215,33 @@ function CombatFxController.Init()
 	WallController.RowRestored:Connect(onRestored)
 end
 
+--[[
+	"Efeitos reduzidos" também vale para as auras de TODOS os personagens:
+	as camadas secundárias (faíscas dos tiers altos e das auras raras) são
+	desligadas neste cliente; os pontinhos de energia básicos continuam (o
+	personagem segue legível e o poder continua visível).
+]]
+local SECONDARY_AURA = { PowerSparks = true, AuraTwinkle = true }
+function CombatFxController.ApplyAuraBudget(isReduced: boolean)
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character then
+			for _, item in character:GetDescendants() do
+				if item:IsA("ParticleEmitter") and SECONDARY_AURA[item.Name] and item.Enabled == isReduced then
+					item.Enabled = not isReduced
+				end
+			end
+		end
+	end
+end
+
 function CombatFxController.Start()
 	CameraFx.Start()
 	task.spawn(function()
 		while true do
 			task.wait(1)
 			CombatFxController.Prune(os.clock())
+			CombatFxController.ApplyAuraBudget(reduced())
 		end
 	end)
 end

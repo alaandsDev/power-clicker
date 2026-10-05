@@ -18,6 +18,13 @@
 
 	Orçamento de efeito por jogador: um rastro, uma luz. O arco do clique é
 	local (SlashController) e não custa rede.
+
+	ESPADA PARADA = energia contida; ESPADA ATACANDO = energia forte. No jogo
+	real a lâmina estourava (Neon inteira + luz de alcance 10–28 sempre acesa).
+	Agora, parada: lâmina sólida na cor da skin (as skins "neon" ganham só um
+	FIO de energia nas bordas), luz fraca e rastro desligado. Durante o golpe,
+	cada cliente acende fio, luz e rastro (SwordTrail, a partir dos atributos
+	IdleBrightness/SwingBrightness e IdleTransparency abaixo).
 ]]
 
 local Players = game:GetService("Players")
@@ -173,13 +180,29 @@ local function buildSword(player: Player, sword: Types.SwordData, token: number)
 	end
 
 	attach("Guard", grip.GuardSize, Vector3.new(0, grip.GripSize.Y / 2, 0), Color3.fromRGB(120, 110, 90), Enum.Material.Metal)
+	local bladeOffset = Vector3.new(0, grip.GripSize.Y / 2 + sword.BladeSize.Y / 2, 0)
 	local blade = attach(
 		"Blade",
 		sword.BladeSize,
-		Vector3.new(0, grip.GripSize.Y / 2 + sword.BladeSize.Y / 2, 0),
+		bladeOffset,
 		sword.Color,
-		if sword.Neon then Enum.Material.Neon else sword.Material
+		-- Material Neon na lâmina inteira estourava o formato: corpo sólido.
+		if sword.Material == Enum.Material.Neon then Enum.Material.SmoothPlastic else sword.Material
 	)
+	if sword.Neon then
+		-- O brilho das skins de energia mora num fio nas duas bordas.
+		for _, side in { -1, 1 } do
+			local edge = attach(
+				"BladeEdge",
+				Vector3.new(sword.BladeSize.X * 1.1, sword.BladeSize.Y * 0.94, 0.14),
+				bladeOffset + Vector3.new(0, 0, side * (sword.BladeSize.Z / 2 + 0.02)),
+				sword.ArcColor,
+				Enum.Material.Neon
+			)
+			edge.Transparency = 0.4
+			edge:SetAttribute("IdleTransparency", 0.4)
+		end
+	end
 
 	if sword.TrailSeconds > 0 then
 		local tip = Instance.new("Attachment")
@@ -201,14 +224,18 @@ local function buildSword(player: Player, sword: Types.SwordData, token: number)
 			NumberSequenceKeypoint.new(0, 0.1),
 			NumberSequenceKeypoint.new(1, 1),
 		})
+		-- Desligado parado; o cliente liga durante o golpe (SwordTrail).
+		trail.Enabled = false
 		trail.Parent = blade
 	end
 	if sword.LightRange > 0 then
 		local glow = Instance.new("PointLight")
 		glow.Color = sword.ArcColor
 		glow.Range = sword.LightRange
-		glow.Brightness = 1.6
+		glow.Brightness = 0.35
 		glow.Shadows = false
+		glow:SetAttribute("IdleBrightness", 0.35)
+		glow:SetAttribute("SwingBrightness", 1.6)
 		glow.Parent = blade
 	end
 

@@ -380,6 +380,36 @@ local function buildCliffs(model: Model, origin: Vector3, palette: Palette, rng:
 		if index % 2 == 0 then
 			block(model, back + Vector3.new(0, backHeight + 1, 0), Vector3.new(width * 1.05 + 1, 2, cliffs.BackDepth + 1), shade(palette.Ground, tint * 0.8), palette.GroundMaterial)
 		end
+
+		--[[
+			Passada leve de acabamento (sem voltar às centenas de blocos): a face
+			lisa de cada segmento ganha UMA faixa de estrato saliente e UM bloco
+			de rocha na base, e segmentos alternados um arbusto. Tudo sem
+			colisão — é só para a superfície não ler como "blockout".
+		]]
+		-- Gerador próprio: o acabamento não muda a sequência do mapa (árvores
+		-- e enfeites continuam onde estavam).
+		local detail = Random.new(9_001 + index * 7_919)
+		local face = facing - direction * (cliffs.Depth / 2 + 0.6)
+		local strataY = height * detail:NextNumber(0.35, 0.6)
+		local strata = block(model, face * CFrame.Angles(0, 0, detail:NextNumber(-0.04, 0.04)) + Vector3.new(0, strataY - GROUND_HEIGHT / 2, 0), Vector3.new(width * detail:NextNumber(0.6, 0.85), detail:NextNumber(1.6, 3), 2.4), shade(rock, tint * 0.78), Enum.Material.Slate, false)
+		strata.Name = "CliffStrata"
+		local outcropHeight = detail:NextNumber(9, 18)
+		local lateral = detail:NextNumber(-0.3, 0.3) * width
+		local outcrop = block(
+			model,
+			face * CFrame.new(lateral, outcropHeight / 2 - 2, -1.5) * CFrame.Angles(detail:NextNumber(-0.12, 0.05), detail:NextNumber(-0.5, 0.5), detail:NextNumber(-0.15, 0.15)),
+			Vector3.new(detail:NextNumber(8, 14), outcropHeight, detail:NextNumber(5, 8)),
+			shade(rock, tint * detail:NextNumber(0.9, 1.05)),
+			Enum.Material.Rock,
+			false
+		)
+		outcrop.Name = "CliffOutcrop"
+		if index % 2 == 1 then
+			local bushAt = (face * CFrame.new(lateral + detail:NextNumber(6, 10) * (if lateral > 0 then -1 else 1), 1.4, -4)).Position
+			ball(model, bushAt, detail:NextNumber(4, 6), shade(palette.Ground, detail:NextNumber(0.75, 0.9)), palette.GroundMaterial, false).Name = "CliffBush"
+			ball(model, bushAt + Vector3.new(detail:NextNumber(-2.5, 2.5), 0.6, detail:NextNumber(-1.5, 1.5)), detail:NextNumber(3, 4.5), shade(palette.Ground, detail:NextNumber(0.85, 1)), palette.GroundMaterial, false).Name = "CliffBush"
+		end
 	end
 end
 
@@ -1278,19 +1308,23 @@ local function buildPathGate(model: Model, origin: Vector3)
 	-- Placa presa na face da verga que olha para a praça: quase a verga
 	-- inteira, fundo escuro e letras douradas grossas, sem emoji (emoji num
 	-- TextScaled encolhe o texto todo).
-	local plateWidth = spanZ * 0.78
+	local plateWidth = spanZ * 0.82
 	local plateHeight = gate.LintelHeight - 2.4
 	local plate = block(
 		model,
 		CFrame.lookAt(origin + Vector3.new(x - gate.LintelDepth / 2 - 0.3, lintelY, 0), origin + Vector3.new(x - gate.LintelDepth, lintelY, 0)),
 		Vector3.new(plateWidth, plateHeight, 0.6),
-		Color3.fromRGB(26, 30, 48),
+		Color3.fromRGB(16, 18, 32),
 		Enum.Material.SmoothPlastic
 	)
 	plate.Name = "GateSign"
 	-- Moldura dourada fina em volta da placa.
 	for _, edge in { -1, 1 } do
 		block(model, CFrame.new(origin + Vector3.new(x - gate.LintelDepth / 2 - 0.35, lintelY + edge * (plateHeight / 2 + 0.4), 0)), Vector3.new(0.7, 0.8, plateWidth + 1.6), gate.Trim, Enum.Material.Metal, false)
+		-- Friso de energia fino por fora da moldura: dá presença à placa sem
+		-- acender a praça (é a cor de identidade do Caminho).
+		local strip = block(model, CFrame.new(origin + Vector3.new(x - gate.LintelDepth / 2 - 0.4, lintelY + edge * (plateHeight / 2 + 1.05), 0)), Vector3.new(0.5, 0.35, plateWidth * 0.9), gate.Energy, Enum.Material.Neon, false)
+		strip.Name = "GateSignGlow"
 	end
 	local surface = Instance.new("SurfaceGui")
 	surface.Face = Enum.NormalId.Front
@@ -1299,14 +1333,24 @@ local function buildPathGate(model: Model, origin: Vector3)
 	surface.LightInfluence = 0
 	surface.MaxDistance = 1000
 	local signLabel = Instance.new("TextLabel")
-	signLabel.Size = UDim2.fromScale(0.96, 0.86)
-	signLabel.Position = UDim2.fromScale(0.02, 0.07)
+	signLabel.Size = UDim2.fromScale(0.97, 0.9)
+	signLabel.Position = UDim2.fromScale(0.015, 0.05)
 	signLabel.BackgroundTransparency = 1
 	signLabel.Font = Enum.Font.GothamBlack
 	signLabel.TextScaled = true
 	signLabel.TextColor3 = Color3.fromRGB(255, 214, 110)
-	signLabel.TextStrokeColor3 = Color3.fromRGB(60, 34, 0)
-	signLabel.TextStrokeTransparency = 0.2
+	signLabel.TextStrokeTransparency = 1
+	-- Contorno grosso (legível de longe e sobre o céu claro) e dourado em
+	-- degradê, em vez do contorno fino de antes.
+	local signStroke = Instance.new("UIStroke")
+	signStroke.Thickness = 4
+	signStroke.Color = Color3.fromRGB(46, 24, 0)
+	signStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	signStroke.Parent = signLabel
+	local signGradient = Instance.new("UIGradient")
+	signGradient.Rotation = 90
+	signGradient.Color = ColorSequence.new(Color3.fromRGB(255, 236, 160), Color3.fromRGB(255, 186, 60))
+	signGradient.Parent = signLabel
 	signLabel.Text = string.upper(Text.GetFor(nil, "area.tower"))
 	signLabel.Parent = surface
 	surface.Parent = plate

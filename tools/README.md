@@ -40,6 +40,7 @@ lune run tools/lune/check_corridor.luau # loop do Caminho do Poder (WallService 
 lune run tools/lune/check_cuts.luau     # vitrine dos Cortes + camada de corte do golpe (mesma config)
 lune run tools/lune/check_swing.luau    # golpe da espada a cada hit, sincronizado com o corte
 lune run tools/lune/check_fx.luau       # efeitos de combate: impacto, rachaduras, quebra, câmera, números
+lune run tools/lune/check_polish.luau   # sem luz constante no personagem; pets menores em formação atrás
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
@@ -93,6 +94,13 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   "Efeitos reduzidos"; golpe de outro jogador sem impacto na minha barreira;
   spam 9 hits/s (30 s + 6 barreiras x Cortes 1/2/4/8, ligado e reduzido) sem
   acumular instâncias, emissores ou luzes; respawn e troca de espada.
+- **check_polish** — nenhuma luz constante presa ao personagem (auras de
+  poder e cosméticas, pets); espada parada contida (luz baixa, rastro
+  desligado, skins neon com fio de energia); pets ~25% menores e em formação
+  atrás do jogador (1–8 pets, simétrica, sem sobreposição), seguindo com
+  suavização, contornando o personagem numa virada de 180° e reaparecendo
+  na vaga depois de um teleporte. (Os chips de buff e o botão AUTO são
+  medidos no `check_hud`; o brilho da espada no golpe no `check_fx`.)
 - **check_cuts** — a vitrine dos pads de Corte (`CutShowcaseController`) e a
   camada de corte do golpe (`SlashController`) de verdade sobre o mapa: cada
   corte tem pad, pedestal, orbe e placa sem colisão e o prompt de compra

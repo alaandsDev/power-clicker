@@ -139,6 +139,11 @@ local function refresh()
 	})
 end
 
+-- A faixa da barreira está na tela? (o jogador está em combate no Caminho)
+function CorridorHudController.IsActive(): boolean
+	return panel ~= nil and panel.Visible
+end
+
 function CorridorHudController.Init()
 	local hud = Theme.Hud
 	panel = Build.button({

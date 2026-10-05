@@ -1,8 +1,10 @@
 --!strict
 --[[
 	SwordTrail
-	Rastro curto seguindo a lâmina DURANTE o golpe, na cor da skin equipada
-	(cosmético, SwordConfig.ArcColor). A energia do ataque continua sendo do
+	A espada ATACANDO: durante o golpe acende o rastro da lâmina (na cor da
+	skin, cosmético), o fio de energia das skins neon e a luz da lâmina; ao
+	parar, tudo volta ao estado contido que o SwordService montou
+	(IdleBrightness / IdleTransparency). A energia do ataque continua sendo do
 	Corte (CutFx); isto é só a arma riscando o ar.
 
 	Local: as duas Attachments e o Trail são criados neste cliente na lâmina
@@ -70,14 +72,33 @@ function SwordTrail.Set(character: Model?, swordId: any, enabled: boolean)
 	if not character then
 		return
 	end
-	local trail = if enabled then SwordTrail.Ensure(character, swordId) else nil
-	if not enabled then
-		local blade = bladeOf(character)
-		local own = if blade then blade:FindFirstChild(NAME) else nil
-		trail = if own and own:IsA("Trail") then own else nil
+	local blade = bladeOf(character)
+	if not blade then
+		return
 	end
-	if trail then
-		trail.Enabled = enabled
+	if enabled then
+		SwordTrail.Ensure(character, swordId)
+	end
+	-- Rastro (o da skin ou o local), luz e fio de energia.
+	for _, child in blade:GetChildren() do
+		if child:IsA("Trail") then
+			child.Enabled = enabled
+		elseif child:IsA("PointLight") then
+			local idle = child:GetAttribute("IdleBrightness")
+			local swing = child:GetAttribute("SwingBrightness")
+			if type(idle) == "number" and type(swing) == "number" then
+				child.Brightness = if enabled then swing else idle
+			end
+		end
+	end
+	local tool = blade.Parent
+	if tool then
+		for _, part in tool:GetChildren() do
+			local idle = part:GetAttribute("IdleTransparency")
+			if part:IsA("BasePart") and type(idle) == "number" then
+				part.Transparency = if enabled then 0 else idle
+			end
+		end
 	end
 end
 
