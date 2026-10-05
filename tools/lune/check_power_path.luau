@@ -1,5 +1,5 @@
 --[[
-	check_power_path.luau — FUNDAÇÃO do Caminho do Poder (Fase A).
+	check_power_path.luau — Caminho do Poder: fundação (Fase A) e temas 1–3 (Fase B).
 
 		lune run tools/lune/check_power_path.luau [raiz]
 
@@ -19,7 +19,10 @@
 	     (largura 1,6x, slots de landmark);
 	  8. nenhuma decoração global (ilhas do céu, árvores, pedras) dentro do
 	     corredor;
-	  9. orçamento: peças, PointLights e emissores do corredor.
+	  9. orçamento: peças, PointLights e emissores do corredor;
+	 10. Fase B (estágios 1–3): landmark, molduras das barreiras, transições
+	     físicas, cenário fora da safe lane / da frente da barreira / das
+	     fileiras / dos pads, orçamento por estágio, emissores locais.
 
 	REQUER VALIDAÇÃO NO ROBLOX STUDIO: escala, materiais, luz e leitura em
 	3ª pessoa; pets de verdade seguindo o jogador.
@@ -161,12 +164,13 @@ check(#laneProblems == 0, "3. SAFE PLAY LANE (±" .. rules.SafeLaneHalf .. " stu
 -- abertas (o jogador as quebrou). Pets (PetFollowController): 1, 3 ou até
 -- 12 equipados, em 2 colunas a ±2,6 studs do rastro (+1,4 da arte) e até
 -- ~19 studs atrás — ocupam ±4 em volta da linha do jogador. Linhas testadas:
--- centro, ±4, ±12, ±30 e ±34 (jogador colado na parede com pets ao lado).
+-- centro, ±4, ±8, ±12 e ±16: a SAFE LANE inteira (Fase B: o cenário mora
+-- fora dela, nas laterais, e as laterais deixam de ser rota garantida).
 local function blockedAt(p)
 	return solidAt(p, true)
 end
 local routeHits = {}
-for _, z in { 0, -4, 4, -12, 12, -30, 30, -34, 34 } do
+for _, z in { 0, -4, 4, -8, 8, -12, 12, -16, 16 } do
 	for x = layout.StartX + 2, finalEnd - 30, 1 do
 		for _, y in { 1, 3, 5 } do
 			local hit = blockedAt(V3.new(x, y, z))
@@ -180,7 +184,7 @@ for _, z in { 0, -4, 4, -12, 12, -30, 30, -34, 34 } do
 		end
 	end
 end
-check(#routeHits == 0, "3. avatar + 1/3/12 pets (linhas a 0, ±4, ±12, ±30 e ±34 studs do centro) atravessam do portão ao portal sem bater em nada além das fileiras " .. table.concat(routeHits, "; "))
+check(#routeHits == 0, "3. avatar + 1/3/12 pets (linhas a 0, ±4, ±8, ±12 e ±16 studs do centro) atravessam do portão ao portal sem bater em nada além das fileiras " .. table.concat(routeHits, "; "))
 local pillarGap = math.huge
 for _, d in path:GetDescendants() do
 	if d:IsA("BasePart") and d.Name == "PathPillar" then
@@ -427,10 +431,15 @@ check(#intruders == 0, "8. nenhuma decoração global (ilha do céu, árvore, pe
 
 -- ── 9. Orçamento ────────────────────────────────────────────────────────────
 local parts, instances, lights, emitters = 0, #path:GetDescendants(), 0, 0
+local decorParts = 0
 local lightKinds = {}
+local emitterList = {}
 for _, d in path:GetDescendants() do
 	if d:IsA("BasePart") then
 		parts += 1
+		if d:GetAttribute("Decor") ~= nil then
+			decorParts += 1
+		end
 	elseif d:IsA("Light") then
 		lights += 1
 		local owner = d.Parent and d.Parent.Name or "?"
@@ -438,15 +447,197 @@ for _, d in path:GetDescendants() do
 		lightKinds[owner] = (lightKinds[owner] or 0) + 1
 	elseif d:IsA("ParticleEmitter") then
 		emitters += 1
+		table.insert(emitterList, d)
 	end
 end
 local kinds = {}
 for name, n in lightKinds do
 	table.insert(kinds, name .. " " .. n)
 end
-check(parts <= 1250, string.format("9. orçamento da fundação: %d peças (%d instâncias) — meta da Fase A 1.100–1.250, final ≤ 1.600", parts, instances))
-check(lights <= 20, string.format("9. PointLights no corredor: %d (eram 103; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
-check(emitters == 0, "9. nenhum ParticleEmitter fixo (VFX ambiental fica para os temas, com LOD)")
+check(parts - decorParts <= 1250, string.format("9. orçamento da fundação (Fase A): %d peças fora do cenário — meta 1.100–1.250", parts - decorParts))
+check(decorParts >= 80 and decorParts <= 130 and parts <= 1400, string.format("9. orçamento da Fase B: +%d peças de cenário (meta 80–110, teto 130); corredor com %d peças (%d instâncias), final ≤ 1.600", decorParts, parts, instances))
+check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; Fase B não adiciona; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
+local emittersOk = emitters <= 2
+for _, emitter in emitterList do
+	local owner = emitter.Parent
+	local stage = owner and owner:FindFirstAncestorWhichIsA("Model")
+	stage = stage and stage.Parent
+	if emitter.Enabled or not emitter:HasTag("PowerPathAmbient") or not owner or owner:GetAttribute("Landmark") ~= true or not stage or stage.Name ~= "PowerPath_Ice" or emitter.Rate > 10 then
+		emittersOk = false
+		print("      emissor fora da regra: " .. emitter:GetFullName())
+	end
+end
+check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 2, só no landmark do Gelo, desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
+
+-- ── 10. Fase B: cenário dos estágios 1–3 ────────────────────────────────────
+local themed = { Wood = true, Ruins = true, Ice = true }
+local decorBy = {}
+for _, segment in segments do
+	local decor = stageModels[segment.Id]:FindFirstChild("Decor")
+	local list = {}
+	if decor then
+		for _, d in decor:GetDescendants() do
+			if d:IsA("BasePart") then
+				table.insert(list, d)
+			end
+		end
+	end
+	decorBy[segment.Id] = list
+end
+local function overlaps(minP, maxP, lo, hi)
+	return maxP.X > lo.X and minP.X < hi.X and maxP.Y > lo.Y and minP.Y < hi.Y and maxP.Z > lo.Z and minP.Z < hi.Z
+end
+local function kindsIn(list, fromX, toX)
+	local found = {}
+	for _, d in list do
+		local x = d.CFrame.Position.X
+		if x >= fromX and x <= toX then
+			found[d:GetAttribute("Decor")] = true
+		end
+	end
+	return found
+end
+local landmarkOk, onlyThemed = true, true
+local counts = {}
+for _, segment in segments do
+	local list = decorBy[segment.Id]
+	counts[segment.Id] = #list
+	if themed[segment.Id] then
+		local landmarks, tall = 0, 0
+		for _, d in list do
+			if d:GetAttribute("Landmark") == true then
+				landmarks += 1
+				local _, maxP = box(d)
+				tall = math.max(tall, maxP.Y)
+			end
+			if not d.Name:find("^PathDecor_") or type(d:GetAttribute("Decor")) ~= "string" then
+				landmarkOk = false
+			end
+		end
+		if landmarks < 3 or tall < 24 then
+			landmarkOk = false
+			print(string.format("      %s: %d peças de landmark, a mais alta até y %.0f", segment.Id, landmarks, tall))
+		end
+	elseif #list > 0 or stageModels[segment.Id]:FindFirstChild("Decor") then
+		onlyThemed = false
+	end
+end
+check(landmarkOk, string.format("10. landmark nos estágios 1–3 (peças marcadas Landmark, acima de y 24): floresta %d, ruínas %d, gelo %d peças de cenário", counts.Wood, counts.Ruins, counts.Ice))
+check(onlyThemed, "10. estágios 4–10 sem cenário (Fases C–E); o estágio 4 só tem o indício no fim do 3")
+check(counts.Wood >= 20 and counts.Wood <= 40 and counts.Ruins >= 25 and counts.Ruins <= 45 and counts.Ice >= 30 and counts.Ice <= 50 and counts.Wood < counts.Ice and counts.Ruins <= counts.Ice, string.format("10. orçamento por estágio (guia 25–35 / 30–40 / 35–45) e intensidade subindo até o gelo: %d / %d / %d", counts.Wood, counts.Ruins, counts.Ice))
+
+-- Regras de posição do cenário.
+local laneHits, frontHits, rowHits, padHits, cameraHits = {}, {}, {}, {}, {}
+for _, segment in segments do
+	local half = segment.Width / 2
+	local stage = WallConfig.Stages[segment.Index]
+	for _, d in decorBy[segment.Id] do
+		local minP, maxP = box(d)
+		local label = string.format("%s (%.0f, %.0f, %.0f)", d.Name, d.CFrame.Position.X, d.CFrame.Position.Y, d.CFrame.Position.Z)
+		-- Safe lane (só peças rentes ao chão, topo < 0,3).
+		if overlaps(minP, maxP, V3.new(-math.huge, 0.3, -rules.SafeLaneHalf), V3.new(math.huge, 14, rules.SafeLaneHalf)) then
+			table.insert(laneHits, label)
+		end
+		-- Frente da barreira: placa de HP (x = face - 1,5; |z| ≤ 33 + 5) e o golpe.
+		if overlaps(minP, maxP, V3.new(segment.Barrier - 12, 0.3, -38), V3.new(segment.Barrier, 14, 38)) then
+			table.insert(frontHits, label)
+		end
+		-- Dentro das fileiras (a moldura fica nas bordas ou acima de y 30,5).
+		if overlaps(minP, maxP, V3.new(segment.Barrier, -0.5, -half), V3.new(segment.Barrier + segment.Depth, segment.Height + 0.5, half)) then
+			table.insert(rowHits, label)
+		end
+		-- Pads (pegada + 1 stud, até 10 de altura).
+		local pads = {}
+		for padIndex in stage.Pads do
+			table.insert(pads, V3.new(segment.PadsX, 0, (padIndex - (#stage.Pads + 1) / 2) * layout.PadSpacing))
+		end
+		table.insert(pads, V3.new(segment.ReturnX, 0, half - layout.PadSize))
+		for _, c in pads do
+			local r = layout.PadSize / 2 + 1
+			if overlaps(minP, maxP, c + V3.new(-r, 0.3, -r), c + V3.new(r, 10, r)) then
+				table.insert(padHits, label)
+			end
+		end
+		-- Câmera de 3ª pessoa chegando na barreira: nada sobre a faixa entre
+		-- y 14 e 24 nos 40 studs antes dela (placa de HP, espada e Corte à vista).
+		if overlaps(minP, maxP, V3.new(segment.Barrier - 40, 14, -rules.SafeLaneHalf), V3.new(segment.Barrier, 24, rules.SafeLaneHalf)) then
+			table.insert(cameraHits, label)
+		end
+	end
+end
+check(#laneHits == 0, "10. cenário fora da safe lane (±18 até y 14) " .. table.concat(laneHits, ", "))
+check(#frontHits == 0, "10. frente da barreira livre (placa de HP, espada, CutFx: x ∈ [B-12, B], |z| < 38) " .. table.concat(frontHits, ", "))
+check(#rowHits == 0, "10. nada do cenário dentro das fileiras (molduras nas bordas ou acima da barreira) " .. table.concat(rowHits, ", "))
+check(#padHits == 0, "10. nada do cenário sobre os pads de vitória / Voltar " .. table.concat(padHits, ", "))
+check(#cameraHits == 0, "10. câmera chegando na barreira sem nada sobre a faixa (y 14–24, 40 studs antes) " .. table.concat(cameraHits, ", "))
+
+-- Molduras das barreiras e transições físicas.
+local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal" }
+local framesOk = true
+for id, kind in frames do
+	local segment = segments[id == "Wood" and 1 or id == "Ruins" and 2 or 3]
+	if not kindsIn(decorBy[id], segment.Barrier - 6, segment.Barrier + segment.Depth)[kind] then
+		framesOk = false
+	end
+end
+check(framesOk, "10. barreiras 1–3 emolduradas pelo tema (raízes/troncos, umbral de ruína, selo de gelo)")
+local w, r, i = segments[1], segments[2], segments[3]
+local thirdW, thirdR = (w.Barrier - w.AreaStart) / 3, (r.Barrier - r.AreaStart) / 3
+local t12 = kindsIn(decorBy.Wood, w.AreaStart + 2 * thirdW, w.End)
+local t12a = kindsIn(decorBy.Wood, w.AreaStart, w.AreaStart + 2 * thirdW)
+local t23 = kindsIn(decorBy.Ruins, r.AreaStart + 2 * thirdR, r.Barrier)
+local t23b = kindsIn(decorBy.Ruins, r.Barrier, r.End)
+local t23a = kindsIn(decorBy.Ruins, r.AreaStart, r.AreaStart + 2 * thirdR)
+local t34 = kindsIn(decorBy.Ice, i.Barrier, i.End)
+check((t12.WorkedStone or t12.ColumnDrum) and not t12a.WorkedStone and not t12a.ColumnDrum, "10. transição 1→2 física: pedra trabalhada e tambor de coluna só no fim da floresta")
+check(t23.RuinColumn and (t23.FrostPatch or t23.FrostCap) and (t23b.IceCrust or t23b.IceShard) and not t23a.FrostPatch and not t23a.IceCrust, "10. transição 2→3 física: pedra → frost (terço 3) → gelo (depois da barreira 2)")
+check(t34.CrystalHint and not kindsIn(decorBy.Ice, i.AreaStart, i.Barrier).CrystalHint, "10. indício do estágio 4 só depois da barreira 3 (discreto)")
+
+-- Cenário estático: sem script, sem prompt, sem luz.
+local staticOk = true
+for _, list in decorBy do
+	for _, d in list do
+		if not d.Anchored or d.CanTouch or d:FindFirstChildWhichIsA("Light") or d:FindFirstChildWhichIsA("BaseScript") or d:FindFirstChildWhichIsA("ProximityPrompt") then
+			staticOk = false
+		end
+	end
+end
+check(staticOk, "10. cenário estático: ancorado, sem toque, sem luz, sem script (nenhum loop novo)")
+
+-- O controlador dos emissores: liga só perto da câmera e sem "Efeitos reduzidos".
+do
+	local Sig = { Connect = function()
+		return { Disconnect = function() end }
+	end }
+	E.stubs.CollectionService = {
+		GetTagged = function(_, tag)
+			return if tag == "PowerPathAmbient" then emitterList else {}
+		end,
+		GetInstanceAddedSignal = function()
+			return Sig
+		end,
+		GetInstanceRemovedSignal = function()
+			return Sig
+		end,
+	}
+	local settings = { ReducedEffects = false }
+	E.stubModules["StarterPlayer.Client.Controllers.DataController"] = { Get = function(k)
+		return if k == "Settings" then settings else nil
+	end, Changed = Sig }
+	local camera = { CFrame = CF.new(i.AreaStart + 40, 8, 0) }
+	E.stubs.Workspace = setmetatable({ CurrentCamera = camera }, { __index = E.Workspace })
+	local Ambient = E.require(E.Client.Controllers.PowerPathAmbientController)
+	Ambient.Init()
+	local near = Ambient.Step()
+	settings.ReducedEffects = true
+	local reducedOn = Ambient.Step()
+	settings.ReducedEffects = false
+	camera.CFrame = CF.new(w.AreaStart, 8, 0)
+	local far = Ambient.Step()
+	local source = require("@lune/fs").readFile(E.Root .. "/src/client/Controllers/PowerPathAmbientController.luau")
+	check(Ambient.Count() == emitters and emitters > 0 and near == emitters and reducedOn == 0 and far == 0 and not string.find(source, "RenderStepped", 1, true) and not string.find(source, "Heartbeat", 1, true) and not string.find(source, "Lighting", 1, true),
+		string.format("10. cintilação do gelo LOCAL: liga perto (%d), apaga com Efeitos reduzidos (%d) e longe (%d); sem loop por quadro, sem mexer na Lighting", near, reducedOn, far))
+end
 
 if #problems > 0 then
 	print(#problems .. " problema(s).")

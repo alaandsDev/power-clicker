@@ -361,3 +361,22 @@ PA.10. Desempenho no celular: andar do portão ao portal sem queda perceptível 
 
 Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` (10 trechos, piso plano e sem furo, safe lane, rota de avatar + pets, limites, transições, silhueta, barreiras/pads/portal intocados, decoração global fora, orçamento) e `python tools/render_power_path.py` (renders nas mesmas câmeras).
 
+
+### Caminho do Poder — Fase B: temas 1–3 (PB) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+PB.1. Entrada da floresta: do portão, terra nas laterais, trilha de pedra no meio, paredes de rocha com borda de grama; as duas árvores antigas (no meio da área) formam a entrada natural e a copa fica ACIMA da cabeça — andar por baixo sem a câmera bater nela.
+PB.2. Barreira 1: troncos nas bordas e o galho grosso por cima das fileiras emolduram a barreira; a placa de HP, a espada e o Corte ficam livres nas câmeras próxima e distante (nada entre o jogador e a face).
+PB.3. Transição 1→2: no fim da floresta aparecem pedra talhada e tambores de coluna; depois da Barreira 1 o piso já é de pedra — a natureza recua, não há corte seco.
+PB.4. Ruínas: colunas (algumas quebradas), blocos caídos, lajes partidas; o ARCO quebrado é assimétrico (um lado inteiro com a verga, o outro partido com o pedaço no chão) e a verga passa bem acima da cabeça.
+PB.5. Barreira 2: umbrais de pedra nas bordas e a verga partida em cima — "entrada bloqueada de uma construção antiga"; placa de HP e Corte livres.
+PB.6. Pedra → frost → gelo: no último terço das ruínas, frost no chão junto das paredes e no topo de um bloco; depois da Barreira 2, crosta de gelo na base das paredes e lascas de gelo antes da área 3.
+PB.7. Gelo: portal de gelo na entrada (presas inclinadas + verga alta com pingentes), formações de gelo grandes nas laterais, pingentes no topo das paredes, poças congeladas; a Lighting do mundo NÃO muda.
+PB.8. Barreira 3: blocos e placas de gelo nas bordas e a crosta por cima das fileiras — "selada pelo gelo"; placa de HP, espada e Corte legíveis contra o gelo (contraste da placa).
+PB.9. Placa de HP nas barreiras 1–3: aparece inteira em todas as posições laterais (andar de um lado ao outro); nenhuma peça do cenário na frente dela.
+PB.10. Pets: correr do portão até depois da Barreira 3 com 1, 3 e o máximo de pets — no meio e nas bordas da faixa (±16) ninguém prende; colado na parede há cenário (esperado, é fora da safe lane), mas os pets não ficam presos ao voltar para a faixa.
+PB.11. CutFx: quebrar uma fileira em cada barreira 1–3 — o Corte e os pedaços não somem atrás de tronco, umbral ou gelo.
+PB.12. Dois jogadores (Test > 2): os dois veem o mesmo cenário; a cintilação do gelo é local de cada um (liga só para quem está perto).
+PB.13. Efeitos reduzidos: com a opção ligada, nenhuma cintilação nas formações de gelo; desligada, poucas partículas perto delas (até 180 studs) e nenhuma longe.
+PB.14. Celular: andar do portão até a Barreira 3 e voltar — leitura das 3 regiões sem texto (silhueta, material, landmark), sem cenário cobrindo os botões de CLIQUE/Auto.
+PB.15. FPS: comparar com a Fase A no mesmo aparelho no meio de cada área 1–3 (+109 peças, 0 luzes novas, 2 emissores com LOD); sem queda perceptível.
+
+Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 10 (landmarks 1–3, molduras das barreiras, transições físicas, cenário fora da safe lane / da frente da barreira / das fileiras / dos pads / da câmera, estágios 4–10 sem cenário, orçamento por estágio, emissores ≤ 2 locais e desligados, controlador com LOD e Efeitos reduzidos) e `python tools/render_power_path.py <json> <saida> <tag> B` (câmeras da Fase B).

@@ -17,6 +17,7 @@
 	  │ terço 1 │ terço 2 │ terço 3 (anúncio) │ barreira + zona de decisão │
 	   blend 0    blend 0    blend 0,35          blend 0,7 (revelação)
 
+	  cenário: Model "Decor" (Fase B em diante, PowerPathDecor);
 	  piso: faixa central de placas (o "Caminho") + laterais; bordas da faixa;
 	  paredes: altura por terço (CorridorThemes Profile) com capitel e um
 	           pilar por terço de cada lado — a silhueta sobe e desce;
@@ -35,6 +36,7 @@ local Shared = game:GetService("ReplicatedStorage").Shared
 local WallConfig = require(Shared.Config.WallConfig)
 local CorridorThemes = require(Shared.Config.CorridorThemes)
 local CorridorLayout = require(Shared.Formulas.CorridorLayout)
+local PowerPathDecor = require(script.Parent.PowerPathDecor)
 
 local PowerPath = {}
 
@@ -114,7 +116,7 @@ local function buildSection(model: Model, origin: Vector3, half: number, section
 		for k = 1, count do
 			local useNext = plateIsNext(k, count, blend)
 			local surface = if useNext then toTheme.Lane else fromTheme.Lane
-			local color = shade(surface.Color :: Color3, if k % 2 == 0 then 0.93 else 1)
+			local color = shade(surface.Color :: Color3, if k % 2 == 0 then (if useNext then toTheme else fromTheme).PlateShade else 1)
 			local x = section.From + (k - 0.5) * plate
 			local slab = part(model, "PathLane", Vector3.new(plate + 0.1, thickness, laneHalf * 2), CFrame.new(origin + Vector3.new(x, -thickness / 2, 0)), color, surface.Material, true)
 			slab:SetAttribute("NextTheme", useNext)
@@ -195,6 +197,10 @@ function PowerPath.BuildStage(parent: Instance, origin: Vector3, segment: Corrid
 		part(model, "PathDecisionFrame", Vector3.new(x1 - x0, 0.12, 0.8), CFrame.new(origin + Vector3.new((x0 + x1) / 2, 0.08, s * z1)), frameColor, frameMaterial, false)
 		part(model, "PathDecisionFrame", Vector3.new(0.8, 0.12, z1 * 2), CFrame.new(origin + Vector3.new(if s < 0 then x0 else x1, 0.08, 0)), frameColor, frameMaterial, false)
 	end
+
+	-- Cenário do tema (Fase B em diante): landmark, peças, molduras das
+	-- barreiras e transição — Model "Decor" (PowerPathDecor + CorridorThemes).
+	PowerPathDecor.Build(model, origin, segment)
 
 	model:SetAttribute("StageId", segment.Id)
 	model:SetAttribute("Order", segment.Order)

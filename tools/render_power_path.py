@@ -12,6 +12,11 @@ Câmeras (todas derivadas do CorridorLayout, a mesma conta do WorldBuilder):
   08 portal                         09 aérea completa (planta, 3 faixas)
   10 lateral completa (4 trechos)   11 fundo olhando o lobby
   12 visão geral lobby + Caminho    13-15 transições 1→2, 3→4, 8→9
+
+  Com o 4º argumento "B": o conjunto da Fase B (estágios 1–3) — portão,
+  floresta, transição 1→2, ruínas, transição 2→3 (3 posições), gelo, folha
+  comparativa 1/2/3 SEM TEXTO na mesma câmera relativa e o gelo olhando
+  para trás.
 """
 import os
 import sys
@@ -36,6 +41,58 @@ for i, (sid, rows) in enumerate(STAGES):
 PORTAL_X = cursor + 120 - 4
 
 
+def phase_b(parts, out, tag):
+    """Câmeras da Fase B (estágios 1–3), relativas ao CorridorLayout."""
+    A = [SEG[i]["start"] for i in range(3)]
+    B = [SEG[i]["wall"] for i in range(3)]
+    END = [SEG[i]["end"] for i in range(3)]
+
+    def shot(name, eye, target, title, fov=70, text=True):
+        R.render(parts, R.Cam(eye, target, fov=fov), f"{out}/{name}.png", f"{tag} - {title}", show_text=text)
+
+    def aerial(name, index, title):
+        cx = (A[index] + END[index]) / 2
+        span = END[index] - A[index] + 20
+        R.render(parts, None, f"{out}/{name}.png", f"{tag} - {title}", show_text=False, ortho=(cx, 0, W / span))
+
+    shot("b00_portao_do_lobby", [60, 12, 10], [260, 14, 0], "olhando do lobby pelo portao")
+    # Estágio 1 — floresta.
+    shot("b10_floresta_entrada_portao", [118, 9, -8], [260, 11, 0], "1 floresta: entrada pelo portao")
+    shot("b11_floresta_jogador_entrando", [A[0] + 6, 8, 4], [A[0] + 80, 9, -2], "1 floresta: jogador entrando")
+    shot("b12_floresta_aproximando_b1", [B[0] - 34, 8, -6], [B[0], 12, 2], "1 floresta: aproximando da Barreira 1")
+    aerial("b13_floresta_aerea", 0, "1 floresta: aerea")
+    # Transição 1 → 2.
+    shot("b20_trans12_inicio", [A[0] + 70, 9, 12], [B[0] + 10, 9, -10], "transicao 1-2: inicio (fim da floresta)")
+    shot("b21_trans12_meio", [B[0] + SEG[0]["depth"] + 4, 12, -24], [A[1] + 40, 8, 6], "transicao 1-2: meio (depois da Barreira 1)")
+    shot("b22_trans12_entrada_ruinas", [A[1] + 4, 8, 6], [A[1] + 90, 10, -4], "transicao 1-2: entrando nas ruinas")
+    # Estágio 2 — ruínas.
+    shot("b30_ruinas_entrada", [A[1] + 6, 9, -4], [B[1], 12, 4], "2 ruinas: entrada")
+    shot("b31_ruinas_landmark", [A[1] + 36, 9, 14], [A[1] + 58, 18, -30], "2 ruinas: landmark (arco quebrado)")
+    shot("b32_ruinas_aproximando_b2", [B[1] - 34, 8, 6], [B[1], 12, -2], "2 ruinas: aproximando da Barreira 2")
+    aerial("b33_ruinas_aerea", 1, "2 ruinas: aerea")
+    # Transição 2 → 3 (pedra → frost → gelo).
+    shot("b40_trans23_pedra_fria", [A[1] + 70, 8, -14], [B[1] - 4, 6, 26], "transicao 2-3: pedra comecando a congelar")
+    shot("b41_trans23_frost", [B[1] + SEG[1]["depth"] + 4, 12, 24], [A[2] + 30, 6, -8], "transicao 2-3: frost depois da Barreira 2")
+    shot("b42_trans23_gelo", [A[2] - 8, 9, -6], [A[2] + 70, 12, 4], "transicao 2-3: entrando no gelo")
+    # Estágio 3 — gelo.
+    shot("b50_gelo_entrada", [A[2] + 2, 9, 4], [B[2], 14, 0], "3 gelo: entrada")
+    shot("b51_gelo_landmark", [A[2] + 40, 10, -6], [A[2] + 60, 16, 34], "3 gelo: landmark (formacoes de gelo)")
+    shot("b52_gelo_camera_jogador", [A[2] + 48, 8, 3], [A[2] + 90, 7, 0], "3 gelo: camera normal do jogador")
+    shot("b53_gelo_aproximando_b3", [B[2] - 34, 8, -6], [B[2], 12, 2], "3 gelo: aproximando da Barreira 3")
+    aerial("b54_gelo_aerea", 2, "3 gelo: aerea")
+    shot("b55_gelo_olhando_para_tras", [B[2] - 10, 22, 10], [150, 4, 0], "3 gelo olhando para tras (a jornada)", fov=60, text=False)
+    # Folha 1/2/3 sem texto, mesma câmera relativa.
+    panels = []
+    for i in range(3):
+        R.render(parts, R.Cam([A[i] + 20, 9, -10], [A[i] + 110, 10, 6], fov=70), f"{out}/_cmp.png", None, show_text=False)
+        panels.append(Image.open(f"{out}/_cmp.png").resize((640, 360)))
+    os.remove(f"{out}/_cmp.png")
+    sheet = Image.new("RGB", (640 * 3 + 8, 360), (255, 255, 255))
+    for i, im in enumerate(panels):
+        sheet.paste(im, (i * 644, 0))
+    sheet.save(f"{out}/b60_comparacao_1_2_3_sem_texto.png")
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "build", "map_parts.json")
@@ -43,6 +100,9 @@ def main():
     tag = sys.argv[3] if len(sys.argv) > 3 else "Caminho do Poder"
     os.makedirs(out, exist_ok=True)
     parts, _ = R.load(src)
+    if len(sys.argv) > 4 and sys.argv[4] == "B":
+        phase_b(parts, out, tag)
+        return
 
     def shot(name, cam, title, text=True):
         R.render(parts, cam, f"{out}/{name}.png", f"{tag} - {title}", show_text=text)
