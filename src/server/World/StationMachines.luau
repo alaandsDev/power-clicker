@@ -1039,34 +1039,49 @@ function StationMachines.BuildRebirthAltar(parent: Instance, base: CFrame, optio
 	return model, core
 end
 
--- ── Centro de Treinamento ───────────────────────────────────────────────────
+-- ── Campo de Treinamento ────────────────────────────────────────────────────
 
 export type TrainingSpot = {
 	Id: string,
-	Kind: string, -- Bag / Weights / Treadmill / Rack (TrainingConfig)
+	Kind: string, -- Dummy / Scarecrow / Warrior / Guardian (TrainingConfig)
 	Tier: number, -- 1..4 (ordem)
 	Centre: Vector3, -- relativo ao centro da área
-	Radius: number,
-	Color: Color3,
+	Radius: number, -- meio pedestal (= raio do treino)
 	Name: string,
-	Requirement: string, -- "LIVRE" / "🏆 10"
+	Rebirths: number, -- renascimentos exigidos (0 = livre)
+	Locked: string, -- "🔒 REQUER ♻ 3 RENASCIMENTOS" / "LIVRE"
+	Unlocked: string, -- "♻ 3 RENASCIMENTOS" / "LIVRE"
 }
 
+-- Tags do Campo de Treinamento (cliente: TrainingFieldController).
+StationMachines.TAG_TRAINING = "TrainingStation" -- Model de cada alvo (atributos Station, Tier, RequiredRebirths, Reaction)
+StationMachines.TAG_TRAINING_ENERGY = "TrainingEnergy" -- peça de energia: apagada enquanto bloqueado, responde ao golpe
+
 local ROMAN = { "I", "II", "III", "IV" }
--- Cor da faixa de cada tier: bronze → prata → ouro → energia.
+-- Cor da faixa de cada tier: madeira → prata → energia → ouro.
 local TIER_COLORS = {
 	Color3.fromRGB(176, 120, 72),
 	Color3.fromRGB(176, 184, 198),
-	Color3.fromRGB(222, 180, 80),
-	Color3.fromRGB(255, 150, 60),
+	Color3.fromRGB(90, 200, 255),
+	Color3.fromRGB(232, 184, 80),
 }
+local REACTIONS = { Dummy = "Sway", Scarecrow = "Vibrate", Warrior = "Energy", Guardian = "Pulse" }
 
--- Placa de tier: poste baixo + placa (SurfaceGui com tier, nome e requisito).
-local function tierPlaque(kit: Kit, at: CFrame, spot: TrainingSpot)
+-- Peça de energia (Neon/Glass) que o cliente apaga no bloqueio e acende no golpe.
+local function energy(part: BasePart): BasePart
+	part:SetAttribute("BaseTransparency", part.Transparency)
+	part:AddTag(StationMachines.TAG_TRAINING_ENERGY)
+	return part
+end
+
+-- Placa do alvo: poste baixo + placa (tier, nome, requisito) e o cadeado.
+local function trainingPlaque(kit: Kit, at: CFrame, spot: TrainingSpot, model: Model)
 	local theme = kit.Theme
-	piece(kit, "TierPost", Vector3.new(0.5, 2.6, 0.5), at * CFrame.new(0, 1.3, 0.25), theme.Metal, Enum.Material.Metal, false)
-	local board = piece(kit, "TierPlaque_" .. spot.Id, Vector3.new(5.2, 1.7, 0.2), at * CFrame.new(0, 3.2, 0) * CFrame.Angles(math.rad(-12), 0, 0), theme.Metal, Enum.Material.Metal, false)
-	piece(kit, "TierBand", Vector3.new(5.4, 0.22, 0.24), at * CFrame.new(0, 4.15, 0.02) * CFrame.Angles(math.rad(-12), 0, 0), TIER_COLORS[spot.Tier], Enum.Material.Metal, false)
+	-- Baixa (topo ≈ 2,4 studs): não esconde o boneco de quem olha de frente.
+	piece(kit, "PlaquePost", Vector3.new(0.45, 1.2, 0.45), at * CFrame.new(0, 0.6, 0.3), theme.Metal, Enum.Material.Metal, false)
+	local tilt = CFrame.Angles(math.rad(-24), 0, 0)
+	local board = piece(kit, "TrainingPlaque_" .. spot.Id, Vector3.new(5.2, 1.5, 0.2), at * CFrame.new(0, 1.5, 0) * tilt, theme.Metal, Enum.Material.Metal, false)
+	piece(kit, "PlaqueBand", Vector3.new(5.4, 0.2, 0.24), at * CFrame.new(0, 2.2, 0.32) * tilt, TIER_COLORS[spot.Tier], Enum.Material.Metal, false)
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "Text"
 	gui.Face = Enum.NormalId.Front
@@ -1087,103 +1102,302 @@ local function tierPlaque(kit: Kit, at: CFrame, spot: TrainingSpot)
 		item.Text = text
 		item.Parent = gui
 	end
-	label("Tier", ROMAN[spot.Tier], UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.2, 0.8), TIER_COLORS[spot.Tier], Enum.TextXAlignment.Center)
-	label("Name", StationMachines.Upper(spot.Name), UDim2.fromScale(0.26, 0.08), UDim2.fromScale(0.7, 0.48), Color3.fromRGB(240, 244, 252), Enum.TextXAlignment.Left)
-	label("Requirement", spot.Requirement, UDim2.fromScale(0.26, 0.56), UDim2.fromScale(0.7, 0.36), theme.Crystal, Enum.TextXAlignment.Left)
+	label("Tier", ROMAN[spot.Tier], UDim2.fromScale(0.02, 0.1), UDim2.fromScale(0.18, 0.8), TIER_COLORS[spot.Tier], Enum.TextXAlignment.Center)
+	label("Name", StationMachines.Upper(spot.Name), UDim2.fromScale(0.23, 0.08), UDim2.fromScale(0.74, 0.46), Color3.fromRGB(240, 244, 252), Enum.TextXAlignment.Left)
+	label("Requirement", spot.Locked, UDim2.fromScale(0.23, 0.58), UDim2.fromScale(0.74, 0.32), theme.Crystal, Enum.TextXAlignment.Left)
 	gui.Parent = board
+	board:SetAttribute("LockedText", spot.Locked)
+	board:SetAttribute("UnlockedText", spot.Unlocked)
+	if spot.Rebirths > 0 then
+		-- Cadeado discreto no canto da placa (some quando o jogador libera).
+		local lock = Instance.new("Model")
+		lock.Name = "Padlock"
+		local corner = at * CFrame.new(2.3, 2.75, 0.4)
+		local gold = Color3.fromRGB(206, 170, 92)
+		piece(kit, "PadlockBody", Vector3.new(0.8, 0.66, 0.3), corner, gold, Enum.Material.Metal, false, nil, nil, lock)
+		piece(kit, "PadlockKeyhole", Vector3.new(0.14, 0.26, 0.06), corner * CFrame.new(0, -0.04, -0.16), Color3.fromRGB(30, 30, 36), Enum.Material.SmoothPlastic, false, nil, nil, lock)
+		for _, side in { -1, 1 } do
+			piece(kit, "PadlockShackle", Vector3.new(0.12, 0.5, 0.12), corner * CFrame.new(side * 0.24, 0.52, 0), Color3.fromRGB(196, 200, 210), Enum.Material.Metal, false, nil, nil, lock)
+		end
+		piece(kit, "PadlockShackle", Vector3.new(0.6, 0.12, 0.12), corner * CFrame.new(0, 0.77, 0), Color3.fromRGB(196, 200, 210), Enum.Material.Metal, false, nil, nil, lock)
+		lock.Parent = model
+	end
 end
 
 --[[
-	CENTRO DE TREINAMENTO. Não é uma máquina: é a ACADEMIA que une os quatro
-	equipamentos que já existem (que continuam individuais, nos mesmos
-	lugares e com o mesmo raio — o TrainingService mede pela config).
-	Acrescenta: pórtico de entrada no corredor central virado para a
-	avenida com a placa "🏋️ TREINO / FIQUE MAIS FORTE" e um haltere no
-	alto; uma placa de TIER (I–IV) com nome e requisito na frente de cada
-	equipamento; um trilho de energia no corredor ligando os quatro; e a
-	progressão visual: o Tier II ganha banco e plataforma, o III corrimãos
-	e filetes de energia, o IV pistões, braços, anilhas e um medidor de
-	força que sobe. `base` = centro da área (eixos do mundo); -Z = avenida.
+	Pedestal de cada alvo: o PISO diz o tier sem texto.
+	  I   tablado de madeira, borda de toras, alvo pintado;
+	  II  pedra com chapa xadrez, moldura de metal e parafusos, "X" de metal;
+	  III pedra em dois degraus, chapa de metal, filetes de energia, losango;
+	  IV  base de pedra + degrau de mármore, friso dourado, quatro pilares
+	      com runas e um círculo de runas que gira devagar.
+	`kit.Base` = centro do pedestal no chão, -Z = frente (para a entrada).
 ]]
-function StationMachines.DecorateTraining(parent: Instance, base: CFrame, options: PlateOptions, spots: { TrainingSpot }, aisleFront: number, aisleBack: number): Model
+local function trainingPedestal(kit: Kit, spot: TrainingSpot, floorTop: number): number
+	local theme = kit.Theme
+	local side = spot.Radius * 2
+	local half = spot.Radius
+	local Metal, Slate, Neon = Enum.Material.Metal, Enum.Material.Slate, Enum.Material.Neon
+	local tier = spot.Tier
+	local top
+	if tier == 1 then
+		top = floorTop + 0.5
+		piece(kit, "Pedestal", Vector3.new(side, 0.5, side), CFrame.new(0, floorTop + 0.25, 0), Color3.fromRGB(150, 108, 70), Enum.Material.WoodPlanks, true)
+		for _, rot in { 0, 90 } do
+			for _, s in { -1, 1 } do
+				local frame = CFrame.Angles(0, math.rad(rot), 0) * CFrame.new(0, top + 0.05, s * (half - 0.3))
+				piece(kit, "PedestalLog", Vector3.new(side - 0.2, 0.55, 0.55), frame, Color3.fromRGB(120, 84, 52), Enum.Material.Wood, false, nil, Enum.PartType.Cylinder)
+			end
+		end
+		-- Alvo pintado no chão (onde ficar).
+		piece(kit, "PedestalSymbol", Vector3.new(0.06, 3.0, 3.0), CFrame.new(0, top + 0.03, -half * 0.35) * UPRIGHT, Color3.fromRGB(196, 72, 60), Enum.Material.SmoothPlastic, false, nil, Enum.PartType.Cylinder)
+		piece(kit, "PedestalSymbol", Vector3.new(0.08, 1.6, 1.6), CFrame.new(0, top + 0.04, -half * 0.35) * UPRIGHT, Color3.fromRGB(236, 224, 200), Enum.Material.SmoothPlastic, false, nil, Enum.PartType.Cylinder)
+	elseif tier == 2 then
+		top = floorTop + 0.7
+		piece(kit, "Pedestal", Vector3.new(side, 0.7, side), CFrame.new(0, floorTop + 0.35, 0), theme.StoneDark, Slate, true)
+		piece(kit, "PedestalTop", Vector3.new(side - 1.4, 0.08, side - 1.4), CFrame.new(0, top + 0.04, 0), theme.Plate, Enum.Material.DiamondPlate, false)
+		for _, rot in { 0, 90 } do
+			for _, s in { -1, 1 } do
+				piece(kit, "PedestalBorder", Vector3.new(side, 0.24, 0.5), CFrame.Angles(0, math.rad(rot), 0) * CFrame.new(0, top + 0.12, s * (half - 0.25)), TIER_COLORS[2], Metal, false)
+			end
+		end
+		for _, sx in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				piece(kit, "PedestalBolt", Vector3.new(0.3, 0.7, 0.7), CFrame.new(sx * (half - 0.6), top + 0.2, sz * (half - 0.6)) * UPRIGHT, theme.Metal, Metal, false, nil, Enum.PartType.Cylinder)
+			end
+		end
+		for _, angle in { 45, -45 } do
+			piece(kit, "PedestalSymbol", Vector3.new(0.45, 0.06, 3.2), CFrame.new(0, top + 0.1, -half * 0.4) * CFrame.Angles(0, math.rad(angle), 0), TIER_COLORS[2], Metal, false)
+		end
+	elseif tier == 3 then
+		top = floorTop + 1.1
+		piece(kit, "Pedestal", Vector3.new(side, 0.6, side), CFrame.new(0, floorTop + 0.3, 0), theme.StoneDark, Slate, true)
+		piece(kit, "PedestalStep", Vector3.new(side - 1.2, 0.5, side - 1.2), CFrame.new(0, floorTop + 0.85, 0), theme.Stone, Slate, true)
+		piece(kit, "PedestalTop", Vector3.new(side - 2.4, 0.06, side - 2.4), CFrame.new(0, top + 0.03, 0), theme.Plate, Metal, false)
+		for _, rot in { 0, 90 } do
+			for _, s in { -1, 1 } do
+				energy(piece(kit, "PedestalEnergy", Vector3.new(side - 2.0, 0.08, 0.22), CFrame.Angles(0, math.rad(rot), 0) * CFrame.new(0, top + 0.04, s * (half - 1.0)), TIER_COLORS[3], Neon, false, 0.35))
+			end
+		end
+		for _, sx in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				piece(kit, "PedestalPost", Vector3.new(0.7, 1.6, 0.7), CFrame.new(sx * (half - 0.35), floorTop + 0.8, sz * (half - 0.35)), theme.Metal, Metal, false)
+			end
+		end
+		energy(piece(kit, "PedestalSymbol", Vector3.new(1.8, 0.07, 1.8), CFrame.new(0, top + 0.05, -half * 0.42) * CFrame.Angles(0, math.rad(45), 0), TIER_COLORS[3], Neon, false, 0.3))
+	else
+		top = floorTop + 1.2
+		piece(kit, "Pedestal", Vector3.new(side, 0.6, side), CFrame.new(0, floorTop + 0.3, 0), theme.StoneDark, Slate, true)
+		piece(kit, "PedestalStep", Vector3.new(side - 1.4, 0.6, side - 1.4), CFrame.new(0, floorTop + 0.9, 0), Color3.fromRGB(188, 182, 170), Enum.Material.Marble, true)
+		for _, rot in { 0, 90 } do
+			for _, s in { -1, 1 } do
+				piece(kit, "PedestalBorder", Vector3.new(side - 1.2, 0.16, 0.3), CFrame.Angles(0, math.rad(rot), 0) * CFrame.new(0, top + 0.02, s * (half - 0.85)), TIER_COLORS[4], Metal, false)
+			end
+		end
+		for _, sx in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				local x, z = sx * (half - 0.6), sz * (half - 0.6)
+				piece(kit, "GuardianPillar", Vector3.new(1.1, 3.4, 1.1), CFrame.new(x, floorTop + 1.7, z), theme.Stone, Slate, true)
+				piece(kit, "GuardianPillarCap", Vector3.new(1.4, 0.3, 1.4), CFrame.new(x, floorTop + 3.55, z), TIER_COLORS[4], Metal, false)
+				energy(piece(kit, "GuardianRune", Vector3.new(0.6, 0.6, 0.06), CFrame.new(x, floorTop + 2.2, z - 0.58), theme.Energy, Neon, false, 0.2))
+			end
+		end
+		piece(kit, "PedestalSymbol", Vector3.new(1.4, 0.06, 1.4), CFrame.new(0, top + 0.05, -half + 1.6) * CFrame.Angles(0, math.rad(45), 0), TIER_COLORS[4], Enum.Material.Metal, false)
+		-- Círculo de runas no piso, girando devagar (StationRing).
+		local runes = ring(kit, "GuardianRunes", CFrame.new(0, top + 0.06, 0), half - 2.2, 0.12, theme.Energy, Neon, 0.45, 6)
+		for _, part in runes:GetChildren() do
+			if part:IsA("BasePart") then
+				energy(part)
+			end
+		end
+	end
+	return top
+end
+
+-- I: Boneco de Treino (madeira e palha, quase sem efeito; balança no golpe).
+local function buildDummy(kit: Kit, top: number, dummy: Model)
+	local wood, straw = Color3.fromRGB(128, 90, 56), Color3.fromRGB(214, 184, 116)
+	local z = 1.2
+	for _, angle in { 0, 90 } do
+		piece(kit, "DummyStand", Vector3.new(3.2, 0.4, 0.8), CFrame.new(0, top + 0.2, z) * CFrame.Angles(0, math.rad(angle), 0), wood, Enum.Material.Wood, true)
+	end
+	piece(kit, "DummyPost", Vector3.new(0.7, 2.2, 0.7), CFrame.new(0, top + 1.3, z), wood, Enum.Material.Wood, true)
+	upright(kit, "DummyBody", Vector3.new(0, top + 3.9, z), 3.0, 2.2, straw, Enum.Material.Fabric, true, nil, dummy)
+	for _, y in { 3.0, 4.8 } do
+		upright(kit, "DummyRope", Vector3.new(0, top + y, z), 0.2, 2.3, Color3.fromRGB(150, 110, 70), Enum.Material.Fabric, false, nil, dummy)
+	end
+	piece(kit, "DummyArm", Vector3.new(4.4, 0.42, 0.42), CFrame.new(0, top + 4.9, z), wood, Enum.Material.Wood, false, nil, nil, dummy)
+	piece(kit, "DummyHead", Vector3.new(1.7, 1.7, 1.7), CFrame.new(0, top + 6.3, z), straw, Enum.Material.Fabric, false, nil, Enum.PartType.Ball, dummy)
+	piece(kit, "DummyTarget", Vector3.new(0.1, 1.5, 1.5), CFrame.new(0, top + 4.0, z - 1.1) * FACING, Color3.fromRGB(196, 72, 60), Enum.Material.SmoothPlastic, false, nil, Enum.PartType.Cylinder, dummy)
+	piece(kit, "DummyTarget", Vector3.new(0.12, 0.7, 0.7), CFrame.new(0, top + 4.0, z - 1.12) * FACING, Color3.fromRGB(236, 224, 200), Enum.Material.SmoothPlastic, false, nil, Enum.PartType.Cylinder, dummy)
+	dummy:SetAttribute("Pivot", (kit.Base * CFrame.new(0, top + 2.4, z)).Position)
+end
+
+-- II: Espantalho Reforçado (madeira + metal, placas que vibram, correntes).
+local function buildScarecrow(kit: Kit, top: number, dummy: Model)
+	local theme = kit.Theme
+	local wood = Color3.fromRGB(110, 78, 50)
+	local steel = Color3.fromRGB(150, 156, 170)
+	local z = 1.6
+	piece(kit, "ScarecrowBase", Vector3.new(2.0, 0.4, 2.0), CFrame.new(0, top + 0.2, z), theme.Metal, Enum.Material.Metal, true)
+	for _, s in { -1, 1 } do
+		strut(kit, "ScarecrowBrace", Vector3.new(s * 1.6, top + 0.3, z), Vector3.new(0, top + 2.4, z), 0.35, 0.35, wood, Enum.Material.Wood, false)
+	end
+	piece(kit, "ScarecrowPost", Vector3.new(0.8, 7.2, 0.8), CFrame.new(0, top + 3.6, z), wood, Enum.Material.Wood, true)
+	piece(kit, "ScarecrowShoulders", Vector3.new(5.6, 0.5, 0.5), CFrame.new(0, top + 5.6, z), wood, Enum.Material.Wood, false)
+	piece(kit, "ScarecrowTorso", Vector3.new(2.6, 3.0, 1.2), CFrame.new(0, top + 4.2, z), Color3.fromRGB(96, 70, 48), Enum.Material.WoodPlanks, true, nil, nil, dummy)
+	for index, spec in { { 0.62, 5.0, 1.1 }, { -0.62, 5.0, 1.1 }, { 0, 3.4, 2.2 } } do
+		local plate = piece(kit, "ArmorPlate", Vector3.new(spec[3], 1.2, 0.22), CFrame.new(spec[1], top + spec[2], z - 0.72), steel, Enum.Material.DiamondPlate, false, nil, nil, dummy)
+		plate:SetAttribute("Order", index)
+	end
+	upright(kit, "ScarecrowHelmet", Vector3.new(0, top + 6.7, z), 1.4, 1.5, steel, Enum.Material.Metal, false, nil, dummy)
+	piece(kit, "ScarecrowVisor", Vector3.new(1.0, 0.16, 0.08), CFrame.new(0, top + 6.75, z - 0.76), Color3.fromRGB(26, 26, 32), Enum.Material.SmoothPlastic, false, nil, nil, dummy)
+	-- Correntes penduradas nas pontas dos ombros (elos alternados).
+	for _, s in { -1, 1 } do
+		for link = 1, 3 do
+			local y = top + 5.2 - link * 0.55
+			piece(kit, "ScarecrowChain", Vector3.new(0.12, 0.5, 0.3), CFrame.new(s * 2.5, y, z) * CFrame.Angles(0, math.rad(if link % 2 == 0 then 90 else 0), 0), Color3.fromRGB(120, 124, 136), Enum.Material.Metal, false, nil, nil, dummy)
+		end
+		piece(kit, "ScarecrowWeight", Vector3.new(0.55, 0.55, 0.55), CFrame.new(s * 2.5, top + 3.15, z), theme.Metal, Enum.Material.Metal, false, nil, Enum.PartType.Ball, dummy)
+	end
+	-- Pequenos impactos: faíscas só no golpe (o cliente chama Emit).
+	local chest = dummy:FindFirstChild("ArmorPlate") :: BasePart
+	local sparks = emitter(chest, "ImpactSparks", Color3.fromRGB(255, 214, 140), 0, NumberRange.new(4, 8), NumberRange.new(0.15, 0.3), 0.18, 50, Vector3.new(0, -12, 0))
+	sparks.EmissionDirection = Enum.NormalId.Front
+	dummy:SetAttribute("Pivot", (kit.Base * CFrame.new(0, top + 4.2, z)).Position)
+end
+
+-- III: Guerreiro de Treino (manequim de combate de metal + energia, cristal no peito).
+local function buildWarrior(kit: Kit, top: number, dummy: Model)
+	local theme = kit.Theme
+	local Metal, Neon = Enum.Material.Metal, Enum.Material.Neon
+	local armour = Color3.fromRGB(78, 86, 104)
+	local trim = Color3.fromRGB(176, 184, 198)
+	local glow = TIER_COLORS[3]
+	local z = 1.8
+	upright(kit, "WarriorBase", Vector3.new(0, top + 0.25, z), 0.5, 3.2, theme.Metal, Metal, true)
+	energy(upright(kit, "WarriorBaseRing", Vector3.new(0, top + 0.52, z), 0.08, 3.4, glow, Neon, false, 0.4))
+	for _, s in { -1, 1 } do
+		piece(kit, "WarriorLeg", Vector3.new(0.8, 3.0, 0.9), CFrame.new(s * 0.55, top + 2.0, z), armour, Metal, true)
+	end
+	piece(kit, "WarriorHip", Vector3.new(2.2, 0.8, 1.2), CFrame.new(0, top + 3.8, z), theme.Metal, Metal, false, nil, nil, dummy)
+	piece(kit, "WarriorTorso", Vector3.new(2.7, 2.8, 1.4), CFrame.new(0, top + 5.5, z), armour, Metal, true, nil, nil, dummy)
+	for _, s in { -1, 1 } do
+		energy(piece(kit, "WarriorEnergy", Vector3.new(0.14, 2.2, 0.06), CFrame.new(s * 0.95, top + 5.5, z - 0.72), glow, Neon, false, 0.3, nil, dummy))
+	end
+	energy(piece(kit, "WarriorEnergy", Vector3.new(2.3, 0.14, 0.06), CFrame.new(0, top + 4.3, z - 0.72), glow, Neon, false, 0.3, nil, dummy))
+	local heart = crystal(kit, "WarriorCrystal", Vector3.new(0, top + 5.7, z - 0.8), 1.3, Vector3.new(0, 0, 0), glow, 0.2)
+	heart.Parent = dummy
+	energy(heart)
+	for _, s in { -1, 1 } do
+		piece(kit, "WarriorPauldron", Vector3.new(1.3, 0.8, 1.6), CFrame.new(s * 1.75, top + 6.9, z) * CFrame.Angles(0, 0, math.rad(-s * 18)), trim, Metal, false, nil, nil, dummy)
+		piece(kit, "WarriorUpperArm", Vector3.new(0.7, 1.8, 0.8), CFrame.new(s * 1.85, top + 5.6, z), armour, Metal, false, nil, nil, dummy)
+		-- Antebraços em guarda, para a frente.
+		piece(kit, "WarriorForearm", Vector3.new(0.65, 0.65, 1.8), CFrame.new(s * 1.85, top + 4.85, z - 0.8), armour, Metal, false, nil, nil, dummy)
+	end
+	-- Espada de treino na mão direita (lâmina sem fio, só forma).
+	piece(kit, "WarriorSwordGuard", Vector3.new(0.9, 0.2, 0.3), CFrame.new(-1.85, top + 4.85, z - 1.75), trim, Metal, false, nil, nil, dummy)
+	energy(piece(kit, "WarriorSwordBlade", Vector3.new(0.18, 2.6, 0.4), CFrame.new(-1.85, top + 6.2, z - 1.75), glow, Neon, false, 0.45, nil, dummy))
+	facingDisc(kit, "WarriorShield", Vector3.new(1.85, top + 5.2, z - 1.75), 0.25, 2.4, trim, Metal).Parent = dummy
+	piece(kit, "WarriorHead", Vector3.new(1.2, 1.4, 1.2), CFrame.new(0, top + 7.6, z), armour, Metal, false, nil, nil, dummy)
+	energy(piece(kit, "WarriorVisor", Vector3.new(0.9, 0.18, 0.06), CFrame.new(0, top + 7.7, z - 0.62), glow, Neon, false, 0.2, nil, dummy))
+	dummy:SetAttribute("Pivot", (kit.Base * CFrame.new(0, top + 3.5, z)).Position)
+end
+
+-- IV: Guardião de Poder (pedra + metal, braços robustos, núcleo que pulsa).
+local function buildGuardian(kit: Kit, top: number, dummy: Model)
+	local theme = kit.Theme
+	local Metal, Neon, Slate = Enum.Material.Metal, Enum.Material.Neon, Enum.Material.Slate
+	local stone = Color3.fromRGB(120, 116, 112)
+	local z = 2.2
+	piece(kit, "GuardianPlinth", Vector3.new(4.6, 1.0, 3.2), CFrame.new(0, top + 0.5, z), theme.StoneDark, Slate, true)
+	for _, s in { -1, 1 } do
+		piece(kit, "GuardianLeg", Vector3.new(1.6, 3.4, 1.7), CFrame.new(s * 1.1, top + 2.7, z), stone, Slate, true)
+	end
+	piece(kit, "GuardianTorso", Vector3.new(4.8, 4.0, 2.6), CFrame.new(0, top + 6.4, z), stone, Slate, true, nil, nil, dummy)
+	piece(kit, "GuardianBelt", Vector3.new(4.4, 0.6, 2.7), CFrame.new(0, top + 4.6, z), theme.Metal, Metal, false, nil, nil, dummy)
+	facingDisc(kit, "GuardianCoreFrame", Vector3.new(0, top + 6.6, z - 1.3), 0.3, 2.6, TIER_COLORS[4], Metal).Parent = dummy
+	local core = piece(kit, "GuardianCore", Vector3.new(1.6, 1.6, 1.6), CFrame.new(0, top + 6.6, z - 1.45), theme.Energy, Neon, false, 0.05, Enum.PartType.Ball, dummy)
+	energy(core)
+	energy(piece(kit, "GuardianCoreShell", Vector3.new(2.2, 2.2, 2.2), CFrame.new(0, top + 6.6, z - 1.45), theme.Crystal, Enum.Material.Glass, false, 0.6, Enum.PartType.Ball, dummy))
+	for _, s in { -1, 1 } do
+		piece(kit, "GuardianShoulder", Vector3.new(2.0, 1.9, 2.4), CFrame.new(s * 3.2, top + 7.8, z), theme.Metal, Metal, false, nil, nil, dummy)
+		piece(kit, "GuardianArm", Vector3.new(1.6, 3.2, 1.6), CFrame.new(s * 3.3, top + 5.6, z - 0.2), stone, Slate, false, nil, nil, dummy)
+		piece(kit, "GuardianFist", Vector3.new(2.1, 2.0, 2.1), CFrame.new(s * 3.3, top + 3.6, z - 0.5), theme.Metal, Metal, false, nil, nil, dummy)
+		energy(piece(kit, "GuardianArmRune", Vector3.new(0.5, 1.2, 0.06), CFrame.new(s * 3.3, top + 5.8, z - 1.03), theme.Energy, Neon, false, 0.25, nil, dummy))
+	end
+	piece(kit, "GuardianHead", Vector3.new(1.9, 1.6, 1.7), CFrame.new(0, top + 9.2, z), stone, Slate, false, nil, nil, dummy)
+	energy(piece(kit, "GuardianEyes", Vector3.new(1.2, 0.2, 0.06), CFrame.new(0, top + 9.3, z - 0.87), theme.Energy, Neon, false, 0.15, nil, dummy))
+	for _, s in { -1, 1 } do
+		local shard = crystal(kit, "GuardianShard", Vector3.new(s * 1.3, top + 10.2, z + 0.6), 1.6, Vector3.new(0, 0, -s * 18), theme.Crystal, 0.25)
+		shard.Parent = dummy
+		energy(shard)
+	end
+	dummy:SetAttribute("Pivot", (kit.Base * CFrame.new(0, top + 4.6, z)).Position)
+end
+
+local DUMMY_BUILDERS = { Dummy = buildDummy, Scarecrow = buildScarecrow, Warrior = buildWarrior, Guardian = buildGuardian }
+
+--[[
+	CAMPO DE TREINAMENTO. Quatro alvos de treino em arco, cada um no próprio
+	pedestal (piso + borda + símbolo + placa), do mais simples ao mais
+	elaborado: a progressão se lê sem texto.
+	  I   Boneco de Treino (madeira e palha)
+	  II  Espantalho Reforçado (madeira, placas de metal, correntes)
+	  III Guerreiro de Treino (manequim de metal, energia, cristal)
+	  IV  Guardião de Poder (pedra e metal, núcleo, runas, braços robustos)
+	Na entrada, o pórtico "🏋️ TREINO / FIQUE MAIS FORTE" com um alvo no alto.
+	Sem HP, sem loot, sem IA, sem ataque: os bonecos só REAGEM a quem treina
+	(cliente, TrainingFieldController). Quem decide se treina é o servidor
+	(TrainingService, por Renascimentos); o cliente só mostra cadeado.
+	`base` = centro da área (eixos do mundo); -Z = entrada (avenida).
+	`focus` = ponto (local) para onde os alvos olham.
+]]
+function StationMachines.BuildTrainingField(parent: Instance, base: CFrame, options: PlateOptions, spots: { TrainingSpot }, entranceZ: number, focus: Vector3): Model
 	local model = Instance.new("Model")
 	model.Name = "Station_Training_Machine"
 	local theme = StationMachines.Themes.Training
 	local kit: Kit = { Parent = model, Base = base, Theme = theme, Count = 0 }
-	local Slate, Metal, Neon = Enum.Material.Slate, Enum.Material.Metal, Enum.Material.Neon
+	local Slate, Metal = Enum.Material.Slate, Enum.Material.Metal
 	local floorTop = 0.6
 
-	-- Pórtico de entrada (frente do corredor central).
-	local gateZ = aisleFront + 1.2
+	-- Pórtico de entrada com a placa da área e um alvo de treino no alto.
 	for _, side in { -1, 1 } do
-		piece(kit, "GymGateBase", Vector3.new(2.2, 1, 2.2), CFrame.new(side * 6.2, floorTop + 0.5, gateZ), theme.StoneDark, Slate, true)
-		piece(kit, "GymGatePillar", Vector3.new(1.4, 9.4, 1.4), CFrame.new(side * 6.2, floorTop + 5.7, gateZ), theme.Metal, Metal, true)
-		piece(kit, "GymGateBand", Vector3.new(1.7, 0.3, 1.7), CFrame.new(side * 6.2, floorTop + 3.2, gateZ), theme.Energy, Metal, false)
+		piece(kit, "FieldGateBase", Vector3.new(2.2, 1, 2.2), CFrame.new(side * 6.2, floorTop + 0.5, entranceZ), theme.StoneDark, Slate, true)
+		piece(kit, "FieldGatePillar", Vector3.new(1.4, 9.4, 1.4), CFrame.new(side * 6.2, floorTop + 5.7, entranceZ), Color3.fromRGB(128, 92, 58), Enum.Material.Wood, true)
+		piece(kit, "FieldGateBand", Vector3.new(1.7, 0.3, 1.7), CFrame.new(side * 6.2, floorTop + 3.2, entranceZ), theme.Gold, Metal, false)
 	end
-	piece(kit, "GymGateBeam", Vector3.new(14.4, 1.8, 1.8), CFrame.new(0, floorTop + 11.2, gateZ), theme.Stone, Slate, true)
-	nameplate(kit, CFrame.new(0, floorTop + 11.3, gateZ - 1.0), options.Title, options.Subtitle, 9)
-	-- Haltere no alto do pórtico (a silhueta de academia, pequena).
-	piece(kit, "GateDumbbellBar", Vector3.new(5, 0.5, 0.5), CFrame.new(0, floorTop + 13.0, gateZ), Color3.fromRGB(190, 196, 208), Metal, false)
-	for _, side in { -1, 1 } do
-		piece(kit, "GateDumbbellWeight", Vector3.new(0.9, 2.4, 2.4), CFrame.new(side * 2.2, floorTop + 13.0, gateZ), theme.Energy, Metal, false, nil, Enum.PartType.Cylinder)
-	end
-
-	-- Trilho de energia no corredor, com um ramal para cada equipamento.
-	local railLength = aisleBack - aisleFront - 2
-	piece(kit, "GymRail", Vector3.new(0.4, 0.06, railLength), CFrame.new(0, floorTop + 0.04, (aisleFront + aisleBack) / 2), theme.Energy, Neon, false, 0.55)
-	for _, spot in spots do
-		local edge = spot.Centre.X - math.sign(spot.Centre.X) * spot.Radius
-		local branch = piece(kit, "GymRailBranch", Vector3.new(math.abs(edge), 0.06, 0.3), CFrame.new(edge / 2, floorTop + 0.04, spot.Centre.Z), TIER_COLORS[spot.Tier], Neon, false, 0.5)
-		branch:SetAttribute("Order", spot.Tier)
-		branch:AddTag(StationMachines.TAG_PULSE)
-	end
+	piece(kit, "FieldGateBeam", Vector3.new(14.4, 1.8, 1.8), CFrame.new(0, floorTop + 11.2, entranceZ), theme.Stone, Slate, true)
+	nameplate(kit, CFrame.new(0, floorTop + 11.3, entranceZ - 1.0), options.Title, options.Subtitle, 9)
+	piece(kit, "FieldGateTarget", Vector3.new(0.3, 3.4, 3.4), CFrame.new(0, floorTop + 14.0, entranceZ) * FACING, Color3.fromRGB(196, 72, 60), Metal, false, nil, Enum.PartType.Cylinder)
+	piece(kit, "FieldGateTarget", Vector3.new(0.34, 2.2, 2.2), CFrame.new(0, floorTop + 14.0, entranceZ) * FACING, Color3.fromRGB(236, 224, 200), Metal, false, nil, Enum.PartType.Cylinder)
+	piece(kit, "FieldGateTarget", Vector3.new(0.38, 1.0, 1.0), CFrame.new(0, floorTop + 14.0, entranceZ) * FACING, Color3.fromRGB(196, 72, 60), Metal, false, nil, Enum.PartType.Cylinder)
 
 	for _, spot in spots do
+		local station = Instance.new("Model")
+		station.Name = "TrainingStation_" .. spot.Id
 		local c = spot.Centre
-		-- Placa de tier na borda do pad que dá para a avenida.
-		tierPlaque(kit, CFrame.new(c.X, floorTop, c.Z - spot.Radius + 1.2), spot)
-		if spot.Kind == "Bag" then
-			-- Tier I: simples — base de chapa e um indicador redondo no poste.
-			piece(kit, "BagBase", Vector3.new(3, 0.3, 3), CFrame.new(c.X, floorTop + 0.15, c.Z), theme.Plate, Enum.Material.DiamondPlate, true)
-			piece(kit, "BagGauge", Vector3.new(0.3, 1.4, 1.4), CFrame.new(c.X - 0.75, floorTop + 6, c.Z), TIER_COLORS[1], Metal, false, nil, Enum.PartType.Cylinder)
-		elseif spot.Kind == "Weights" then
-			-- Tier II: plataforma de força, banco e anilhas no suporte.
-			piece(kit, "LiftPlatform", Vector3.new(12, 0.4, 6), CFrame.new(c.X, floorTop + 0.2, c.Z), Color3.fromRGB(46, 48, 58), Enum.Material.Rubber, true)
-			piece(kit, "Bench", Vector3.new(2.2, 0.8, 5.6), CFrame.new(c.X, floorTop + 2.2, c.Z + 3.6), theme.Plate, Enum.Material.Fabric, true)
-			for _, dz in { 1.6, 5.6 } do
-				piece(kit, "BenchLeg", Vector3.new(1.4, 1.8, 0.5), CFrame.new(c.X, floorTop + 1.0, c.Z + dz), theme.Metal, Metal, true)
-			end
-			for _, side in { -1, 1 } do
-				piece(kit, "SparePlate", Vector3.new(0.7, 3.2, 3.2), CFrame.new(c.X + side * 6.6, floorTop + 1.8, c.Z + 2.2), TIER_COLORS[2], Metal, false, nil, Enum.PartType.Cylinder)
-			end
-		elseif spot.Kind == "Treadmill" then
-			-- Tier III: corrimãos e filetes de energia nas laterais da esteira.
-			for _, side in { -1, 1 } do
-				piece(kit, "Handrail", Vector3.new(9, 0.4, 0.4), CFrame.new(c.X - 3.5, floorTop + 5.2, c.Z + side * 3.9), Color3.fromRGB(190, 196, 208), Metal, false)
-				piece(kit, "HandrailPost", Vector3.new(0.4, 2.8, 0.4), CFrame.new(c.X + 0.8, floorTop + 3.9, c.Z + side * 3.9), theme.Metal, Metal, false)
-				piece(kit, "BeltGlow", Vector3.new(14, 0.08, 0.25), CFrame.new(c.X, 2.45, c.Z + side * 3.62), theme.Core, Neon, false, 0.5)
-			end
-			-- Mostrador de velocidade no montante (barras, sem Neon) e friso.
-			local display = piece(kit, "TreadmillDisplay", Vector3.new(0.2, 2.2, 4.6), CFrame.new(c.X - 7.38, floorTop + 7.0, c.Z), Color3.fromRGB(18, 26, 36), Enum.Material.SmoothPlastic, false)
-			screenGui(display, theme.Core)
-			local screen = display:FindFirstChildOfClass("SurfaceGui") :: SurfaceGui
-			screen.Face = Enum.NormalId.Right
-			piece(kit, "TreadmillTrim", Vector3.new(0.3, 0.2, 5), CFrame.new(c.X - 7.4, floorTop + 8.2, c.Z), theme.Gold, Metal, false)
-		elseif spot.Kind == "Rack" then
-			-- Tier IV: pistões, braços mecânicos, anilhas e medidor de força.
-			for _, side in { -1, 1 } do
-				piece(kit, "Piston", Vector3.new(8, 1.2, 1.2), CFrame.new(c.X + side * 5, floorTop + 4.6, c.Z - 1.4) * UPRIGHT, theme.Metal, Metal, false, nil, Enum.PartType.Cylinder)
-				piece(kit, "PistonSleeve", Vector3.new(2.6, 1.5, 1.5), CFrame.new(c.X + side * 5, floorTop + 2.0, c.Z - 1.4) * UPRIGHT, theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
-				strut(kit, "RackArm", Vector3.new(c.X + side * 6, floorTop + 13.5, c.Z - 4.4), Vector3.new(c.X + side * 1.8, floorTop + 10, c.Z - 4.4), 0.9, 0.9, theme.Energy, Metal, false)
-				piece(kit, "RackPlate", Vector3.new(0.9, 4.2, 4.2), CFrame.new(c.X + side * 7.2, floorTop + 3, c.Z + 2), Color3.fromRGB(44, 46, 56), Metal, false, nil, Enum.PartType.Cylinder)
-			end
-			piece(kit, "GaugeFrame", Vector3.new(1.4, 7.4, 0.4), CFrame.new(c.X, floorTop + 7.4, c.Z - 5.6), theme.Metal, Metal, false)
-			for level = 1, 5 do
-				local bar = piece(kit, "ForceGauge", Vector3.new(0.9, 1.1, 0.1), CFrame.new(c.X, floorTop + 4.4 + level * 1.25, c.Z - 5.84), theme.Energy, Neon, false, 0.4)
-				bar:SetAttribute("Order", level)
-				bar:AddTag(StationMachines.TAG_PULSE)
-			end
-		end
+		local frame = CFrame.lookAt(Vector3.new(c.X, 0, c.Z), Vector3.new(focus.X, 0, focus.Z))
+		local sub: Kit = { Parent = station, Base = base * frame, Theme = theme, Count = 0 }
+		local top = trainingPedestal(sub, spot, floorTop)
+		-- Placa no chão, logo à frente do pedestal (de quem chega).
+		trainingPlaque(sub, CFrame.new(0, floorTop, -spot.Radius - 0.8), spot, station)
+		local dummy = Instance.new("Model")
+		dummy.Name = "Dummy"
+		DUMMY_BUILDERS[spot.Kind](sub, top, dummy)
+		atomic(dummy)
+		dummy.Parent = station
+		station:SetAttribute("Station", spot.Id)
+		station:SetAttribute("Tier", spot.Tier)
+		station:SetAttribute("RequiredRebirths", spot.Rebirths)
+		station:SetAttribute("Reaction", REACTIONS[spot.Kind] or "Sway")
+		station:SetAttribute("Centre", (base * CFrame.new(c.X, floorTop, c.Z)).Position)
+		station:SetAttribute("Front", (base * frame).LookVector)
+		station:SetAttribute("PartCount", sub.Count)
+		atomic(station)
+		station.Parent = model
+		station:AddTag(StationMachines.TAG_TRAINING)
+		kit.Count += sub.Count
 	end
 
 	model:SetAttribute("PartCount", kit.Count)

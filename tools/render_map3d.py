@@ -228,7 +228,25 @@ if __name__ == "__main__":
     altar = next((p for p in parts if p["n"] == "RebirthCore"), None)
     if altar:
         station_views("rebirth", "RebirthCore", (-altar["p"][0], -altar["p"][2]), 7, 26)
-    station_views("training", "GymGateBeam", (0, -1), 6, 34)
+    # Campo de Treinamento: entrada, os quatro juntos, cada alvo (de frente,
+    # de onde se chega), lateral e aérea.
+    gate = next((p for p in parts if p["n"] == "FieldGateBeam"), None)
+    if gate:
+        gx, _, gz = gate["p"]
+        centre = np.array([gx, 0, gz + 23 - 1.2])
+        render(parts, Cam([gx - 6, 6, gz - 16], [gx, 5, gz + 14], fov=70), out_prefix + "_training_1_entrance.png", f"{label} - Treino: entrada")
+        render(parts, Cam(centre + np.array([0, 13, -36]), centre + np.array([0, 3, 2]), fov=66), out_prefix + "_training_2_all.png", f"{label} - Treino: os quatro alvos")
+        for index, (name, title) in enumerate((("Dummy", "I Boneco de Treino"), ("Scarecrow", "II Espantalho Reforcado"), ("Warrior", "III Guerreiro de Treino"), ("Guardian", "IV Guardiao de Poder"))):
+            plaque = next((p for p in parts if p["n"] == f"TrainingPlaque_{name}"), None)
+            if not plaque:
+                continue
+            px, _, pz = plaque["p"]
+            focus = np.array([gx, 0, gz - 8])
+            f = focus - np.array([px, 0, pz]); f /= np.linalg.norm(f)
+            target = np.array([px, 4.5, pz]) - f * 3
+            render(parts, Cam(target + f * 15 + np.array([0, 1.5, 0]) + np.array([f[2], 0, -f[0]]) * 3, target, fov=62), out_prefix + f"_training_{index + 3}_{name.lower()}.png", f"{label} - Treino {title}")
+        render(parts, Cam(centre + np.array([-34, 7, 8]), centre + np.array([4, 4, 2]), fov=66), out_prefix + "_training_7_side.png", f"{label} - Treino: lateral")
+        render(parts, Cam(centre + np.array([-6, 52, -30]), centre + np.array([0, 0, 2]), fov=60), out_prefix + "_training_8_aerial.png", f"{label} - Treino: aerea")
     station_views("eggs", "EggHeaderStone", (0, 1), 8, 84)
     # Circulação lateral: na altura do olho, cruzando a praça entre as áreas.
     render(parts, Cam([-30, 6, 70], [60, 4, -40], fov=72), out_prefix + "_circulation.png", f"{label} - circulacao lateral (altura do jogador)")

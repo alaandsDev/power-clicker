@@ -72,14 +72,17 @@ training_text = read("TrainingConfig.luau")
 # Each machine is "clicks per second equivalent"; a player uses the best one
 # they qualify for. The fields span several lines, so each station is read as a
 # block between braces.
+# O requisito é em Renascimentos (RequiredRebirths); RequiredWins ficou só
+# para ler configs antigas.
 STATION_BLOCK = re.compile(
-    r'Id = "(\w+)",.*?Rate = ([\d.]+),\s*RequiredWins = ([\d_]+)', re.S
+    r'Id = "(\w+)",.*?Rate = ([\d.]+),\s*Required(Wins|Rebirths) = ([\d_]+)', re.S
 )
 TRAINING = [
     {
         "Id": match.group(1),
         "Rate": float(match.group(2)),
-        "RequiredWins": float(match.group(3).replace("_", "")),
+        "RequiredWins": float(match.group(4).replace("_", "")) if match.group(3) == "Wins" else 0.0,
+        "RequiredRebirths": float(match.group(4).replace("_", "")) if match.group(3) == "Rebirths" else 0.0,
     }
     for match in STATION_BLOCK.finditer(training_text)
 ]
@@ -89,12 +92,12 @@ TRAINING.sort(key=lambda item: item["Rate"])
 TRAINING_CAP = number(training_text, "MaxShareOfHoldClick") * HOLD_CPS
 
 
-def training_rate(wins: float) -> float:
+def training_rate(wins: float, rebirths: float = 0.0, stations: list | None = None) -> float:
     """Best machine the player qualifies for, in clicks per second."""
     rate = 0.0
-    for machine in TRAINING:
-        if wins >= machine["RequiredWins"]:
-            rate = min(machine["Rate"], TRAINING_CAP)
+    for machine in stations or TRAINING:
+        if wins >= machine.get("RequiredWins", 0) and rebirths >= machine.get("RequiredRebirths", 0):
+            rate = max(rate, min(machine["Rate"], TRAINING_CAP))
     return rate
 
 
@@ -374,7 +377,10 @@ def simulate(player: Player, hours: float, training: float) -> Player:
 
     while elapsed < hours * 3600:
         per_click = player.per_click()
-        clicks = player.cps * step * (1 - player.training_share)
+        # Auto Click (servidor) continua clicando enquanto o jogador está
+        # parado na máquina: aí o treino SOMA, não divide o tempo.
+        auto = getattr(player, "auto_click", False)
+        clicks = player.cps * step * (1 if auto else 1 - player.training_share)
 
         #[[
         #   The corridor: the player attacks the HIGHEST barrier whose row they
@@ -392,7 +398,7 @@ def simulate(player: Player, hours: float, training: float) -> Player:
         player.earn("clicks", per_click * clicks)
         # Training pays while the player is on a machine; they are not clicking
         # then, which is why the share is taken off the clicking time above.
-        machine = training if training > 0 else training_rate(player.wins) * player.training_share
+        machine = training if training > 0 else training_rate(player.wins, player.rebirths, getattr(player, "stations", None)) * player.training_share
         if machine > 0:
             player.earn("training", per_click * machine * step)
 

@@ -911,190 +911,46 @@ end
 	Cada tipo tem um visual próprio para a área não parecer quatro caixas
 	iguais: saco de pancada, halteres, esteira e máquina de força.
 ]]
-local function buildTrainingMachines(model: Model, origin: Vector3, palette: Palette)
+--[[
+	CAMPO DE TREINAMENTO: quatro alvos de treino em arco (StationMachines).
+	O TrainingService mede pela config (Local + Radius), não pelas peças: o
+	pedestal de cada alvo tem o mesmo tamanho do raio que conta. Requisito em
+	Renascimentos, decidido no servidor; a placa sai com o texto "bloqueado"
+	e o cliente troca para "liberado" para quem já pode treinar.
+]]
+local function buildTrainingMachines(model: Model, origin: Vector3, _palette: Palette)
 	local area = areaOf(TrainingConfig.Area)
-
-	--[[
-		Academia ao ar livre: um pórtico de vigas de metal sobre o piso de
-		borracha, com anilhas penduradas e um rack de halteres. É a arquitetura
-		que diz "treino" — antes era a palavra TREINO enorme num poste.
-	]]
-	local gymCentre = origin + area.Offset
-	local reach = area.Radius - 6
-	local beamHeight = 15
-	local steel = Color3.fromRGB(70, 76, 92)
-	--[[
-		Só a metade de TRÁS do pórtico (o lado de fora da ilha): a academia
-		ganha um "fundo" de vigas e anilhas sem ficar na frente do portão do
-		Caminho do Poder para quem nasce na praça.
-	]]
-	local outwardDir = Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit
-	local backFrame = CFrame.lookAt(gymCentre, gymCentre - outwardDir) -- olha para a praça
-	for _, side in { -1, 1 } do
-		local post = (backFrame * CFrame.new(side * reach * 0.8, 0, reach * 0.62)).Position
-		block(model, CFrame.new(post + Vector3.new(0, beamHeight / 2, 0)), Vector3.new(1.6, beamHeight, 1.6), steel, Enum.Material.Metal)
-	end
-	block(model, backFrame * CFrame.new(0, beamHeight, reach * 0.62), Vector3.new(reach * 1.6 + 1.6, 1.4, 1.4), steel, Enum.Material.Metal, false)
-	for _, offset in { -0.45, 0, 0.45 } do
-		local plate = makePart(model, {
-			Name = "GymPlate",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(0.8, if offset == 0 then 5 else 3.6, if offset == 0 then 5 else 3.6),
-			CFrame = (backFrame * CFrame.new(offset * reach, beamHeight - 3.2, reach * 0.62)) * CFrame.Angles(0, math.rad(90), 0),
-			Color = if offset == 0 then area.Color else Color3.fromRGB(44, 46, 56),
-			Material = Enum.Material.Metal,
-			CanCollide = false,
-		})
-		plate.Name = "GymPlate"
-	end
-	--[[
-		MARCO DO TREINO: um haltere gigante sobre a viga de trás do pórtico —
-		a silhueta mais óbvia de "academia" que existe. Fica a ~20 studs.
-	]]
-	local barCentre = backFrame * CFrame.new(0, beamHeight + 3.2, reach * 0.62)
-	block(model, barCentre, Vector3.new(12, 1.2, 1.2), Color3.fromRGB(190, 196, 208), Enum.Material.Metal, false).Name = "GymLandmark"
-	for _, side in { -1, 1 } do
-		local weight = makePart(model, {
-			Name = "GymLandmark",
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(2.2, 6, 6),
-			CFrame = barCentre * CFrame.new(side * 5.2, 0, 0),
-			Color = area.Color,
-			Material = Enum.Material.Metal,
-			CanCollide = false,
-		})
-		weight.Name = "GymLandmark"
-	end
-	-- Rack de halteres no fundo (lado de fora, de frente para a praça).
-	local outward = Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit
-	local rackBase = gymCentre + outward * (reach - 1)
-	local rackFrame = CFrame.lookAt(rackBase, rackBase - outward)
-	block(model, rackFrame + Vector3.new(0, 1.6, 0), Vector3.new(14, 0.6, 3), steel, Enum.Material.Metal)
-	for index = -2, 2 do
-		ball(model, (rackFrame * CFrame.new(index * 2.6, 0, 0)).Position + Vector3.new(0, 2.6, 0), 1.6, Color3.fromRGB(40, 42, 50), Enum.Material.Metal, false)
-	end
-
-	local center = LobbyConfig.TrainingCenter == true
+	local spots = {}
 	for _, station in TrainingConfig.Stations do
-		local centre = origin + area.Offset + station.Local
-
-		-- O pad onde se fica (o serviço mede pela config: Local + Radius).
-		-- Centro de treino: tapete escuro com aro na cor do equipamento.
-		local pad
-		if center then
-			disc(model, centre + Vector3.new(0, 0.66, 0), station.Radius, 0.52, station.Color:Lerp(Color3.fromRGB(60, 60, 66), 0.35), Enum.Material.SmoothPlastic, false)
-			pad = disc(model, centre + Vector3.new(0, 0.7, 0), station.Radius - 0.7, 0.6, Color3.fromRGB(52, 54, 64), Enum.Material.Rubber, false)
+		local required = math.max(math.floor(station.RequiredRebirths), 0)
+		local locked, unlocked
+		if required <= 0 then
+			locked = Text.GetFor(nil, "training.free")
+			unlocked = locked
+		elseif required == 1 then
+			locked = Text.GetFor(nil, "training.requiresOne")
+			unlocked = Text.GetFor(nil, "training.unlockedOne")
 		else
-			pad = disc(model, centre + Vector3.new(0, 0.7, 0), station.Radius, 0.6, station.Color, Enum.Material.SmoothPlastic, false)
+			locked = Text.GetFor(nil, "training.requires", { count = tostring(required) })
+			unlocked = Text.GetFor(nil, "training.unlocked", { count = tostring(required) })
 		end
-		pad.Name = "TrainingPad_" .. station.Id
-		pad:SetAttribute("TrainingStation", station.Id)
-
-		if station.Kind == "Bag" then
-			-- Poste, corrente e o saco pendurado.
-			block(model, CFrame.new(centre + Vector3.new(0, 7, 0)), Vector3.new(1.2, 14, 1.2), palette.Rim, Enum.Material.Metal)
-			block(model, CFrame.new(centre + Vector3.new(2.5, 13.5, 0)), Vector3.new(6, 1, 1), palette.Rim, Enum.Material.Metal)
-			local bag = makePart(model, {
-				Name = "Bag",
-				Size = Vector3.new(3.4, 7, 3.4),
-				CFrame = CFrame.new(centre + Vector3.new(4.5, 8, 0)),
-				Color = station.Color,
-				Material = Enum.Material.Fabric,
-				CanCollide = false,
-			})
-			block(model, CFrame.new(centre + Vector3.new(4.5, 12.2, 0)), Vector3.new(0.5, 2, 0.5), palette.Rim, Enum.Material.Metal, false)
-			bag.Name = "Bag"
-		elseif station.Kind == "Weights" then
-			-- Suporte com duas barras e discos.
-			for side = -1, 1, 2 do
-				block(model, CFrame.new(centre + Vector3.new(side * 4, 3, 0)), Vector3.new(1.5, 6, 1.5), palette.Rim, Enum.Material.Metal)
-			end
-			local bar = block(model, CFrame.new(centre + Vector3.new(0, 6.5, 0)), Vector3.new(12, 0.8, 0.8), Color3.fromRGB(190, 195, 205), Enum.Material.Metal, false)
-			bar.Name = "Bar"
-			for side = -1, 1, 2 do
-				local plate = makePart(model, {
-					Name = "Plate",
-					Shape = Enum.PartType.Cylinder,
-					Size = Vector3.new(1.2, 5, 5),
-					CFrame = CFrame.new(centre + Vector3.new(side * 5.2, 6.5, 0)),
-					Color = station.Color,
-					Material = Enum.Material.Metal,
-					CanCollide = false,
-				})
-				plate.Name = "Plate"
-			end
-		elseif station.Kind == "Treadmill" then
-			-- Base, esteira e painel.
-			block(model, CFrame.new(centre + Vector3.new(0, 1.2, 0)), Vector3.new(16, 2.4, 9), palette.Rim, Enum.Material.Metal)
-			local belt = block(model, CFrame.new(centre + Vector3.new(0, 2.5, 0)), Vector3.new(14, 0.6, 7), Color3.fromRGB(40, 44, 58), Enum.Material.Rubber, false)
-			belt.Name = "Belt"
-			block(model, CFrame.new(centre + Vector3.new(-8, 6, 0)), Vector3.new(1, 8, 8), palette.Rim, Enum.Material.Metal)
-			local panel = block(model, CFrame.new(centre + Vector3.new(-8.6, 9, 0)), Vector3.new(0.4, 3, 6), station.Color, Enum.Material.Neon, false)
-			panel.Name = "Panel"
-			if not center then
-				light(panel, station.Color, 14, 1)
-			end
-		else
-			-- Máquina de força: gaiola com barra e pesos.
-			for x = -1, 1, 2 do
-				for z = -1, 1, 2 do
-					block(model, CFrame.new(centre + Vector3.new(x * 6, 8, z * 5)), Vector3.new(1.2, 16, 1.2), palette.Rim, Enum.Material.Metal)
-				end
-			end
-			block(model, CFrame.new(centre + Vector3.new(0, 16, 0)), Vector3.new(13, 1.2, 11), palette.Rim, Enum.Material.Metal, false)
-			local stack = block(model, CFrame.new(centre + Vector3.new(0, 5, -4)), Vector3.new(8, 10, 2.5), station.Color, Enum.Material.Metal, false)
-			stack.Name = "Stack"
-			if not center then
-				light(stack, station.Color, 16, 1)
-			end
-		end
-
-		-- Centro de treino: placa de tier física (StationMachines) no lugar do letreiro.
-		if center then
-			continue
-		end
-		-- Letreiro: o que rende e o que exige, em cima da máquina.
-		local sign = makePart(model, {
-			Name = "TrainingSign_" .. station.Id,
-			Size = Vector3.new(2, 2, 2),
-			CFrame = CFrame.new(centre + Vector3.new(0, 18, 0)),
-			Color = station.Color,
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Transparency = 1,
+		table.insert(spots, {
+			Id = station.Id,
+			Kind = station.Kind,
+			Tier = math.clamp(station.Order, 1, 4),
+			Centre = station.Local,
+			Radius = station.Radius,
+			Name = Text.GetFor(nil, "training." .. station.Id .. ".name"),
+			Rebirths = required,
+			Locked = locked,
+			Unlocked = unlocked,
 		})
-		local label = Text.GetFor(nil, "training.sign", {
-			name = Text.GetFor(nil, "training." .. station.Id .. ".name"),
-			rate = string.format("%.2f", math.min(station.Rate, 99)),
-		})
-		if station.RequiredWins > 0 then
-			label = label .. Text.GetFor(nil, "training.signWins", { wins = NumberFormat.Short(station.RequiredWins) })
-		end
-		-- Detalhe (rendimento e requisito) só de perto: de longe, as próprias
-		-- máquinas já dizem o que são.
-		billboard(sign, label, station.Color, 3, 32, 0.8)
 	end
-
-	if center then
-		local spots = {}
-		for index, station in TrainingConfig.Stations do
-			table.insert(spots, {
-				Id = station.Id,
-				Kind = station.Kind,
-				Tier = math.min(index, 4),
-				Centre = station.Local,
-				Radius = station.Radius,
-				Color = station.Color,
-				Name = Text.GetFor(nil, "training." .. station.Id .. ".name"),
-				Requirement = if station.RequiredWins > 0 then "🏆 " .. NumberFormat.Short(station.RequiredWins) else Text.GetFor(nil, "training.free"),
-			})
-		end
-		local half = (area.FloorSize or Vector2.new(area.Radius * 1.6, area.Radius * 1.2)).Y / 2
-		StationMachines.DecorateTraining(model, CFrame.new(origin + area.Offset), {
-			Title = "🏋️ " .. StationMachines.Upper(Text.GetFor(nil, "station.training.name")),
-			Subtitle = Text.GetFor(nil, "station.training.subtitle"),
-		}, spots, -half, half)
-	end
+	local half = (area.FloorSize or Vector2.new(area.Radius * 1.6, area.Radius * 1.2)).Y / 2
+	StationMachines.BuildTrainingField(model, CFrame.new(origin + area.Offset), {
+		Title = "🏋️ " .. StationMachines.Upper(Text.GetFor(nil, "station.training.name")),
+		Subtitle = Text.GetFor(nil, "station.training.subtitle"),
+	}, spots, -half + 1.2, Vector3.new(0, 0, -half - 90))
 end
 
 --[[
@@ -1266,7 +1122,7 @@ end
 ]]
 local function bannerReplaced(areaId: string): boolean
 	if areaId == "Training" then
-		return LobbyConfig.TrainingCenter == true
+		return true
 	elseif areaId == "Eggs" then
 		return LobbyConfig.IncubationArea == true
 	elseif areaId == "Rebirth" then

@@ -12,8 +12,12 @@
 	- O pagamento é `poderPorClique × Rate × tempo`, então o treino acompanha
 	  todos os multiplicadores do jogador sem ter número próprio: nunca vira
 	  uma segunda economia.
-	- O servidor decide tudo: posição do personagem, requisito de vitórias e
-	  quanto pagar. O cliente só lê o atributo "Training" para mostrar o aviso.
+	- O servidor decide tudo: posição do personagem, requisito de
+	  Renascimentos (TrainingLogic.CanTrain com Stats.Rebirths) e quanto
+	  pagar. O cliente só lê o atributo "Training" para mostrar o aviso.
+	- Quem pisa num alvo bloqueado não ganha nada e recebe UMA vez por
+	  entrada o aviso "Você precisa de X Renascimentos para treinar aqui."
+	  (Notify "TrainingLocked"); sair e voltar avisa de novo.
 	- O ganho é limitado por TrainingConfig.MaxShareOfHoldClick, para que uma
 	  config errada não possa pagar mais que o clique ativo.
 
@@ -27,6 +31,7 @@ local Logger = require(Shared.Utils.Logger)
 local Signal = require(Shared.Utils.Signal)
 local EconomyConfig = require(Shared.Config.EconomyConfig)
 local TrainingConfig = require(Shared.Config.TrainingConfig)
+local TrainingLogic = require(Shared.Formulas.TrainingLogic)
 
 local DataService = require(script.Parent.DataService)
 local CurrencyService = require(script.Parent.CurrencyService)
@@ -34,6 +39,7 @@ local PowerService = require(script.Parent.PowerService)
 local WorldService = require(script.Parent.WorldService)
 local LobbyConfig = require(Shared.Config.LobbyConfig)
 local WallConfig = require(Shared.Config.WallConfig)
+local NetService = require(script.Parent.NetService)
 
 type Station = TrainingConfig.Station
 
@@ -54,15 +60,18 @@ local function rateOf(station: Station): number
 	return math.min(station.Rate, MAX_RATE)
 end
 
--- World position of a station (the lobby area plus its local offset).
-local function stationCentre(station: Station): Vector3?
+-- Centro da área de treino no mundo.
+local function areaCentre(): Vector3?
 	local origin = WorldService.OriginOf(WallConfig.WorldId)
 	local area = LobbyConfig.Areas[TrainingConfig.Area]
 	if not origin or not area then
 		return nil
 	end
-	return origin + area.Offset + station.Local
+	return origin + area.Offset
 end
+
+-- Último alvo bloqueado em que o jogador pisou (para avisar uma vez só).
+local lockedNotice: { [Player]: string } = {}
 
 local function characterState(player: Player): (Vector3?, boolean)
 	local character = player.Character
@@ -79,26 +88,29 @@ local function characterState(player: Player): (Vector3?, boolean)
 	return root.Position, grounded
 end
 
--- The station this player is standing on, if any (and if they qualify for it).
-local function stationFor(player: Player, wins: number): Station?
+-- The station this player is in, if any, and whether they may train there
+-- right now (requirement met and, when required, standing on the ground).
+-- A jump inside a locked station keeps the station, so the notice is not
+-- repeated on every jump.
+local function stationFor(player: Player, rebirths: number): (Station?, boolean, boolean)
 	local position, grounded = characterState(player)
-	if not position then
-		return nil
+	local centre = areaCentre()
+	if not position or not centre then
+		return nil, false, false
 	end
-	if TrainingConfig.RequireGrounded and not grounded then
-		return nil
+	local station = TrainingLogic.StationAt(centre, position)
+	if not station then
+		return nil, false, false
 	end
-	for _, station in TrainingConfig.Stations do
-		local centre = stationCentre(station)
-		if centre and wins >= station.RequiredWins then
-			local flat = (position - centre) * Vector3.new(1, 0, 1)
-			-- Height matters too: standing under or over the pad is not training.
-			if flat.Magnitude <= station.Radius and math.abs(position.Y - centre.Y) <= 14 then
-				return station
-			end
-		end
+	local standing = grounded or not TrainingConfig.RequireGrounded
+	return station, TrainingLogic.CanTrain(station, rebirths), standing
+end
+
+local function clear(player: Player)
+	if player:GetAttribute(ATTRIBUTE) ~= nil then
+		player:SetAttribute(ATTRIBUTE, nil)
+		player:SetAttribute(RATE_ATTRIBUTE, nil)
 	end
-	return nil
 end
 
 local function tick(dt: number)
@@ -107,14 +119,21 @@ local function tick(dt: number)
 		if not data then
 			continue
 		end
-		local station = stationFor(player, data.Currencies.Wins)
-		if not station then
-			if player:GetAttribute(ATTRIBUTE) ~= nil then
-				player:SetAttribute(ATTRIBUTE, nil)
-				player:SetAttribute(RATE_ATTRIBUTE, nil)
+		local station, allowed, standing = stationFor(player, data.Stats.Rebirths)
+		if not station or not allowed or not standing then
+			clear(player)
+			if station and not allowed and standing and lockedNotice[player] ~= station.Id then
+				lockedNotice[player] = station.Id
+				NetService.FireClient("Notify", player, "TrainingLocked", {
+					Station = station.Id,
+					Rebirths = TrainingLogic.Required(station),
+				})
+			elseif not station or allowed then
+				lockedNotice[player] = nil
 			end
 			continue
 		end
+		lockedNotice[player] = nil
 		local info = PowerService.GetInfo(player)
 		if not info then
 			continue
@@ -134,6 +153,7 @@ end
 
 function TrainingService.Init()
 	Players.PlayerRemoving:Connect(function(player)
+		lockedNotice[player] = nil
 		player:SetAttribute(ATTRIBUTE, nil)
 		player:SetAttribute(RATE_ATTRIBUTE, nil)
 	end)

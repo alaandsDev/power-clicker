@@ -59,6 +59,7 @@ local CONTROLLER_ORDER = {
 	"SettingsController",
 	"WorldAmbientController", -- per-world lighting (client only)
 	"StationFxController", -- lobby station machines: core spin, rings, rising arrows, technician
+	"TrainingFieldController", -- training field: padlock per player, dummies react to whoever trains
 	"SpawnCameraController", -- aims the camera along the spawn marker after the server teleport
 	"InteractController", -- world stations (ProximityPrompts) open panels
 	"TutorialController", -- must come after every controller that adds menu buttons

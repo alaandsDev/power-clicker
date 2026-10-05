@@ -7,6 +7,10 @@
 	está numa máquina: "Training" (id da estação) e "TrainingRate" (Power por
 	segundo já com todos os multiplicadores). Este controller só desenha isso —
 	não decide nem calcula nada, e por isso não há o que burlar aqui.
+
+	Também mostra o aviso curto quando o servidor recusa o treino num alvo
+	bloqueado (Notify "TrainingLocked": "Você precisa de X Renascimentos para
+	treinar aqui."). O servidor manda uma vez por entrada no alvo.
 ]]
 
 local Players = game:GetService("Players")
@@ -19,6 +23,8 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local Build = require(script.Parent.Parent.UI.Build)
 local Anim = require(script.Parent.Parent.UI.Anim)
 local HudController = require(script.Parent.HudController)
+local NotificationController = require(script.Parent.NotificationController)
+local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 
 local CHIP_WIDTH = 260
 
@@ -66,6 +72,15 @@ function TrainingController.Init()
 	player:GetAttributeChangedSignal("Training"):Connect(refresh)
 	player:GetAttributeChangedSignal("TrainingRate"):Connect(refresh)
 	refresh()
+
+	ClientNet.On("Notify", function(kind: any, payload: any)
+		if kind ~= "TrainingLocked" or type(payload) ~= "table" then
+			return
+		end
+		local count = math.max(math.floor(tonumber(payload.Rebirths) or 0), 1)
+		local text = if count == 1 then Text.Get("training.lockedOne") else Text.Get("training.locked", { count = tostring(count) })
+		NotificationController.Show(text, "Bad")
+	end)
 end
 
 return TrainingController

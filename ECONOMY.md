@@ -270,6 +270,50 @@ Leitura: o treino tira o jogador casual do "só clicar" sem passar na frente de
 quem clica — quem clica mais ainda ganha mais. **P3 (nenhuma renda passiva)
 resolvido.**
 
+## Campo de Treinamento — requisito em Renascimentos
+
+A academia (saco, halteres, esteira, máquina) virou o **Campo de Treinamento**:
+quatro alvos de treino em arco. Rates **iguais** (0,35 / 0,70 / 1,20 / 1,80
+clique/s equivalente); só o requisito mudou de vitórias para
+**Renascimentos** (`TrainingConfig.RequiredRebirths`, lido de
+`Stats.Rebirths` no servidor; nada novo no save, DataVersion 8).
+
+| Alvo | Rende | Antes | Agora |
+|---|---|---|---|
+| I Boneco de Treino | 0,35 | — | — |
+| II Espantalho Reforçado | 0,70 | 10 vitórias | 1 Renascimento |
+| III Guerreiro de Treino | 1,20 | 60 vitórias | 3 Renascimentos |
+| IV Guardião de Poder | 1,80 | 300 vitórias | 6 Renascimentos |
+
+Escolhido por `python tools/simulate_training.py` (30 min a 12 h; casual,
+ativo, muito ativo, auto click AFK no treino; jogadores com 0/1/3/5/10/20
+renascimentos), comparando 0/1/2/4, 0/1/3/6, 0/2/5/10, o antigo em vitórias e
+"sem treino":
+
+- 0/1/2/4 libera o IV em 47 min para o ativo: os marcos ficam colados.
+- 0/2/5/10: o casual nunca vê o IV em 12 h e o III só em 3,3 h.
+- **0/1/3/6**: II no 1º Renascimento (12–38 min), III em 31 min–1,2 h, IV
+  em 1,6–1,7 h (ativo) / 4,8 h (casual). Cada alvo novo é um marco do Renascer.
+
+Peso do treino no Power (0/1/3/6 → antigo): ativo 5,2% → 5,2% (12 h), casual
+24,4% → 24,7%, muito ativo 0,9% → 0,9%, auto click AFK 30,9% → 31,0%. No longo
+prazo pesa **o mesmo** que antes; continua complementar (o melhor alvo é 20% do
+clique segurado e o teto `MaxShareOfHoldClick` segura qualquer erro de config).
+
+Custo da troca: o começo fica menos generoso para o casual — antes chegava a
+1,20/1,80 com poucas vitórias, agora só depois de renascer. 1º Renascimento do
+casual: 28 min → 38 min (sem treino nenhum seria 41 min). Para o ativo e o muito
+ativo não muda (15 e 12 min). A barreira máxima alcançada não muda em nenhum
+perfil (12 h: ativo estágio 9, casual 7). Subir o Rate do I (0,35 → 0,5 ou 0,7)
+foi testado e **não** recupera esses minutos (36–39 min); por isso as rates
+ficaram como estavam.
+
+Escala: o treino é `poderPorClique × Rate`, então Renascimento × Pet × Aura ×
+Corte multiplicam o treino exatamente como multiplicam o clique — a fração
+fica fixa (3,9% / 7,8% / 13,3% / 20% do clique segurado). Não existe camada
+nova de multiplicador. Ponto já existente, não alterado: Auto Click (4/s) e
+treino somam; parado no IV o AFK ganha +45% sobre o Auto Click.
+
 ## Atualização da Fase G — ovos, pets e renascimento
 
 ### Probabilidades (sem sorte; todas somam 100%)

@@ -184,10 +184,10 @@ câmera, toque e replicação.
 14. A barreira 10 é visivelmente maior e o portal diz "em breve" (e não teleporta).
 14b. A praça final termina num maciço de rocha: não dá para andar além do portal nem cair do fim do mapa.
 
-### Treino
-15. Subir em cada máquina: o aviso "Treinando" aparece com o ganho por segundo.
-16. Pular ou sair do pad para o ganho.
-17. Máquina com requisito de vitórias não paga antes do requisito.
+### Treino (Campo de Treinamento — ver bloco TR)
+15. Ficar no pedestal de cada alvo liberado: o aviso "Treinando" aparece com o ganho por segundo.
+16. Pular ou sair do pedestal para o ganho.
+17. Alvo com requisito de Renascimentos não paga antes do requisito e mostra "Você precisa de X Renascimentos para treinar aqui."
 
 ### Economia
 18. Comprar corte nos pads da entrada do Caminho do Poder (E) — preço e requisito conferem.
@@ -290,4 +290,23 @@ G.7. Ficar parado DENTRO do bloco da barreira quando os 14 s acabam: ela não se
 G.8. Depois de passar, virar e golpear a barreira 1 por trás: não tira HP.
 G.9. Na área 2, resetar o personagem: renasce no spawn olhando a avenida, espada na mão (um `CutBlade` só), progresso igual no painel Progresso. Cronometrar a volta até a barreira 2 (estimado: ~31 s andando + quebrar a 1 de novo).
 G.10. Dois jogadores: um quebra, o outro passa junto; cada um pega o próprio pad uma vez.
-G.11. Ovo gigante (Ovos), haltere (Treino) e halo roxo (Renascer) reconhecíveis de longe; nenhum compete com o portão vindo do spawn. Sem cascata no paredão sul.
+G.11. Ovo gigante (Ovos), Guardião de Poder (Treino) e halo roxo (Renascer) reconhecíveis de longe; nenhum compete com o portão vindo do spawn. Sem cascata no paredão sul.
+
+### Campo de Treinamento (TR) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+Renascimentos no Studio: comando de Debug "Rebirth" (renasce de verdade e completa o Power que faltar); "ResetData" volta a 0.
+TR.1. **0 Renascimento**: no I (Boneco) o chip "Treinando" aparece e o Power sobe; o boneco balança a cada ~0,7 s. II, III e IV mostram cadeado, placa "🔒 REQUER ♻ X RENASCIMENTOS" e energia apagada.
+TR.2. **Insuficiente**: com 0 no II (precisa 1) / com 5 no IV (precisa 6): nenhum ganho, chip some, aparece UMA vez "Você precisa de X Renascimentos para treinar aqui."; ficar parado ou pular dentro não repete; sair e voltar avisa de novo.
+TR.3. **Exato**: com 1 no II, com 3 no III, com 6 no IV: treina. O cadeado some e a placa vira "♻ X RENASCIMENTOS" em verde.
+TR.4. **Acima**: com 10+ todos treinam; o IV dá o maior ganho por segundo (1,80 × poder por clique).
+TR.5. **Troca de alvo**: andar do I para o IV: o chip troca o valor na hora, sem ficar preso no anterior.
+TR.6. **Renascer parado no alvo**: renascer com 5 → 6 em cima do IV: libera no próximo segundo, sem relogar; o cadeado some.
+TR.7. **Respawn**: resetar o personagem em cima de um alvo: o chip some; ao voltar, treina normalmente.
+TR.8. **Rejoin**: sair e entrar: os Renascimentos voltam do save, os cadeados batem com o que o jogador tem (nada do treino é salvo).
+TR.9. **Visual**: I madeira/palha, II espantalho com placas e correntes (placas vibram, faíscas pequenas), III guerreiro de metal com energia que acende no golpe, IV guardião com núcleo que pulsa e runas girando. Placas legíveis de perto e baixas (não escondem o boneco). Nenhum boneco ataca, anda ou tem barra de vida.
+TR.10. **Power ganho**: anotar o Power, ficar 30 s no I com o clique solto: ganho ≈ poder por clique × 0,35 × 30 (II 0,70; III 1,20; IV 1,80).
+TR.11. **Multiplayer** (Test > 2 jogadores): A (0 Renascimento) e B (6+). B treinando no IV: os dois veem o núcleo pulsar; A vê o IV com cadeado (é por jogador), B sem. A no IV não ganha nada e recebe o aviso; B ganha.
+TR.12. **Circulação**: andar entre os quatro pedestais e da entrada até cada placa sem prender; nada do campo na avenida.
+TR.13. **Efeitos reduzidos** ligado: sem faíscas no Espantalho; o resto do movimento continua.
+
+Coberto fora do Studio: `lune run tools/lune/check_training.luau` (config, mundo,
+trava no servidor com jogadores falsos, cliente) e `TrainingLogic.spec`.

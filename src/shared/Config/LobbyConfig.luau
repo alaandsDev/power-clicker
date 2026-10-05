@@ -203,13 +203,8 @@ return {
 	]]
 	RebirthStation = "Altar",
 
-	--[[
-		CENTRO DE TREINAMENTO: true = academia (pórtico, placas de tier, trilho,
-		equipamentos com mais detalhe por tier, pads escuros com aro, sem luz
-		constante); false/nil = como antes. Os equipamentos, o raio e o
-		rendimento continuam no TrainingConfig (o serviço mede por lá).
-	]]
-	TrainingCenter = true,
+	-- (O Campo de Treinamento não tem chave aqui: os alvos, o raio, o
+	-- rendimento e o requisito ficam no TrainingConfig.)
 
 	--[[
 		ÁREA DE INCUBAÇÃO: true = incubadoras abertas em volta dos ovos, placas
