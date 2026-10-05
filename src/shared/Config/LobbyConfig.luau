@@ -65,12 +65,18 @@ local Areas: { [string]: Area } = {
 		NameKey = "area.spawn",
 		Icon = "🏠",
 		Offset = Vector3.new(0, 0, 92),
-		Radius = 26,
+		--[[
+			CENTRAL DO AVENTUREIRO (Missões + Prêmios). O jogador não nasce mais
+			aqui (SpawnPoint foi para a avenida), e a praça 76x26 do antigo
+			spawn tinha ficado vazia, com os quiosques nas pontas. Raio = meia
+			profundidade do piso: a calçada da praça chega até a borda dele.
+		]]
+		Radius = 16,
 		Color = Color3.fromRGB(255, 226, 120),
 		SignHeight = 18,
 		Label = "None",
-		Floor = "Square",
-		FloorSize = Vector2.new(76, 26),
+		Floor = "Adventure",
+		FloorSize = Vector2.new(64, 30),
 	},
 	Eggs = {
 		Id = "Eggs",
@@ -155,8 +161,11 @@ local Stations: { Station } = {
 	{ Panel = "Shop", TextKey = "world.prompt.shop", NameKey = "menu.shop", Icon = "🛒", Area = "Shop", Local = Vector3.new(18, 0, 8), Color = Color3.fromRGB(255, 196, 45) },
 	-- Pets: estação de companheiros (antes: quiosque). Sem Style = quiosque antigo.
 	{ Panel = "Pets", TextKey = "world.prompt.pets", NameKey = "menu.pets", Icon = "🐾", Area = "Pets", Local = Vector3.new(0, 0, 0), Color = Color3.fromRGB(80, 220, 255), Style = "PetLab", Previews = { "Cat", "Fox", "Dog" } },
-	{ Panel = "Quests", TextKey = "world.prompt.quests", NameKey = "menu.quests", Icon = "📜", Area = "Spawn", Local = Vector3.new(-34, 0, 10), Color = Color3.fromRGB(140, 90, 255) },
-	{ Panel = "Rewards", TextKey = "world.prompt.rewards", NameKey = "menu.rewards", Icon = "🎁", Area = "Spawn", Local = Vector3.new(34, 0, 10), Color = Color3.fromRGB(255, 150, 80) },
+	-- Central do Aventureiro: Missões à ESQUERDA de quem chega pela calçada
+	-- (+X) e Prêmios à direita (-X). Antes: quiosques em (-34, 0, 10) e
+	-- (34, 0, 10), nas pontas de uma praça maior, com o toldo para fora dela.
+	{ Panel = "Quests", TextKey = "world.prompt.quests", NameKey = "menu.quests", Icon = "📋", Area = "Spawn", Local = Vector3.new(19, 0, 2), Color = Color3.fromRGB(150, 110, 70), Style = "QuestBoard" },
+	{ Panel = "Rewards", TextKey = "world.prompt.rewards", NameKey = "menu.rewards", Icon = "🎁", Area = "Spawn", Local = Vector3.new(-19, 0, 2), Color = Color3.fromRGB(226, 170, 80), Style = "RewardTotem" },
 }
 
 return {

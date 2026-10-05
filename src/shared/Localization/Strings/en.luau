@@ -40,6 +40,8 @@ return {
 	["station.training.subtitle"] = "GET STRONGER",
 	["training.free"] = "FREE",
 	["station.eggs.name"] = "Eggs",
+	["station.quests.subtitle"] = "COMPLETE CHALLENGES",
+	["station.rewards.subtitle"] = "CLAIM YOUR REWARDS",
 	["station.eggs.subtitle"] = "FIND NEW PETS",
 	["menu.rebirth"] = "Rebirth",
 

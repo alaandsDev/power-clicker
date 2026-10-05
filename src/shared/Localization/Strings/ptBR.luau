@@ -46,6 +46,8 @@ return {
 	["station.training.subtitle"] = "FIQUE MAIS FORTE",
 	["training.free"] = "LIVRE",
 	["station.eggs.name"] = "Ovos",
+	["station.quests.subtitle"] = "COMPLETE DESAFIOS",
+	["station.rewards.subtitle"] = "COLETE SUAS RECOMPENSAS",
 	["station.eggs.subtitle"] = "ENCONTRE NOVOS PETS",
 	["menu.rebirth"] = "Renascer",
 

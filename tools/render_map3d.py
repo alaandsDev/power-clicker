@@ -248,6 +248,13 @@ if __name__ == "__main__":
         render(parts, Cam(centre + np.array([-34, 7, 8]), centre + np.array([4, 4, 2]), fov=66), out_prefix + "_training_7_side.png", f"{label} - Treino: lateral")
         render(parts, Cam(centre + np.array([-6, 52, -30]), centre + np.array([0, 0, 2]), fov=60), out_prefix + "_training_8_aerial.png", f"{label} - Treino: aerea")
     station_views("eggs", "EggHeaderStone", (0, 1), 8, 84)
+    # Missões e Prêmios (área "Spawn" do LobbyConfig, em z = 92): chegando
+    # pela calçada da praça, de frente, 3/4 e aérea.
+    rz = 92
+    render(parts, Cam([4, 6, rz - 44], [0, 6, rz], fov=68), out_prefix + "_rewards_1_arrival.png", f"{label} - Missoes/Premios: chegando")
+    render(parts, Cam([0, 9, rz - 26], [0, 5, rz + 2], fov=72), out_prefix + "_rewards_2_front.png", f"{label} - Missoes/Premios: frente")
+    render(parts, Cam([30, 9, rz - 20], [-4, 4, rz + 2], fov=68), out_prefix + "_rewards_3_side.png", f"{label} - Missoes/Premios: 3/4")
+    render(parts, Cam([0, 62, rz - 30], [0, 0, rz], fov=62), out_prefix + "_rewards_4_aerial.png", f"{label} - Missoes/Premios: aerea")
     # Circulação lateral: na altura do olho, cruzando a praça entre as áreas.
     render(parts, Cam([-30, 6, 70], [60, 4, -40], fov=72), out_prefix + "_circulation.png", f"{label} - circulacao lateral (altura do jogador)")
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")

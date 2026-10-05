@@ -211,6 +211,14 @@ local function clearOfLayout(x: number, z: number, margin: number): boolean
 		if dx * dx + dz * dz < (area.Radius + margin) ^ 2 then
 			return false
 		end
+		-- Piso retangular passa do círculo (Missões/Prêmios: 64x30 com raio
+		-- 16): sem isto, árvores nasciam nos cantos do piso, em cima das
+		-- estações e na frente dos letreiros.
+		-- (+4: a copa de uma árvore tem até ~6,5 studs de raio.)
+		local floor = area.FloorSize
+		if floor and math.abs(dx) < floor.X / 2 + margin + 4 and math.abs(dz) < floor.Y / 2 + margin + 4 then
+			return false
+		end
 	end
 	if x > 0 and math.abs(z) < LobbyConfig.Path.Width / 2 + margin + 6 then
 		return false
@@ -653,6 +661,16 @@ local function buildStations(model: Model, origin: Vector3, palette: Palette)
 				Previews = previews,
 			})
 			prompt(terminal, station.Panel, station.TextKey, station.NameKey)
+			continue
+		elseif station.Style == "QuestBoard" or station.Style == "RewardTotem" then
+			-- Central do Aventureiro: quadro de missões / totem de prêmios,
+			-- com o mesmo prompt de antes (abre o painel atual).
+			local build = if station.Style == "QuestBoard" then StationMachines.BuildQuestBoard else StationMachines.BuildRewardTotem
+			local _, anchor = build(model, CFrame.new(base) * yaw, station.Panel, {
+				Title = string.format("%s %s", station.Icon, StationMachines.Upper(Text.GetFor(nil, station.NameKey))),
+				Subtitle = Text.GetFor(nil, "station." .. string.lower(station.Panel) .. ".subtitle"),
+			})
+			prompt(anchor, station.Panel, station.TextKey, station.NameKey)
 			continue
 		end
 		local market = station.Area == "Shop"
@@ -1147,6 +1165,23 @@ local function buildAreas(model: Model, origin: Vector3, palette: Palette)
 			-- adro fica por cima, sem cintilação de faces na mesma altura.
 			roundedRect(model, centre + Vector3.new(0, 0.26, 0), size + Vector2.new(2, 2), 5, 0.5, area.Color:Lerp(Color3.fromRGB(120, 116, 110), 0.55), Enum.Material.SmoothPlastic)
 			roundedRect(model, centre + Vector3.new(0, 0.34, 0), size, 4, 0.5, palette.Pad:Lerp(area.Color, 0.06), Enum.Material.Slate)
+		elseif area.Floor == "Adventure" then
+			-- Central do Aventureiro: pedra quente com friso dourado; o centro
+			-- (medalhão, caminhos e placa de direção) é do StationMachines.
+			roundedRect(model, centre + Vector3.new(0, 0.26, 0), size + Vector2.new(2, 2), 5, 0.5, Color3.fromRGB(176, 140, 76), Enum.Material.SmoothPlastic)
+			roundedRect(model, centre + Vector3.new(0, 0.34, 0), size, 4, 0.5, Color3.fromRGB(176, 168, 152), Enum.Material.Slate)
+			local plazaStations = {}
+			for _, station in LobbyConfig.Stations do
+				if station.Area == area.Id then
+					table.insert(plazaStations, {
+						Local = station.Local,
+						Color = station.Color,
+						Label = string.format("%s %s", station.Icon, StationMachines.Upper(Text.GetFor(nil, station.NameKey))),
+					})
+				end
+			end
+			local front = CFrame.lookAt(centre, Vector3.new(origin.X, centre.Y, origin.Z))
+			StationMachines.DecorateAdventurePlaza(model, front, plazaStations, size.Y)
 		elseif area.Floor == "Deck" then
 			-- Deck de madeira um degrau acima da grama.
 			roundedRect(model, centre + Vector3.new(0, 0.6, 0), size, 3, 1, Color3.fromRGB(176, 136, 94), Enum.Material.WoodPlanks)

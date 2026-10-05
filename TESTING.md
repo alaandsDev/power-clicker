@@ -310,3 +310,17 @@ TR.13. **Efeitos reduzidos** ligado: sem faíscas no Espantalho; o resto do movi
 
 Coberto fora do Studio: `lune run tools/lune/check_training.luau` (config, mundo,
 trava no servidor com jogadores falsos, cliente) e `TrainingLogic.spec`.
+
+### Central do Aventureiro — Missões e Prêmios (RW) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+A área fica ao sul da praça (z ≈ 92), no fim da calçada que sai da praça.
+RW.1. Chegando pela calçada: a calçada encosta no piso (sem faixa de grama no meio); Missões à ESQUERDA, Prêmios à DIREITA, medalhão dourado no centro e a placa de direção no fundo.
+RW.2. Nenhuma árvore, pedra ou copa sobre o piso; nada (telhado, arco, presente) passando da borda.
+RW.3. Placas "📋 MISSÕES / COMPLETE DESAFIOS" e "🎁 PRÊMIOS / COLETE SUAS RECOMPENSAS" inteiras, legíveis de perto, sem nada na frente; nenhum letreiro flutuante antigo ("Missões"/"Prêmios" em BillboardGui) sobrando.
+RW.4. Em frente ao quadro: "E — Ver missões" abre o painel de Missões de sempre (mesmo progresso, mesmas missões).
+RW.5. Em frente ao baú: "E — Pegar prêmios" abre o painel Prêmios de sempre (recompensa diária + código); resgatar funciona igual a antes.
+RW.6. Andar: entrar → quadro → centro → baú → sair, sem prender; com pet equipado, o pet segue sem ficar preso no caixote, no pedestal ou nos pilares.
+RW.7. De longe (spawn, praça e avenida) a área não compete com o portão do Caminho do Poder.
+RW.8. Os chips/badges de Missões no HUD continuam iguais (nada novo na tela).
+
+Coberto fora do Studio: `lune run tools/lune/check_rewards_area.luau`.
+
