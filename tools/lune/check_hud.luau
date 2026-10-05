@@ -148,6 +148,14 @@ local function run(touch: boolean, CW: number, CH: number): ({ string }, { strin
 	E.stubs.SoundService = anyStub()
 	E.stubs.GuiService = anyStub()
 	E.stubs.MarketplaceService = anyStub()
+	-- Estações-máquina (StationFxController): sem peças marcadas no HUD.
+	E.stubs.CollectionService = { GetTagged = function()
+		return {}
+	end, GetInstanceAddedSignal = function()
+		return Sig
+	end, GetInstanceRemovedSignal = function()
+		return Sig
+	end }
 	E.stubs.Lighting = roblox.Instance.new("Lighting")
 	E.stubs.TextService = { GetTextSize = function(_, text, size)
 		return V2.new(#text * size * 0.5, size)

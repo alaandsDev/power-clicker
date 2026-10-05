@@ -58,6 +58,7 @@ local CONTROLLER_ORDER = {
 	"VipController",
 	"SettingsController",
 	"WorldAmbientController", -- per-world lighting (client only)
+	"StationFxController", -- lobby station machines: core spin, rings, rising arrows, technician
 	"SpawnCameraController", -- aims the camera along the spawn marker after the server teleport
 	"InteractController", -- world stations (ProximityPrompts) open panels
 	"TutorialController", -- must come after every controller that adds menu buttons

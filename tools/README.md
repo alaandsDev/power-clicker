@@ -41,6 +41,7 @@ lune run tools/lune/check_cuts.luau     # vitrine dos Cortes + camada de corte d
 lune run tools/lune/check_swing.luau    # postura de combate + golpe da espada a cada hit, sincronizado com o corte
 lune run tools/lune/check_fx.luau       # efeitos de combate: impacto, rachaduras, quebra, câmera, números
 lune run tools/lune/check_polish.luau   # sem luz constante no personagem; pets menores em formação atrás
+lune run tools/lune/check_station.luau  # protótipo: estação de Melhorias como máquina (orçamento, posição, prompt, movimento)
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
@@ -120,6 +121,16 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   "Efeitos reduzidos"; golpe de outro jogador sem impacto na minha barreira;
   spam 9 hits/s (30 s + 6 barreiras x Cortes 1/2/4/8, ligado e reduzido) sem
   acumular instâncias, emissores ou luzes; respawn e troca de espada.
+- **check_station** — PROTÓTIPO da estação de Melhorias como máquina
+  (`World/StationMachines` + `StationFxController`): mesmo prompt de antes
+  (um só, `OpenPanel = "Upgrades"`); orçamento (≤ 130 peças, nenhuma luz,
+  nenhum BillboardGui, partículas poucas); escala 2–3x o avatar; placas
+  físicas viradas para a praça com distância de leitura limitada; pegada
+  dentro do piso da área, fora das calçadas/caminho/spawn e longe da Loja;
+  plataforma de interação na frente e ao alcance; reverter pelo LobbyConfig
+  (sem `Style`) volta o quiosque; no cliente núcleo/anéis giram, setas
+  sobem, técnico olha para quem chega, nada roda longe nem é criado.
+  `render_map3d.py` gera `_upgrades_{far,mid,near}.png`.
 - **check_polish** — nenhuma luz constante presa ao personagem (auras de
   poder e cosméticas, pets); espada parada contida (luz baixa, rastro
   desligado, skins neon com fio de energia); pets ~25% menores e em formação

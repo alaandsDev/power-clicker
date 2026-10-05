@@ -49,6 +49,13 @@ export type Station = {
 	Area: string, -- em qual área o quiosque fica
 	Local: Vector3, -- deslocamento dentro da área
 	Color: Color3,
+	--[[
+		PROTÓTIPO VISUAL: "Machine" troca o quiosque (balcão + toldo + letreiro)
+		por uma estação-máquina temática (World/StationMachines). Para voltar
+		ao quiosque antigo, apague Style/Npc da entrada e devolva o Local.
+	]]
+	Style: string?,
+	Npc: boolean?, -- técnico ao lado da máquina (só com Style = "Machine")
 }
 
 local Areas: { [string]: Area } = {
@@ -141,7 +148,9 @@ local Areas: { [string]: Area } = {
 
 -- Quiosques: cada um pertence a uma área e abre um painel.
 local Stations: { Station } = {
-	{ Panel = "Upgrades", TextKey = "world.prompt.upgrades", NameKey = "menu.upgrades", Icon = "⬆️", Area = "Shop", Local = Vector3.new(-18, 0, -8), Color = Color3.fromRGB(70, 210, 110) },
+	-- Melhorias: protótipo da ESTAÇÃO DE PODER (antes: quiosque em Local = (-18, 0, -8);
+	-- 4 studs para dentro da área para a plataforma de interação ficar no piso).
+	{ Panel = "Upgrades", TextKey = "world.prompt.upgrades", NameKey = "menu.upgrades", Icon = "⬆️", Area = "Shop", Local = Vector3.new(-14, 0, -8), Color = Color3.fromRGB(70, 210, 110), Style = "Machine", Npc = true },
 	{ Panel = "Shop", TextKey = "world.prompt.shop", NameKey = "menu.shop", Icon = "🛒", Area = "Shop", Local = Vector3.new(18, 0, 8), Color = Color3.fromRGB(255, 196, 45) },
 	{ Panel = "Pets", TextKey = "world.prompt.pets", NameKey = "menu.pets", Icon = "🐾", Area = "Pets", Local = Vector3.new(0, 0, 0), Color = Color3.fromRGB(80, 220, 255) },
 	{ Panel = "Quests", TextKey = "world.prompt.quests", NameKey = "menu.quests", Icon = "📜", Area = "Spawn", Local = Vector3.new(-34, 0, 10), Color = Color3.fromRGB(140, 90, 255) },

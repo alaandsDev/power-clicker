@@ -30,6 +30,7 @@ return {
 	["goal.worldProgress"] = "🌍 {name}: {have} / {need} rebirths",
 
 	["menu.upgrades"] = "Upgrades",
+	["station.upgrades.subtitle"] = "BOOST YOUR POWER",
 	["menu.rebirth"] = "Rebirth",
 
 	["upgrades.title"] = "{icon} Upgrades",

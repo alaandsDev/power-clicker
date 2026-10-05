@@ -36,6 +36,7 @@ return {
 
 	-- Menu
 	["menu.upgrades"] = "Melhorias",
+	["station.upgrades.subtitle"] = "AUMENTE SEU PODER",
 	["menu.rebirth"] = "Renascer",
 
 	-- Painel de melhorias

@@ -39,6 +39,7 @@ local WorldRules = require(Shared.Formulas.WorldRules)
 local WinPadRules = require(Shared.Formulas.WinPadRules)
 local NumberFormat = require(Shared.Utils.NumberFormat)
 local Text = require(Shared.Localization)
+local StationMachines = require(script.Parent.StationMachines)
 
 type WorldData = Types.WorldData
 type ZoneData = Types.ZoneData
@@ -587,6 +588,16 @@ local function buildStations(model: Model, origin: Vector3, palette: Palette)
 		local base = origin + areaOf(station.Area).Offset + station.Local
 		local facing = CFrame.lookAt(base, origin + Vector3.new(0, 0, 0)) -- always faces the plaza
 		local yaw = facing - facing.Position
+		if station.Style == "Machine" then
+			-- Protótipo: estação-máquina; o prompt é o mesmo, no console dela.
+			local _, console = StationMachines.BuildUpgrades(model, CFrame.new(base) * yaw, station.Panel, {
+				Title = string.format("%s %s", station.Icon, string.upper(Text.GetFor(nil, station.NameKey))),
+				Subtitle = Text.GetFor(nil, "station.upgrades.subtitle"),
+				Npc = station.Npc == true,
+			})
+			prompt(console, station.Panel, station.TextKey, station.NameKey)
+			continue
+		end
 		local market = station.Area == "Shop"
 		local counter = block(model, CFrame.new(base + Vector3.new(0, 2.5, 0)) * yaw, Vector3.new(12, 5, 5), palette.Rim, Enum.Material.WoodPlanks)
 		counter.Name = "Station_" .. station.Panel

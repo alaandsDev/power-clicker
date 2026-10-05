@@ -195,4 +195,15 @@ if __name__ == "__main__":
     render(parts, Cam([-105, 95, 105], [70, 0, -25], fov=62), out_prefix + "_overview.png", f"{label} - visao geral do lobby")
     render(parts, Cam([60, 12, 10], [200, 14, 0], fov=70), out_prefix + "_gate.png", f"{label} - chegando na entrada do Caminho")
     render(parts, None, out_prefix + "_top.png", f"{label} - planta (vista de cima)", show_text=False, ortho=(60, 0, 2.0))
-    print("renders em " + out_prefix + "_{spawn,overview,gate,top}.png")
+    # Estação de Melhorias (protótipo "máquina"): longe / média / perto, de
+    # quem chega pela praça (a máquina olha para a origem).
+    machine = next((p for p in parts if p["n"] == "Station_Upgrades"), None)
+    if machine:
+        mx, _, mz = machine["p"]
+        d = np.array([-mx, 0, -mz], float); d /= np.linalg.norm(d)
+        side = np.array([d[2], 0, -d[0]])
+        target = np.array([mx, 8, mz])
+        for name, dist, height, fov in (("far", 70, 9, 55), ("mid", 32, 7, 60), ("near", 15, 6.5, 70)):
+            eye = target + d * dist + side * dist * 0.18 + np.array([0, height - 8, 0])
+            render(parts, Cam(eye, target - np.array([0, 1.5 if name == "near" else 0, 0]), fov=fov), out_prefix + f"_upgrades_{name}.png", f"{label} - Melhorias ({name}: {dist} studs)")
+    print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*}.png")
