@@ -51,6 +51,9 @@ StationMachines.TAG_PULSE = "StationPulse" -- seta de energia (atributo Order 1.
 StationMachines.TAG_CORE = "StationCore" -- núcleo que pulsa (Transparency)
 StationMachines.TAG_NPC = "StationNpc" -- Model do técnico (respira, olha para quem chega)
 StationMachines.TAG_SCREEN = "StationScreen" -- tela do console (barras sobem; reage a quem chega)
+StationMachines.TAG_PARTICLES = "StationParticles" -- emissor desligado com "Efeitos reduzidos"
+StationMachines.TAG_CUT_TINT = "StationCutTint" -- peça/emissor na cor do Corte do jogador local
+StationMachines.TAG_FLASH = "StationFlash" -- de tempos em tempos um clarão curto (mini-impacto)
 
 export type Theme = {
 	Stone: Color3,
@@ -74,6 +77,18 @@ StationMachines.Themes = {
 		Energy = Color3.fromRGB(86, 196, 236),
 		Crystal = Color3.fromRGB(120, 200, 232),
 		Core = Color3.fromRGB(130, 228, 255),
+	} :: Theme,
+	-- Cortes: forja de energia vermelho/laranja (o slash pega a cor do Corte
+	-- do jogador no cliente).
+	Cuts = {
+		Stone = Color3.fromRGB(104, 104, 112),
+		StoneDark = Color3.fromRGB(70, 70, 80),
+		Metal = Color3.fromRGB(44, 44, 52),
+		Plate = Color3.fromRGB(62, 60, 66),
+		Gold = Color3.fromRGB(188, 152, 86),
+		Energy = Color3.fromRGB(255, 122, 52),
+		Crystal = Color3.fromRGB(255, 150, 90),
+		Core = Color3.fromRGB(255, 176, 96),
 	} :: Theme,
 }
 
@@ -211,7 +226,7 @@ local function ring(kit: Kit, name: string, centre: CFrame, radius: number, thic
 	return model
 end
 
-local function emitter(parent: BasePart, name: string, color: Color3, rate: number, speed: NumberRange, lifetime: NumberRange, size: number, spread: number, acceleration: Vector3)
+local function emitter(parent: BasePart, name: string, color: Color3, rate: number, speed: NumberRange, lifetime: NumberRange, size: number, spread: number, acceleration: Vector3): ParticleEmitter
 	local attachment = Instance.new("Attachment")
 	attachment.Name = name
 	attachment.Parent = parent
@@ -230,6 +245,9 @@ local function emitter(parent: BasePart, name: string, color: Color3, rate: numb
 	particles.Acceleration = acceleration
 	particles.LockedToPart = false
 	particles.Parent = attachment
+	-- "Efeitos reduzidos" desliga as partículas das estações (cliente).
+	particles:AddTag(StationMachines.TAG_PARTICLES)
+	return particles
 end
 
 -- ── Componentes (mesma linguagem; cada estação monta a sua silhueta) ────────
@@ -523,6 +541,170 @@ function StationMachines.BuildUpgrades(parent: Instance, base: CFrame, panel: st
 	model:SetAttribute("Prototype", "StationMachine")
 	model.Parent = parent
 	return model, console
+end
+
+-- ── Componentes compartilhados pelas próximas estações ──────────────────────
+
+--[[
+	Nameplate: o mesmo FORMATO de placa de Melhorias (moldura dourada, título
+	grande, subtítulo pequeno, SurfaceGui de perto) sem precisar da verga —
+	cada estação decide onde a placa fica na própria arquitetura.
+	`at` = centro do título, olhando para -Z (frente).
+]]
+local function nameplate(kit: Kit, at: CFrame, title: string, subtitle: string, width: number)
+	local theme = kit.Theme
+	piece(kit, "SignFrame", Vector3.new(width + 0.4, 1.45, 0.14), at * CFrame.new(0, 0, 0.1), theme.Gold, Enum.Material.Metal, false)
+	plate(kit, "SignTitle", Vector3.new(width, 1.15, 0.18), at, title, Color3.fromRGB(242, 247, 255), 110)
+	plate(kit, "SignSubtitle", Vector3.new(width * 0.55, 0.44, 0.16), at * CFrame.new(0, -1.05, 0.02), subtitle, theme.Crystal, 55)
+end
+
+-- Bloco inclinado entre dois pontos no plano XY local (braço, escora).
+local function strut(kit: Kit, name: string, from: Vector3, to: Vector3, width: number, depth: number, color: Color3, material: Enum.Material, collide: boolean?): Part
+	local delta = to - from
+	local angle = math.atan2(-delta.X, delta.Y)
+	return piece(kit, name, Vector3.new(width, delta.Magnitude, depth), CFrame.new((from + to) / 2) * CFrame.Angles(0, 0, angle), color, material, collide)
+end
+
+export type PlateOptions = { Title: string, Subtitle: string }
+
+-- ── Forja de Cortes ─────────────────────────────────────────────────────────
+
+--[[
+	FORJA DE CORTES. Não é loja nem espada: é onde o PODER do corte é forjado.
+	Silhueta horizontal e pesada (bem diferente das colunas de Melhorias):
+	base de forja larga com bisel até o piso, uma lareira no meio com a
+	bigorna tecnológica, dois BRAÇOS CONDUTORES inclinados que apontam para um
+	SLASH de energia suspenso (o corte, em arco) na frente de uma placa de
+	fundo com a "fenda", fragmentos orbitando, canais de energia levando
+	energia dos braços para o centro e um trilho no chão que liga a forja aos
+	pads da galeria de Cortes.
+
+	Interação: NENHUMA nova. Os Cortes continuam sendo comprados nos pads da
+	galeria (um prompt por Corte, CutId) — a forja é o fundo/marco dela.
+	O slash, a bigorna e as faíscas pegam a cor do Corte do jogador local
+	(cliente, StationFxController + CutVisuals); a estrutura fica laranja.
+	Referência local: -Z = frente (para a avenida).
+]]
+function StationMachines.BuildCutForge(parent: Instance, base: CFrame, options: PlateOptions, galleryXs: { number }, railZ: number): Model
+	local model = Instance.new("Model")
+	model.Name = "Station_Cuts_Machine"
+	local theme = StationMachines.Themes.Cuts
+	local kit: Kit = { Parent = model, Base = base, Theme = theme, Count = 0 }
+	local Slate, Metal, Neon = Enum.Material.Slate, Enum.Material.Metal, Enum.Material.Neon
+
+	-- Base de forja: plataforma larga + bisel até o piso + lareira central.
+	piece(kit, "ForgeBase", Vector3.new(24, 1.2, 12), CFrame.new(0, 0.6, 0), theme.StoneDark, Slate, true)
+	wedge(kit, "ForgeBevel", Vector3.new(24, 0.8, 1.6), CFrame.new(0, 0.8, -6.8), theme.StoneDark, Slate)
+	piece(kit, "ForgeTrim", Vector3.new(24.2, 0.16, 0.22), CFrame.new(0, 1.22, -6.0), theme.Gold, Metal, false)
+	piece(kit, "Hearth", Vector3.new(10, 0.8, 7), CFrame.new(0, 1.6, 0.5), theme.Stone, Slate, true)
+	-- Canais de energia dos pés dos braços até a lareira (a onda vai para dentro).
+	for _, side in { -1, 1 } do
+		for order = 1, 3 do
+			local piece_ = piece(kit, "ForgeConduit", Vector3.new(1.55, 0.08, 0.42), CFrame.new(side * (9.6 - order * 1.7), 1.24, -1.6), theme.Energy, Neon, false, 0.6)
+			piece_:SetAttribute("Order", order)
+			piece_:AddTag(StationMachines.TAG_PULSE)
+		end
+	end
+
+	-- Braços condutores: pé de metal, braço inclinado com faixas douradas e
+	-- filete de energia, cabeça emissora e cristal apontando para o slash.
+	local slashCentre = Vector3.new(0, 7.8, 0.4)
+	for _, side in { -1, 1 } do
+		local foot = Vector3.new(side * 10, 4.2, 1.0)
+		local tip = Vector3.new(side * 5.4, 14.4, 1.0)
+		piece(kit, "ArmFoot", Vector3.new(4, 3, 4.4), CFrame.new(side * 10, 2.7, 1.0), theme.Metal, Metal, true)
+		piece(kit, "ArmFootTrim", Vector3.new(4.2, 0.3, 4.6), CFrame.new(side * 10, 4.3, 1.0), theme.Gold, Metal, false)
+		-- Aberturas de ventilação na frente do pé (brilho baixo da forja).
+		for vent = 0, 1 do
+			piece(kit, "FootVent", Vector3.new(2.8, 0.22, 0.12), CFrame.new(side * 10, 2.3 + vent * 0.7, -1.23), theme.Energy, Neon, false, 0.55)
+		end
+		-- Cabo do pé do braço até a lateral da fenda.
+		tube(kit, "ForgeCable", Vector3.new(side * 8.6, 2.0, 2.6), Vector3.new(side * 5.4, 3.0, 3.9), 0.4, theme.Metal)
+		local arm = strut(kit, "ConductorArm", foot, tip, 2.2, 2.6, theme.Stone, Slate, true)
+		local armLocal = base:ToObjectSpace(arm.CFrame) -- o braço no referencial da forja
+		for _, along in { -3, 3 } do
+			piece(kit, "ArmBand", Vector3.new(2.5, 0.35, 2.9), armLocal * CFrame.new(0, along, 0), theme.Gold, Metal, false)
+		end
+		piece(kit, "ArmEnergy", Vector3.new(0.3, 8.6, 0.3), armLocal * CFrame.new(-side * 1.12, 0, -0.7), theme.Energy, Neon, false, 0.45)
+		piece(kit, "EmitterHead", Vector3.new(2.6, 2.0, 3.0), armLocal * CFrame.new(0, (tip - foot).Magnitude / 2, 0), theme.Metal, Metal, false)
+		local aim = (slashCentre - tip).Unit
+		crystal(kit, "EmitterCrystal", tip + aim * 1.6, 1.6, Vector3.new(0, 0, side * 55), theme.Crystal)
+	end
+
+	-- Placa de fundo com a "fenda" e a cornija com a placa CORTES.
+	piece(kit, "ForgeBack", Vector3.new(9, 10.4, 1.2), CFrame.new(0, 7.2, 4.2), theme.Plate, Enum.Material.DiamondPlate, true)
+	for _, side in { -1, 1 } do
+		piece(kit, "BackPilaster", Vector3.new(1, 10.4, 1.6), CFrame.new(side * 4.9, 7.2, 4.0), theme.StoneDark, Slate, true)
+	end
+	-- Costelas e contrafortes: a placa de fundo ganha relevo e corpo.
+	for _, y in { 4.4, 10.0 } do
+		piece(kit, "BackRib", Vector3.new(8.8, 0.34, 0.26), CFrame.new(0, y, 3.55), theme.Gold, Metal, false)
+	end
+	for _, side in { -1, 1 } do
+		wedge(kit, "BackButtress", Vector3.new(1.4, 6, 1.2), CFrame.new(side * 4.9, 4.2, 5.4) * CFrame.Angles(0, math.rad(180), 0), theme.StoneDark, Slate)
+	end
+	piece(kit, "Rift", Vector3.new(0.9, 8.6, 0.1), CFrame.new(0, 7.6, 3.55) * CFrame.Angles(0, 0, math.rad(-34)), Color3.fromRGB(20, 14, 18), Enum.Material.SmoothPlastic, false)
+	piece(kit, "Cornice", Vector3.new(12, 1.7, 2.8), CFrame.new(0, 13.25, 4.0), theme.Stone, Slate, true)
+	nameplate(kit, CFrame.new(0, 13.35, 2.48), options.Title, options.Subtitle, 8.4)
+	-- Coroa de estilhaços (silhueta de longe: "chama/fragmento", não ⬆).
+	crystal(kit, "CrownShard", Vector3.new(0, 15.3, 4.0), 2.6, Vector3.new(0, 0, 0), theme.Crystal)
+	crystal(kit, "CrownShard", Vector3.new(-1.3, 14.7, 4.1), 1.6, Vector3.new(0, 10, 24), theme.Crystal)
+	crystal(kit, "CrownShard", Vector3.new(1.3, 14.7, 4.1), 1.6, Vector3.new(0, -10, -24), theme.Crystal)
+
+	-- O SLASH: arco de energia em três trechos + véu de brilho atrás, que
+	-- pulsa e, de tempos em tempos, dá um clarão curto (mini-impacto).
+	local slashFrame = CFrame.new(slashCentre)
+	local slashParts = {
+		piece(kit, "CutSlash", Vector3.new(0.34, 5.2, 0.2), slashFrame * CFrame.Angles(0, 0, math.rad(-32)), theme.Core, Neon, false, 0.05),
+		piece(kit, "CutSlash", Vector3.new(0.24, 3.2, 0.18), slashFrame * CFrame.Angles(0, 0, math.rad(-32)) * CFrame.new(0, 3.6, 0) * CFrame.Angles(0, 0, math.rad(-16)), theme.Core, Neon, false, 0.15),
+		piece(kit, "CutSlash", Vector3.new(0.24, 3.2, 0.18), slashFrame * CFrame.Angles(0, 0, math.rad(-32)) * CFrame.new(0, -3.6, 0) * CFrame.Angles(0, 0, math.rad(16)), theme.Core, Neon, false, 0.15),
+	}
+	local veil = piece(kit, "CutSlashVeil", Vector3.new(1.2, 9.4, 0.1), slashFrame * CFrame.new(0, 0, 0.25) * CFrame.Angles(0, 0, math.rad(-32)), theme.Core, Neon, false, 0.8)
+	for _, part in slashParts do
+		part:AddTag(StationMachines.TAG_CUT_TINT)
+		part:AddTag(StationMachines.TAG_CORE)
+	end
+	veil:AddTag(StationMachines.TAG_CUT_TINT)
+	veil:AddTag(StationMachines.TAG_FLASH)
+	local sparks = emitter(slashParts[1], "ForgeSparks", theme.Core, 5, NumberRange.new(2, 4), NumberRange.new(0.5, 0.9), 0.16, 180, Vector3.new(0, -9, 0))
+	sparks:AddTag(StationMachines.TAG_CUT_TINT)
+	-- Fragmentos orbitando o slash (devagar).
+	local fragments = Instance.new("Model")
+	fragments.Name = "SlashFragments"
+	for index = 0, 3 do
+		local angle = index * math.pi / 2 + 0.4
+		local at = slashCentre + Vector3.new(math.cos(angle) * 3.4, math.sin(angle) * 3.4, -0.2)
+		piece(kit, "Fragment", Vector3.new(0.45, 0.9, 0.45), CFrame.new(at) * CFrame.Angles(math.rad(25), math.rad(45), math.rad(index * 40)), theme.Crystal, Enum.Material.Glass, false, 0.2, nil, fragments)
+	end
+	fragments:SetAttribute("SpinSpeed", 14)
+	fragments:SetAttribute("Centre", (base * slashFrame).Position)
+	fragments:SetAttribute("Axis", (base * slashFrame).LookVector)
+	atomic(fragments)
+	fragments.Parent = model
+	fragments:AddTag(StationMachines.TAG_RING)
+
+	-- Bigorna tecnológica (mesa de forja) na frente da lareira.
+	local anvilZ = -2.2
+	piece(kit, "AnvilFoot", Vector3.new(2.6, 0.6, 1.8), CFrame.new(0, 2.3, anvilZ), theme.Metal, Metal, true)
+	piece(kit, "AnvilWaist", Vector3.new(1.3, 1.2, 1.1), CFrame.new(0, 3.2, anvilZ), theme.Metal, Metal, true)
+	piece(kit, "AnvilTop", Vector3.new(3.8, 0.8, 1.7), CFrame.new(0, 4.2, anvilZ), theme.Plate, Metal, true)
+	wedge(kit, "AnvilHorn", Vector3.new(1.7, 0.8, 1.6), CFrame.new(-2.7, 4.2, anvilZ) * CFrame.Angles(0, math.rad(90), 0), theme.Plate, Metal)
+	piece(kit, "AnvilTrim", Vector3.new(3.9, 0.14, 0.14), CFrame.new(0, 3.84, anvilZ - 0.86), theme.Gold, Metal, false)
+	local inlay = piece(kit, "AnvilInlay", Vector3.new(3.2, 0.06, 0.26), CFrame.new(0, 4.63, anvilZ), theme.Core, Neon, false, 0.2)
+	inlay:AddTag(StationMachines.TAG_CUT_TINT)
+
+	-- Trilho de energia no chão ligando a forja à galeria (um "tap" por pad).
+	local railLength = 0
+	for _, x in galleryXs do
+		railLength = math.max(railLength, math.abs(x) * 2 + 4)
+		piece(kit, "RailTap", Vector3.new(1.4, 0.18, 1.4), CFrame.new(x, 0.46, railZ), theme.Gold, Metal, false)
+	end
+	piece(kit, "ForgeRail", Vector3.new(railLength, 0.06, 0.36), CFrame.new(0, 0.44, railZ), theme.Energy, Neon, false, 0.6)
+
+	model:SetAttribute("PartCount", kit.Count)
+	model:SetAttribute("Prototype", "StationMachine")
+	model.Parent = parent
+	return model
 end
 
 return StationMachines

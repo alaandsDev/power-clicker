@@ -1117,6 +1117,25 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 			proximity.Parent = pad
 		end
 	end
+
+	-- Forja de Cortes: o marco da galeria (sem prompt; os pads continuam sendo
+	-- a compra). O trilho no chão passa pelas bordas de fora da fileira norte.
+	local forge = LobbyConfig.CutForge
+	if forge then
+		local at = origin + forge.Position
+		local frame = CFrame.lookAt(at, at + forge.Facing)
+		local xs = {}
+		for column = 0, columns - 1 do
+			local worldX = area.Offset.X + (column - (columns - 1) / 2) * layout.Spacing.X
+			table.insert(xs, frame:PointToObjectSpace(origin + Vector3.new(worldX, 0, 0)).X)
+		end
+		local railWorldZ = -(rowDistance + layout.PadSize / 2 + 1.3)
+		local railZ = frame:PointToObjectSpace(origin + Vector3.new(area.Offset.X, 0, railWorldZ)).Z
+		StationMachines.BuildCutForge(model, frame, {
+			Title = string.format("⚔️ %s", string.upper(Text.GetFor(nil, "station.cuts.name"))),
+			Subtitle = Text.GetFor(nil, "station.cuts.subtitle"),
+		}, xs, railZ)
+	end
 end
 
 --[[

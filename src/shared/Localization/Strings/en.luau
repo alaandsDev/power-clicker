@@ -31,6 +31,8 @@ return {
 
 	["menu.upgrades"] = "Upgrades",
 	["station.upgrades.subtitle"] = "BOOST YOUR POWER",
+	["station.cuts.name"] = "Cuts",
+	["station.cuts.subtitle"] = "MASTER YOUR CUT",
 	["menu.rebirth"] = "Rebirth",
 
 	["upgrades.title"] = "{icon} Upgrades",

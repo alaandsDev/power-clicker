@@ -189,6 +189,16 @@ return {
 		placa, orbe, prompt, efeito). As fileiras ficam encostadas por fora
 		dessa zona, simétricas; tools/lune/check_cuts.luau confere.
 	]]
+	--[[
+		FORJA DE CORTES: o marco físico da galeria de Cortes, atrás da fileira
+		norte de pads (fora da avenida), virada para ela. Os Cortes continuam
+		sendo comprados nos pads; a forja não tem prompt. Para tirar: nil.
+	]]
+	CutForge = {
+		Position = Vector3.new(130, 0, -28),
+		Facing = Vector3.new(0, 0, 1), -- para a avenida (z = 0)
+	},
+
 	CutStations = {
 		ClearHalfWidth = 6, -- zona livre de 12 studs entre os pads (era 4 antes das vitrines)
 		CardSize = Vector2.new(6, 2.6), -- placa (antes 8 x 3,4: -25% por lado)

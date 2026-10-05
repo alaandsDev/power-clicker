@@ -48,6 +48,10 @@ local function check(condition: any, message: string)
 end
 
 local WorldBuilder = E.require(E.Server.World.WorldBuilder)
+local StationMachines = E.require(E.Server.World.StationMachines)
+local function StationMachinesTheme()
+	return StationMachines.Themes.Cuts
+end
 local WorldConfig = E.require(E.Shared.Config.WorldConfig)
 local LobbyConfig = E.require(E.Shared.Config.LobbyConfig)
 local WallConfig = E.require(E.Shared.Config.WallConfig)
@@ -290,8 +294,9 @@ check(old:FindFirstChild("Station_Upgrades_Machine") == nil and oldPrompt and ol
 station.Style, station.Npc = style, npc
 
 -- 8. Cliente.
+-- Todas as estações do mundo (o controlador é um só para todas).
 local tagged = {}
-for _, d in machine:GetDescendants() do
+for _, d in world:GetDescendants() do
 	for _, tag in d:GetTags() do
 		tagged[tag] = tagged[tag] or {}
 		table.insert(tagged[tag], d)
@@ -316,9 +321,29 @@ local playerRoot = E.Instance.new("Part")
 playerRoot.Name = "HumanoidRootPart"
 local character = E.Instance.new("Model")
 playerRoot.Parent = character
+local playerAttributes = { BestCut = "Cut1" }
+local bestCutChanged = nil
+local localPlayer = {
+	Character = character,
+	GetAttribute = function(_, key)
+		return playerAttributes[key]
+	end,
+	GetAttributeChangedSignal = function(_, key)
+		return { Connect = function(_, fn)
+			if key == "BestCut" then
+				bestCutChanged = fn
+			end
+			return { Disconnect = function() end }
+		end }
+	end,
+}
 E.stubs.Players = { GetPlayers = function()
 	return { { Character = character } }
-end, LocalPlayer = { Character = character } }
+end, LocalPlayer = localPlayer }
+local settings = { ReducedEffects = false }
+E.stubModules["StarterPlayer.Client.Controllers.DataController"] = { Get = function(key)
+	return if key == "Settings" then settings else nil
+end }
 E.stubs.Workspace = setmetatable({ CurrentCamera = camera }, { __index = E.Workspace })
 -- O Lune não expõe BasePart.Position (só CFrame).
 E.patches["StarterPlayer.Client.Controllers.StationFxController"] = {
@@ -327,11 +352,18 @@ E.patches["StarterPlayer.Client.Controllers.StationFxController"] = {
 	{ "pulse.Part.Position", "pulse.Part.CFrame.Position", "all" },
 	{ "localRoot.Position", "localRoot.CFrame.Position", "all" },
 	{ "screen.Part.Position", "screen.Part.CFrame.Position", "all" },
+	{ "flash.Part.Position", "flash.Part.CFrame.Position", "all" },
 }
 local Fx = E.require(E.Client.Controllers.StationFxController)
 Fx.Init()
 local counts = Fx.Counts()
-check(counts.Spin == 2 and counts.Ring == 2 and counts.Core == 1 and counts.Npc == (if npc then 1 else 0) and counts.Pulse >= 12 and counts.Screen == 1, string.format("8. peças animadas registradas (giro %d, anéis %d, núcleo %d, setas %d, técnico %d, tela %d)", counts.Spin, counts.Ring, counts.Core, counts.Pulse, counts.Npc, counts.Screen))
+local function tagCount(tag)
+	return if tagged[tag] then #tagged[tag] else 0
+end
+local registeredAll = counts.Spin == tagCount("StationSpin") and counts.Ring == tagCount("StationRing") and counts.Core == tagCount("StationCore")
+	and counts.Pulse == tagCount("StationPulse") and counts.Npc == tagCount("StationNpc") and counts.Screen == tagCount("StationScreen")
+	and counts.Tint == tagCount("StationCutTint") and counts.Flash == tagCount("StationFlash") and counts.Particles == tagCount("StationParticles")
+check(registeredAll and counts.Npc == (if npc then 1 else 0) and counts.Screen == 1, string.format("8. um controlador para todas as estações: tudo registrado (giro %d, anéis %d, núcleo %d, pulsos %d, técnico %d, tela %d, tint %d, clarão %d, partículas %d)", counts.Spin, counts.Ring, counts.Core, counts.Pulse, counts.Npc, counts.Screen, counts.Tint, counts.Flash, counts.Particles))
 
 local core = machine:FindFirstChild("PowerCore", true)
 local ringModel = machine:FindFirstChild("CoreRingGold", true)
@@ -456,6 +488,143 @@ for _ = 1, 30 do
 	Fx.Step(t)
 end
 check(core.CFrame == frozen, "8. câmera longe (>140 studs): nada é animado")
+
+-- ── C. FORJA DE CORTES ─────────────────────────────────────────────────────
+do
+	local forge = world:FindFirstChild("Station_Cuts_Machine", true)
+	check(forge ~= nil, "C. forja de Cortes construída")
+	if forge then
+		local parts, lights, bills, emittersN, forgePrompts = 0, 0, 0, 0, 0
+		local minX, maxX, minZ, maxZ, top = math.huge, -math.huge, math.huge, -math.huge, 0
+		local railMinX, railMaxX = math.huge, -math.huge
+		for _, d in forge:GetDescendants() do
+			if d:IsA("BasePart") then
+				parts += 1
+				local isRail = d.Name == "ForgeRail" or d.Name == "RailTap"
+				for _, c in corners(d) do
+					if isRail then
+						railMinX, railMaxX = math.min(railMinX, c.X), math.max(railMaxX, c.X)
+					else
+						minX, maxX = math.min(minX, c.X), math.max(maxX, c.X)
+					end
+					minZ, maxZ = math.min(minZ, c.Z), math.max(maxZ, c.Z)
+					top = math.max(top, c.Y)
+				end
+			elseif d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
+				lights += 1
+			elseif d:IsA("BillboardGui") then
+				bills += 1
+			elseif d:IsA("ParticleEmitter") then
+				emittersN += 1
+			elseif d:IsA("ProximityPrompt") then
+				forgePrompts += 1
+			end
+		end
+		check(parts >= 50 and parts <= 115, string.format("C. orçamento: %d peças (%d instâncias)", parts, #forge:GetDescendants()))
+		check(lights == 0 and bills == 0 and emittersN <= 2, "C. sem luz, sem BillboardGui, no máximo 2 emissores")
+		check(forgePrompts == 0, "C. a forja não tem prompt: a compra continua nos pads da galeria")
+		-- Os pads de compra continuam os mesmos (um prompt por Corte pago).
+		local CutLogic = E.require(E.Shared.Formulas.CutLogic)
+		local paid, padPrompts = 0, 0
+		for _, cut in CutLogic.Ordered() do
+			if cut.Price > 0 then
+				paid += 1
+			end
+		end
+		for _, d in world:GetDescendants() do
+			if d:IsA("ProximityPrompt") and d:GetAttribute("CutId") then
+				if d.Parent and string.sub(d.Parent.Name, 1, 7) == "CutPad_" and d.Parent.Name == "CutPad_" .. d:GetAttribute("CutId") then
+					padPrompts += 1
+				end
+			end
+		end
+		check(padPrompts == paid, string.format("C. %d prompts de compra, um em cada pad de Corte pago (como antes)", padPrompts))
+		-- Fora da avenida e da galeria: atrás da fileira norte, dentro do adro, antes do portão.
+		local stations = LobbyConfig.CutStations
+		local CutConfig = E.require(E.Shared.Config.CutConfig)
+		local rowOuter = stations.ClearHalfWidth + CutConfig.Layout.PadSize
+		local tower = LobbyConfig.Areas.Tower
+		check(maxZ <= -rowOuter and minZ >= -tower.Radius - 0.05, string.format("C. fora da avenida e da galeria: z de %.1f a %.1f (pads até %.1f; adro até %.1f)", minZ, maxZ, -rowOuter, -tower.Radius))
+		check(minX >= tower.Offset.X - tower.Radius and maxX <= WallConfig.Layout.StartX, string.format("C. estrutura dentro do adro, antes do portão (x %.1f a %.1f)", minX, maxX))
+		local padXs = {}
+		for _, d in world:GetDescendants() do
+			if d:IsA("BasePart") and string.sub(d.Name, 1, 7) == "CutPad_" then
+				table.insert(padXs, d.CFrame.Position.X)
+			end
+		end
+		local galleryMin, galleryMax = math.min(table.unpack(padXs)) - CutConfig.Layout.PadSize / 2, math.max(table.unpack(padXs)) + CutConfig.Layout.PadSize / 2
+		check(railMinX >= galleryMin and railMaxX <= galleryMax, string.format("C. trilho no chão só ao longo da galeria (x %.1f a %.1f; pads de %.1f a %.1f)", railMinX, railMaxX, galleryMin, galleryMax))
+		local shopFloor = LobbyConfig.Areas.Shop
+		check(minX > shopFloor.Offset.X + shopFloor.FloorSize.X / 2 + 3, "C. não invade a área da Loja/Melhorias")
+		check(top <= 17 and top < LobbyConfig.Gate.PillarHeight * 0.4, string.format("C. %.1f studs de altura: não compete com o portão (pilares de %d)", top, LobbyConfig.Gate.PillarHeight))
+		-- Canais de energia: a onda vai dos braços para o centro.
+		local outerOrder, innerOrder = 0, 0
+		for _, d in forge:GetDescendants() do
+			if d.Name == "ForgeConduit" then
+				local lateral = math.abs((d.CFrame.Position - forge:FindFirstChild("ForgeBack").CFrame.Position):Dot(V3.new(1, 0, 0)))
+				if d:GetAttribute("Order") == 1 then
+					outerOrder = math.max(outerOrder, lateral)
+				elseif d:GetAttribute("Order") == 3 then
+					innerOrder = math.max(innerOrder, lateral)
+				end
+			end
+		end
+		check(outerOrder > innerOrder, "C. energia viaja pelos condutores de fora para o centro (1 → 3)")
+		-- Cliente: o slash na cor do Corte do jogador; troca quando ele troca.
+		local CutVisuals = E.require(E.Shared.Formulas.CutVisuals)
+		local slash = forge:FindFirstChild("CutSlash")
+		local sparks = forge:FindFirstChildWhichIsA("ParticleEmitter", true)
+		local function near(a, b)
+			return math.abs(a.R - b.R) < 0.01 and math.abs(a.G - b.G) < 0.01 and math.abs(a.B - b.B) < 0.01
+		end
+		check(slash and near(slash.Color, CutVisuals.ForBest("Cut1").Color), "C. slash na cor do Corte do jogador (Cut1)")
+		playerAttributes.BestCut = "Cut6"
+		if bestCutChanged then
+			bestCutChanged()
+		end
+		check(slash and near(slash.Color, CutVisuals.ForBest("Cut6").Color) and sparks and near(sparks.Color.Keypoints[1].Value, CutVisuals.ForBest("Cut6").Color), "C. trocou de Corte: slash e faíscas mudam de cor (cliente, sem reconstruir nada)")
+		check(near(forge:FindFirstChild("ConductorArm").Color, StationMachinesTheme().Stone), "C. a estrutura mantém a cor própria")
+		-- Clarão ocasional e "Efeitos reduzidos".
+		local veil = forge:FindFirstChild("CutSlashVeil")
+		camera.CFrame = CF.new(veil.CFrame.Position + V3.new(0, 4, 20))
+		local flashed, baseVeil = false, veil.Transparency
+		for _ = 1, 60 * 6 do
+			t += 1 / 60
+			Fx.Step(t)
+			if veil.Transparency < baseVeil - 0.2 then
+				flashed = true
+			end
+		end
+		check(flashed and veil.Transparency >= 0.7, "C. clarão curto de tempos em tempos (mini-impacto), voltando ao normal")
+		settings.ReducedEffects = true
+		t += 1.1
+		Fx.Step(t)
+		local anyOn = false
+		for _, d in world:GetDescendants() do
+			if d:IsA("ParticleEmitter") and d:HasTag("StationParticles") and d.Enabled then
+				anyOn = true
+			end
+		end
+		check(not anyOn, "C. \"Efeitos reduzidos\": partículas das estações desligadas")
+		settings.ReducedEffects = false
+		t += 1.1
+		Fx.Step(t)
+		check(sparks.Enabled, "C. e voltam quando desliga")
+		-- O visual não mexe em Corte de verdade.
+		local fsMod = require("@lune/fs")
+		local clean = true
+		for _, path in { "src/server/World/StationMachines.luau", "src/client/Controllers/StationFxController.luau" } do
+			local source = fsMod.readFile(E.Root .. "/" .. path)
+			for _, word in { "CutConfig", "CutLogic", "FireServer", "InvokeServer", "Damage", "Price" } do
+				if string.find(source, word, 1, true) then
+					clean = false
+					print("      " .. path .. " usa " .. word)
+				end
+			end
+		end
+		check(clean, "C. VFX da forja não toca em Corte de verdade (sem CutConfig/CutLogic, preço, dano ou remote)")
+	end
+end
 
 if #problems > 0 then
 	print(#problems .. " problema(s).")

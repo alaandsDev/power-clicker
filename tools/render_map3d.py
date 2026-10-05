@@ -210,4 +210,16 @@ if __name__ == "__main__":
         # anéis, console e o encaixe da base no chão).
         eye = target + d * 11 + side * 11 + np.array([0, -1.5, 0])
         render(parts, Cam(eye, target + np.array([0, -1.5, 0]) - side * 1.0, fov=68), out_prefix + "_upgrades_side.png", f"{label} - Melhorias (3/4 lateral, ~15 studs)")
-    print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*}.png")
+    # Estações do lobby (perto e 3/4): peça de referência, lado de onde se
+    # chega (direção "frente" no chão) e altura do alvo.
+    def station_views(key, anchor, front, height, dist):
+        part = next((p for p in parts if p["n"] == anchor), None)
+        if not part:
+            return
+        f = np.array([front[0], 0, front[1]], float); f /= np.linalg.norm(f)
+        side = np.array([f[2], 0, -f[0]])
+        target = np.array([part["p"][0], height, part["p"][2]])
+        render(parts, Cam(target + f * dist + np.array([0, -1.5, 0]), target, fov=68), out_prefix + f"_{key}_near.png", f"{label} - {key} (perto)")
+        render(parts, Cam(target + f * dist * 0.75 + side * dist * 0.75 + np.array([0, -1, 0]), target - side * 1.0, fov=68), out_prefix + f"_{key}_side.png", f"{label} - {key} (3/4)")
+    station_views("cuts", "ForgeBack", (0, 1), 7, 24)
+    print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")

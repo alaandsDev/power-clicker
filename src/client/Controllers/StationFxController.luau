@@ -1,8 +1,9 @@
 --!strict
 --[[
 	StationFxController
-	O MOVIMENTO das estações-máquina do lobby (protótipo: só Melhorias, ver
-	server/World/StationMachines). Tudo local e só visual:
+	O MOVIMENTO das estações do lobby (server/World/StationMachines: Melhorias,
+	Forja de Cortes...). Um controlador central para todas; tudo local e só
+	visual:
 
 	- núcleo de poder gira devagar e pulsa (Transparency), a casca gira ao
 	  contrário;
@@ -13,7 +14,12 @@
 	- a tela do console mostra barras subindo;
 	- JOGADOR NO PONTO DE USO (a até ENGAGE_DISTANCE da tela): a máquina
 	  "acorda" de leve — núcleo ~10% mais intenso e mais rápido, setas mais
-	  rápidas, tela mais viva — e volta ao normal quando ele sai. Só visual.
+	  rápidas, tela mais viva — e volta ao normal quando ele sai. Só visual;
+	- peças marcadas StationCutTint (o slash da forja, a bigorna, as faíscas)
+	  ficam na cor do Corte do jogador local (atributo "BestCut" +
+	  CutVisuals, a mesma receita do golpe) e mudam quando ele troca;
+	- StationFlash: um clarão curto de tempos em tempos (mini-impacto);
+	- "Efeitos reduzidos" desliga as partículas das estações (StationParticles).
 
 	Peças achadas pelas tags (CollectionService) que o servidor põe; funciona
 	com StreamingEnabled (peça que chega/sai é registrada/esquecida). Só mexe
@@ -25,6 +31,11 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local CutVisuals = require(Shared:WaitForChild("Formulas"):WaitForChild("CutVisuals"))
+
+local DataController = require(script.Parent.DataController)
 
 local ACTIVE_DISTANCE = 140
 local CORE_PULSE_SECONDS = 1.8
@@ -39,6 +50,10 @@ local ENGAGE_RATE = 4 -- quão rápido acorda/adormece (por segundo)
 local ENGAGE_SPEED = 0.4 -- giro +40% com o jogador no ponto de uso
 local ENGAGE_GLOW = 0.04 -- núcleo um pouco menos transparente (~10% mais intenso)
 local ENGAGE_ARROWS = 1.0 -- ciclo das setas vira isto (de ARROW_CYCLE)
+local FLASH_EVERY = 4.5 -- segundos entre clarões (mini-impacto)
+local FLASH_SECONDS = 0.18
+local FLASH_TRANSPARENCY = 0.3
+local SETTINGS_EVERY = 1 -- "Efeitos reduzidos" conferido a cada tanto
 
 local TAGS = {
 	Spin = "StationSpin",
@@ -47,6 +62,9 @@ local TAGS = {
 	Core = "StationCore",
 	Npc = "StationNpc",
 	Screen = "StationScreen",
+	Particles = "StationParticles",
+	CutTint = "StationCutTint",
+	Flash = "StationFlash",
 }
 
 -- Estado de cada estação (o Model "..._Machine", pela chave = caminho dele):
@@ -59,6 +77,7 @@ type Pulse = { Part: BasePart, Order: number, Station: string? }
 type Core = { Part: BasePart, Base: number, Station: string? }
 type Npc = { Model: Model, Root: CFrame, Members: { { Part: BasePart, Offset: CFrame } }, Yaw: number }
 type Screen = { Part: BasePart, Bars: { Frame }, Arrow: TextLabel?, Station: string? }
+type Flash = { Part: BasePart, Base: number, Offset: number }
 
 local StationFxController = {}
 
@@ -68,6 +87,11 @@ local pulses: { [Instance]: Pulse } = {}
 local cores: { [Instance]: Core } = {}
 local npcs: { [Instance]: Npc } = {}
 local screens: { [Instance]: Screen } = {}
+local tints: { [Instance]: Instance } = {}
+local flashes: { [Instance]: Flash } = {}
+local emitters: { [Instance]: ParticleEmitter } = {}
+local reducedNow = false
+local nextSettings = 0
 local stations: { [string]: Station } = {}
 
 -- A estação (Model "..._Machine") a que uma peça pertence, pela chave.
@@ -116,8 +140,39 @@ local function numberAttribute(item: Instance, name: string, fallback: number): 
 	return if type(value) == "number" then value else fallback
 end
 
+-- A cor do Corte do jogador local (a mesma receita do golpe).
+local function cutColor(): Color3
+	local player = Players.LocalPlayer
+	local best = if player then player:GetAttribute("BestCut") else nil
+	return CutVisuals.ForBest(best).Color
+end
+
+local function paint(item: Instance, color: Color3)
+	if item:IsA("BasePart") then
+		item.Color = color
+	elseif item:IsA("ParticleEmitter") then
+		item.Color = ColorSequence.new(color)
+	end
+end
+
+-- Repinta tudo que segue o Corte (chamado quando o jogador troca de Corte).
+function StationFxController.RefreshCutTint()
+	local color = cutColor()
+	for _, item in tints do
+		paint(item, color)
+	end
+end
+
 local function register(tag: string, item: Instance)
-	if tag == TAGS.Spin and item:IsA("BasePart") then
+	if tag == TAGS.CutTint then
+		tints[item] = item
+		paint(item, cutColor())
+	elseif tag == TAGS.Particles and item:IsA("ParticleEmitter") then
+		emitters[item] = item
+		item.Enabled = not reducedNow
+	elseif tag == TAGS.Flash and item:IsA("BasePart") then
+		flashes[item] = { Part = item, Base = item.Transparency, Offset = (#item:GetFullName() * 0.37) % FLASH_EVERY }
+	elseif tag == TAGS.Spin and item:IsA("BasePart") then
 		spins[item] = { Part = item, Base = item.CFrame, Speed = numberAttribute(item, "SpinSpeed", 20), Angle = 0, Station = stationOf(item) }
 	elseif tag == TAGS.Ring and item:IsA("Model") then
 		local centre = vectorAttribute(item, "Centre", item:GetPivot().Position)
@@ -163,6 +218,25 @@ local function forget(item: Instance)
 	cores[item] = nil
 	npcs[item] = nil
 	screens[item] = nil
+	tints[item] = nil
+	flashes[item] = nil
+	emitters[item] = nil
+end
+
+-- "Efeitos reduzidos": partículas das estações desligadas (o movimento fica).
+local function applySettings(at: number)
+	if at < nextSettings then
+		return
+	end
+	nextSettings = at + SETTINGS_EVERY
+	local settings = DataController.Get("Settings")
+	local reduced = settings ~= nil and settings.ReducedEffects == true
+	if reduced ~= reducedNow then
+		reducedNow = reduced
+		for _, particles in emitters do
+			particles.Enabled = not reduced
+		end
+	end
 end
 
 local function near(position: Vector3, camera: Vector3): boolean
@@ -195,6 +269,13 @@ function StationFxController.Step(at: number)
 	end
 	local eye = camera.CFrame.Position
 	local t = at - started
+	applySettings(at)
+	for _, flash in flashes do
+		if near(flash.Part.Position, eye) then
+			local phase = (t + flash.Offset) % FLASH_EVERY
+			flash.Part.Transparency = if phase < FLASH_SECONDS then FLASH_TRANSPARENCY else flash.Base
+		end
+	end
 
 	-- Quanto cada estação está "acordada" (jogador local no ponto de uso).
 	local localCharacter = Players.LocalPlayer and Players.LocalPlayer.Character
@@ -283,7 +364,17 @@ function StationFxController.Counts(): { [string]: number }
 		end
 		return n
 	end
-	return { Spin = count(spins), Ring = count(rings), Pulse = count(pulses), Core = count(cores), Npc = count(npcs), Screen = count(screens) }
+	return {
+		Spin = count(spins),
+		Ring = count(rings),
+		Pulse = count(pulses),
+		Core = count(cores),
+		Npc = count(npcs),
+		Screen = count(screens),
+		Tint = count(tints),
+		Flash = count(flashes),
+		Particles = count(emitters),
+	}
 end
 
 -- Para os testes: quanto a estação de `item` está acordada (0..1).
@@ -301,6 +392,10 @@ function StationFxController.Init()
 			register(tag, item)
 		end)
 		CollectionService:GetInstanceRemovedSignal(tag):Connect(forget)
+	end
+	local player = Players.LocalPlayer
+	if player then
+		player:GetAttributeChangedSignal("BestCut"):Connect(StationFxController.RefreshCutTint)
 	end
 end
 
