@@ -228,4 +228,5 @@ if __name__ == "__main__":
     altar = next((p for p in parts if p["n"] == "RebirthCore"), None)
     if altar:
         station_views("rebirth", "RebirthCore", (-altar["p"][0], -altar["p"][2]), 7, 26)
+    station_views("training", "GymGateBeam", (0, -1), 6, 34)
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")

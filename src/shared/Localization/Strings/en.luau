@@ -36,6 +36,9 @@ return {
 	["station.pets.subtitle"] = "YOUR COMPANIONS",
 	["station.rebirth.name"] = "Rebirth",
 	["station.rebirth.subtitle"] = "REBORN STRONGER",
+	["station.training.name"] = "Training",
+	["station.training.subtitle"] = "GET STRONGER",
+	["training.free"] = "FREE",
 	["menu.rebirth"] = "Rebirth",
 
 	["upgrades.title"] = "{icon} Upgrades",

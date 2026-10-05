@@ -93,6 +93,17 @@ StationMachines.Themes = {
 		Crystal = Color3.fromRGB(176, 150, 255),
 		Core = Color3.fromRGB(126, 226, 255),
 	} :: Theme,
+	-- Treino: academia industrial (amarelo/laranja com um toque de ciano).
+	Training = {
+		Stone = Color3.fromRGB(112, 114, 124),
+		StoneDark = Color3.fromRGB(70, 72, 82),
+		Metal = Color3.fromRGB(56, 60, 72),
+		Plate = Color3.fromRGB(66, 70, 82),
+		Gold = Color3.fromRGB(196, 158, 84),
+		Energy = Color3.fromRGB(255, 176, 60),
+		Crystal = Color3.fromRGB(255, 200, 110),
+		Core = Color3.fromRGB(110, 210, 240),
+	} :: Theme,
 	-- Renascer: altar ritual dourado + violeta + luz clara (sem ciano).
 	Rebirth = {
 		Stone = Color3.fromRGB(150, 144, 160),
@@ -1013,6 +1024,159 @@ function StationMachines.BuildRebirthAltar(parent: Instance, base: CFrame, optio
 	model:SetAttribute("Prototype", "StationMachine")
 	model.Parent = parent
 	return model, core
+end
+
+-- ── Centro de Treinamento ───────────────────────────────────────────────────
+
+export type TrainingSpot = {
+	Id: string,
+	Kind: string, -- Bag / Weights / Treadmill / Rack (TrainingConfig)
+	Tier: number, -- 1..4 (ordem)
+	Centre: Vector3, -- relativo ao centro da área
+	Radius: number,
+	Color: Color3,
+	Name: string,
+	Requirement: string, -- "LIVRE" / "🏆 10"
+}
+
+local ROMAN = { "I", "II", "III", "IV" }
+-- Cor da faixa de cada tier: bronze → prata → ouro → energia.
+local TIER_COLORS = {
+	Color3.fromRGB(176, 120, 72),
+	Color3.fromRGB(176, 184, 198),
+	Color3.fromRGB(222, 180, 80),
+	Color3.fromRGB(255, 150, 60),
+}
+
+-- Placa de tier: poste baixo + placa (SurfaceGui com tier, nome e requisito).
+local function tierPlaque(kit: Kit, at: CFrame, spot: TrainingSpot)
+	local theme = kit.Theme
+	piece(kit, "TierPost", Vector3.new(0.5, 2.6, 0.5), at * CFrame.new(0, 1.3, 0.25), theme.Metal, Enum.Material.Metal, false)
+	local board = piece(kit, "TierPlaque_" .. spot.Id, Vector3.new(5.2, 1.7, 0.2), at * CFrame.new(0, 3.2, 0) * CFrame.Angles(math.rad(-12), 0, 0), theme.Metal, Enum.Material.Metal, false)
+	piece(kit, "TierBand", Vector3.new(5.4, 0.22, 0.24), at * CFrame.new(0, 4.15, 0.02) * CFrame.Angles(math.rad(-12), 0, 0), TIER_COLORS[spot.Tier], Enum.Material.Metal, false)
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Text"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 50
+	gui.LightInfluence = 0.2
+	gui.MaxDistance = 45
+	local function label(name: string, text: string, position: UDim2, size: UDim2, color: Color3, align: Enum.TextXAlignment)
+		local item = Instance.new("TextLabel")
+		item.Name = name
+		item.BackgroundTransparency = 1
+		item.Position = position
+		item.Size = size
+		item.Font = Enum.Font.GothamBlack
+		item.TextScaled = true
+		item.TextColor3 = color
+		item.TextXAlignment = align
+		item.Text = text
+		item.Parent = gui
+	end
+	label("Tier", ROMAN[spot.Tier], UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.2, 0.8), TIER_COLORS[spot.Tier], Enum.TextXAlignment.Center)
+	label("Name", string.upper(spot.Name), UDim2.fromScale(0.26, 0.08), UDim2.fromScale(0.7, 0.48), Color3.fromRGB(240, 244, 252), Enum.TextXAlignment.Left)
+	label("Requirement", spot.Requirement, UDim2.fromScale(0.26, 0.56), UDim2.fromScale(0.7, 0.36), theme.Crystal, Enum.TextXAlignment.Left)
+	gui.Parent = board
+end
+
+--[[
+	CENTRO DE TREINAMENTO. Não é uma máquina: é a ACADEMIA que une os quatro
+	equipamentos que já existem (que continuam individuais, nos mesmos
+	lugares e com o mesmo raio — o TrainingService mede pela config).
+	Acrescenta: pórtico de entrada no corredor central virado para a
+	avenida com a placa "🏋️ TREINO / FIQUE MAIS FORTE" e um haltere no
+	alto; uma placa de TIER (I–IV) com nome e requisito na frente de cada
+	equipamento; um trilho de energia no corredor ligando os quatro; e a
+	progressão visual: o Tier II ganha banco e plataforma, o III corrimãos
+	e filetes de energia, o IV pistões, braços, anilhas e um medidor de
+	força que sobe. `base` = centro da área (eixos do mundo); -Z = avenida.
+]]
+function StationMachines.DecorateTraining(parent: Instance, base: CFrame, options: PlateOptions, spots: { TrainingSpot }, aisleFront: number, aisleBack: number): Model
+	local model = Instance.new("Model")
+	model.Name = "Station_Training_Machine"
+	local theme = StationMachines.Themes.Training
+	local kit: Kit = { Parent = model, Base = base, Theme = theme, Count = 0 }
+	local Slate, Metal, Neon = Enum.Material.Slate, Enum.Material.Metal, Enum.Material.Neon
+	local floorTop = 0.6
+
+	-- Pórtico de entrada (frente do corredor central).
+	local gateZ = aisleFront + 1.2
+	for _, side in { -1, 1 } do
+		piece(kit, "GymGateBase", Vector3.new(2.2, 1, 2.2), CFrame.new(side * 6.2, floorTop + 0.5, gateZ), theme.StoneDark, Slate, true)
+		piece(kit, "GymGatePillar", Vector3.new(1.4, 9.4, 1.4), CFrame.new(side * 6.2, floorTop + 5.7, gateZ), theme.Metal, Metal, true)
+		piece(kit, "GymGateBand", Vector3.new(1.7, 0.3, 1.7), CFrame.new(side * 6.2, floorTop + 3.2, gateZ), theme.Energy, Metal, false)
+	end
+	piece(kit, "GymGateBeam", Vector3.new(14.4, 1.8, 1.8), CFrame.new(0, floorTop + 11.2, gateZ), theme.Stone, Slate, true)
+	nameplate(kit, CFrame.new(0, floorTop + 11.3, gateZ - 1.0), options.Title, options.Subtitle, 9)
+	-- Haltere no alto do pórtico (a silhueta de academia, pequena).
+	piece(kit, "GateDumbbellBar", Vector3.new(5, 0.5, 0.5), CFrame.new(0, floorTop + 13.0, gateZ), Color3.fromRGB(190, 196, 208), Metal, false)
+	for _, side in { -1, 1 } do
+		piece(kit, "GateDumbbellWeight", Vector3.new(0.9, 2.4, 2.4), CFrame.new(side * 2.2, floorTop + 13.0, gateZ), theme.Energy, Metal, false, nil, Enum.PartType.Cylinder)
+	end
+
+	-- Trilho de energia no corredor, com um ramal para cada equipamento.
+	local railLength = aisleBack - aisleFront - 2
+	piece(kit, "GymRail", Vector3.new(0.4, 0.06, railLength), CFrame.new(0, floorTop + 0.04, (aisleFront + aisleBack) / 2), theme.Energy, Neon, false, 0.55)
+	for _, spot in spots do
+		local edge = spot.Centre.X - math.sign(spot.Centre.X) * spot.Radius
+		local branch = piece(kit, "GymRailBranch", Vector3.new(math.abs(edge), 0.06, 0.3), CFrame.new(edge / 2, floorTop + 0.04, spot.Centre.Z), TIER_COLORS[spot.Tier], Neon, false, 0.5)
+		branch:SetAttribute("Order", spot.Tier)
+		branch:AddTag(StationMachines.TAG_PULSE)
+	end
+
+	for _, spot in spots do
+		local c = spot.Centre
+		-- Placa de tier na borda do pad que dá para a avenida.
+		tierPlaque(kit, CFrame.new(c.X, floorTop, c.Z - spot.Radius + 1.2), spot)
+		if spot.Kind == "Bag" then
+			-- Tier I: simples — base de chapa e um indicador redondo no poste.
+			piece(kit, "BagBase", Vector3.new(3, 0.3, 3), CFrame.new(c.X, floorTop + 0.15, c.Z), theme.Plate, Enum.Material.DiamondPlate, true)
+			piece(kit, "BagGauge", Vector3.new(0.3, 1.4, 1.4), CFrame.new(c.X - 0.75, floorTop + 6, c.Z), TIER_COLORS[1], Metal, false, nil, Enum.PartType.Cylinder)
+		elseif spot.Kind == "Weights" then
+			-- Tier II: plataforma de força, banco e anilhas no suporte.
+			piece(kit, "LiftPlatform", Vector3.new(12, 0.4, 6), CFrame.new(c.X, floorTop + 0.2, c.Z), Color3.fromRGB(46, 48, 58), Enum.Material.Rubber, true)
+			piece(kit, "Bench", Vector3.new(2.2, 0.8, 5.6), CFrame.new(c.X, floorTop + 2.2, c.Z + 3.6), theme.Plate, Enum.Material.Fabric, true)
+			for _, dz in { 1.6, 5.6 } do
+				piece(kit, "BenchLeg", Vector3.new(1.4, 1.8, 0.5), CFrame.new(c.X, floorTop + 1.0, c.Z + dz), theme.Metal, Metal, true)
+			end
+			for _, side in { -1, 1 } do
+				piece(kit, "SparePlate", Vector3.new(0.7, 3.2, 3.2), CFrame.new(c.X + side * 6.6, floorTop + 1.8, c.Z + 2.2), TIER_COLORS[2], Metal, false, nil, Enum.PartType.Cylinder)
+			end
+		elseif spot.Kind == "Treadmill" then
+			-- Tier III: corrimãos e filetes de energia nas laterais da esteira.
+			for _, side in { -1, 1 } do
+				piece(kit, "Handrail", Vector3.new(9, 0.4, 0.4), CFrame.new(c.X - 3.5, floorTop + 5.2, c.Z + side * 3.9), Color3.fromRGB(190, 196, 208), Metal, false)
+				piece(kit, "HandrailPost", Vector3.new(0.4, 2.8, 0.4), CFrame.new(c.X + 0.8, floorTop + 3.9, c.Z + side * 3.9), theme.Metal, Metal, false)
+				piece(kit, "BeltGlow", Vector3.new(14, 0.08, 0.25), CFrame.new(c.X, 2.45, c.Z + side * 3.62), theme.Core, Neon, false, 0.5)
+			end
+			-- Mostrador de velocidade no montante (barras, sem Neon) e friso.
+			local display = piece(kit, "TreadmillDisplay", Vector3.new(0.2, 2.2, 4.6), CFrame.new(c.X - 7.38, floorTop + 7.0, c.Z), Color3.fromRGB(18, 26, 36), Enum.Material.SmoothPlastic, false)
+			screenGui(display, theme.Core)
+			local screen = display:FindFirstChildOfClass("SurfaceGui") :: SurfaceGui
+			screen.Face = Enum.NormalId.Right
+			piece(kit, "TreadmillTrim", Vector3.new(0.3, 0.2, 5), CFrame.new(c.X - 7.4, floorTop + 8.2, c.Z), theme.Gold, Metal, false)
+		elseif spot.Kind == "Rack" then
+			-- Tier IV: pistões, braços mecânicos, anilhas e medidor de força.
+			for _, side in { -1, 1 } do
+				piece(kit, "Piston", Vector3.new(8, 1.2, 1.2), CFrame.new(c.X + side * 5, floorTop + 4.6, c.Z - 1.4) * UPRIGHT, theme.Metal, Metal, false, nil, Enum.PartType.Cylinder)
+				piece(kit, "PistonSleeve", Vector3.new(2.6, 1.5, 1.5), CFrame.new(c.X + side * 5, floorTop + 2.0, c.Z - 1.4) * UPRIGHT, theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
+				strut(kit, "RackArm", Vector3.new(c.X + side * 6, floorTop + 13.5, c.Z - 4.4), Vector3.new(c.X + side * 1.8, floorTop + 10, c.Z - 4.4), 0.9, 0.9, theme.Energy, Metal, false)
+				piece(kit, "RackPlate", Vector3.new(0.9, 4.2, 4.2), CFrame.new(c.X + side * 7.2, floorTop + 3, c.Z + 2), Color3.fromRGB(44, 46, 56), Metal, false, nil, Enum.PartType.Cylinder)
+			end
+			piece(kit, "GaugeFrame", Vector3.new(1.4, 7.4, 0.4), CFrame.new(c.X, floorTop + 7.4, c.Z - 5.6), theme.Metal, Metal, false)
+			for level = 1, 5 do
+				local bar = piece(kit, "ForceGauge", Vector3.new(0.9, 1.1, 0.1), CFrame.new(c.X, floorTop + 4.4 + level * 1.25, c.Z - 5.84), theme.Energy, Neon, false, 0.4)
+				bar:SetAttribute("Order", level)
+				bar:AddTag(StationMachines.TAG_PULSE)
+			end
+		end
+	end
+
+	model:SetAttribute("PartCount", kit.Count)
+	model:SetAttribute("Prototype", "StationMachine")
+	model.Parent = parent
+	return model
 end
 
 return StationMachines

@@ -42,6 +42,9 @@ return {
 	["station.pets.subtitle"] = "SEUS COMPANHEIROS",
 	["station.rebirth.name"] = "Renascer",
 	["station.rebirth.subtitle"] = "RENASÇA MAIS FORTE",
+	["station.training.name"] = "Treino",
+	["station.training.subtitle"] = "FIQUE MAIS FORTE",
+	["training.free"] = "LIVRE",
 	["menu.rebirth"] = "Renascer",
 
 	-- Painel de melhorias

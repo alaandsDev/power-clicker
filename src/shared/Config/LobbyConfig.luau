@@ -203,6 +203,14 @@ return {
 	]]
 	RebirthStation = "Altar",
 
+	--[[
+		CENTRO DE TREINAMENTO: true = academia (pórtico, placas de tier, trilho,
+		equipamentos com mais detalhe por tier, pads escuros com aro, sem luz
+		constante); false/nil = como antes. Os equipamentos, o raio e o
+		rendimento continuam no TrainingConfig (o serviço mede por lá).
+	]]
+	TrainingCenter = true,
+
 	CutForge = {
 		Position = Vector3.new(130, 0, -28),
 		Facing = Vector3.new(0, 0, 1), -- para a avenida (z = 0)

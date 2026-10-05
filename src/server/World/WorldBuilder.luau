@@ -940,11 +940,19 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 		ball(model, (rackFrame * CFrame.new(index * 2.6, 0, 0)).Position + Vector3.new(0, 2.6, 0), 1.6, Color3.fromRGB(40, 42, 50), Enum.Material.Metal, false)
 	end
 
+	local center = LobbyConfig.TrainingCenter == true
 	for _, station in TrainingConfig.Stations do
 		local centre = origin + area.Offset + station.Local
 
-		-- O pad onde se fica: é ele que o serviço mede.
-		local pad = disc(model, centre + Vector3.new(0, 0.7, 0), station.Radius, 0.6, station.Color, Enum.Material.SmoothPlastic, false)
+		-- O pad onde se fica (o serviço mede pela config: Local + Radius).
+		-- Centro de treino: tapete escuro com aro na cor do equipamento.
+		local pad
+		if center then
+			disc(model, centre + Vector3.new(0, 0.66, 0), station.Radius, 0.52, station.Color:Lerp(Color3.fromRGB(60, 60, 66), 0.35), Enum.Material.SmoothPlastic, false)
+			pad = disc(model, centre + Vector3.new(0, 0.7, 0), station.Radius - 0.7, 0.6, Color3.fromRGB(52, 54, 64), Enum.Material.Rubber, false)
+		else
+			pad = disc(model, centre + Vector3.new(0, 0.7, 0), station.Radius, 0.6, station.Color, Enum.Material.SmoothPlastic, false)
+		end
 		pad.Name = "TrainingPad_" .. station.Id
 		pad:SetAttribute("TrainingStation", station.Id)
 
@@ -989,7 +997,9 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 			block(model, CFrame.new(centre + Vector3.new(-8, 6, 0)), Vector3.new(1, 8, 8), palette.Rim, Enum.Material.Metal)
 			local panel = block(model, CFrame.new(centre + Vector3.new(-8.6, 9, 0)), Vector3.new(0.4, 3, 6), station.Color, Enum.Material.Neon, false)
 			panel.Name = "Panel"
-			light(panel, station.Color, 14, 1)
+			if not center then
+				light(panel, station.Color, 14, 1)
+			end
 		else
 			-- Máquina de força: gaiola com barra e pesos.
 			for x = -1, 1, 2 do
@@ -1000,9 +1010,15 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 			block(model, CFrame.new(centre + Vector3.new(0, 16, 0)), Vector3.new(13, 1.2, 11), palette.Rim, Enum.Material.Metal, false)
 			local stack = block(model, CFrame.new(centre + Vector3.new(0, 5, -4)), Vector3.new(8, 10, 2.5), station.Color, Enum.Material.Metal, false)
 			stack.Name = "Stack"
-			light(stack, station.Color, 16, 1)
+			if not center then
+				light(stack, station.Color, 16, 1)
+			end
 		end
 
+		-- Centro de treino: placa de tier física (StationMachines) no lugar do letreiro.
+		if center then
+			continue
+		end
 		-- Letreiro: o que rende e o que exige, em cima da máquina.
 		local sign = makePart(model, {
 			Name = "TrainingSign_" .. station.Id,
@@ -1023,6 +1039,27 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 		-- Detalhe (rendimento e requisito) só de perto: de longe, as próprias
 		-- máquinas já dizem o que são.
 		billboard(sign, label, station.Color, 3, 32, 0.8)
+	end
+
+	if center then
+		local spots = {}
+		for index, station in TrainingConfig.Stations do
+			table.insert(spots, {
+				Id = station.Id,
+				Kind = station.Kind,
+				Tier = math.min(index, 4),
+				Centre = station.Local,
+				Radius = station.Radius,
+				Color = station.Color,
+				Name = Text.GetFor(nil, "training." .. station.Id .. ".name"),
+				Requirement = if station.RequiredWins > 0 then "🏆 " .. NumberFormat.Short(station.RequiredWins) else Text.GetFor(nil, "training.free"),
+			})
+		end
+		local half = (area.FloorSize or Vector2.new(area.Radius * 1.6, area.Radius * 1.2)).Y / 2
+		StationMachines.DecorateTraining(model, CFrame.new(origin + area.Offset), {
+			Title = "🏋️ " .. string.upper(Text.GetFor(nil, "station.training.name")),
+			Subtitle = Text.GetFor(nil, "station.training.subtitle"),
+		}, spots, -half, half)
 	end
 end
 
@@ -1188,6 +1225,18 @@ local function roundedRect(model: Model, centre: Vector3, size: Vector2, corner:
 	end
 end
 
+--[[
+	Áreas cuja ESTAÇÃO física já diz o nome (placa na arquitetura): o
+	estandarte com cristal e luz vira repetição e sai. Desligar a estação no
+	LobbyConfig traz o estandarte de volta.
+]]
+local function bannerReplaced(areaId: string): boolean
+	if areaId == "Training" then
+		return LobbyConfig.TrainingCenter == true
+	end
+	return false
+end
+
 local function buildAreas(model: Model, origin: Vector3, palette: Palette)
 	for _, area in LobbyConfig.Areas do
 		local centre = origin + area.Offset
@@ -1221,7 +1270,7 @@ local function buildAreas(model: Model, origin: Vector3, palette: Palette)
 			end
 		end
 
-		if area.Label ~= "None" then
+		if area.Label ~= "None" and not bannerReplaced(area.Id) then
 			-- Estandarte no lado de FORA da área (de quem olha da praça).
 			local outward = if area.Offset.Magnitude > 1 then Vector3.new(area.Offset.X, 0, area.Offset.Z).Unit else Vector3.new(0, 0, 1)
 			local base = centre + outward * (area.Radius - 5)
