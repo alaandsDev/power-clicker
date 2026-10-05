@@ -469,6 +469,8 @@ local function buildEggStands(model: Model, origin: Vector3, palette: Palette, w
 	local count = #world.Eggs
 	local area = areaOf("Eggs")
 	local radius = math.max(area.Radius - 16, 10)
+	local incubation = LobbyConfig.IncubationArea == true
+	local stands = {}
 	for index, eggId in world.Eggs do
 		local egg = EggConfig.Eggs[eggId]
 		if egg then
@@ -496,7 +498,32 @@ local function buildEggStands(model: Model, origin: Vector3, palette: Palette, w
 			mesh.Scale = Vector3.new(1, 1.3, 1)
 			mesh.Parent = eggPart
 			local icon = if egg.Currency == "Gems" then "💎" else "⚡"
-			billboard(eggPart, string.format("%s\n%s %s", Text.GetFor(nil, "egg." .. eggId .. ".name"), icon, NumberFormat.Short(egg.Price)), Color3.new(1, 1, 1), 7, 60, 0.8)
+			if incubation then
+				-- Placa física da incubadora (StationMachines) no lugar do letreiro.
+				local requirement = nil
+				if egg.RequiredStage then
+					for _, stage in WallConfig.Stages do
+						if stage.Id == egg.RequiredStage then
+							requirement = Text.GetFor(nil, "eggs.stageLocked", { order = stage.Order })
+						end
+					end
+				end
+				table.insert(stands, {
+					Id = eggId,
+					Base = base,
+					Facing = Vector3.new(base.X - (origin + area.Offset).X, 0, base.Z - (origin + area.Offset).Z).Unit,
+					Tier = index,
+					EggCentre = 9,
+					EggRadius = 3.5,
+					PedestalTop = 4.5,
+					PedestalRadius = 6,
+					Title = Text.GetFor(nil, "egg." .. eggId .. ".name"),
+					Price = string.format("%s %s", icon, NumberFormat.Short(egg.Price)),
+					Requirement = requirement,
+				})
+			else
+				billboard(eggPart, string.format("%s\n%s %s", Text.GetFor(nil, "egg." .. eggId .. ".name"), icon, NumberFormat.Short(egg.Price)), Color3.new(1, 1, 1), 7, 60, 0.8)
+			end
 			prompt(eggPart, "Eggs", "world.prompt.hatch", "egg." .. eggId .. ".name")
 		end
 	end
@@ -524,7 +551,14 @@ local function buildEggStands(model: Model, origin: Vector3, palette: Palette, w
 	giantMesh.Parent = giant
 	local band = disc(model, back + Vector3.new(0, 9.9, 0), 4.6, 1.4, LobbyConfig.Gate.Trim, Enum.Material.Metal, false)
 	band.Name = "EggLandmarkBand"
-	light(giant, Color3.fromRGB(255, 226, 150), 18, 0.9)
+	if incubation then
+		StationMachines.DecorateEggs(model, {
+			Title = "🥚 " .. StationMachines.Upper(Text.GetFor(nil, "station.eggs.name")),
+			Subtitle = Text.GetFor(nil, "station.eggs.subtitle"),
+		}, stands, back, Vector3.new(0, 0, 1))
+	else
+		light(giant, Color3.fromRGB(255, 226, 150), 18, 0.9)
+	end
 end
 
 local function buildAltar(model: Model, origin: Vector3, palette: Palette)
@@ -533,7 +567,7 @@ local function buildAltar(model: Model, origin: Vector3, palette: Palette)
 		-- Altar do Renascimento (o prompt de sempre, no núcleo).
 		local facing = CFrame.lookAt(base, Vector3.new(origin.X, base.Y, origin.Z))
 		local _, core = StationMachines.BuildRebirthAltar(model, facing, {
-			Title = "♻️ " .. string.upper(Text.GetFor(nil, "station.rebirth.name")),
+			Title = "♻️ " .. StationMachines.Upper(Text.GetFor(nil, "station.rebirth.name")),
 			Subtitle = Text.GetFor(nil, "station.rebirth.subtitle"),
 		}, 0.35)
 		prompt(core, "Rebirth", "world.prompt.rebirth")
@@ -601,7 +635,7 @@ local function buildStations(model: Model, origin: Vector3, palette: Palette)
 		if station.Style == "Machine" then
 			-- Protótipo: estação-máquina; o prompt é o mesmo, no console dela.
 			local _, console = StationMachines.BuildUpgrades(model, CFrame.new(base) * yaw, station.Panel, {
-				Title = string.format("%s %s", station.Icon, string.upper(Text.GetFor(nil, station.NameKey))),
+				Title = string.format("%s %s", station.Icon, StationMachines.Upper(Text.GetFor(nil, station.NameKey))),
 				Subtitle = Text.GetFor(nil, "station.upgrades.subtitle"),
 				Npc = station.Npc == true,
 			})
@@ -614,7 +648,7 @@ local function buildStations(model: Model, origin: Vector3, palette: Palette)
 				table.insert(previews, AssetIds["pet_" .. petId] or "")
 			end
 			local _, terminal = StationMachines.BuildPetLab(model, CFrame.new(base) * yaw, station.Panel, {
-				Title = string.format("%s %s", station.Icon, string.upper(Text.GetFor(nil, station.NameKey))),
+				Title = string.format("%s %s", station.Icon, StationMachines.Upper(Text.GetFor(nil, station.NameKey))),
 				Subtitle = Text.GetFor(nil, "station.pets.subtitle"),
 				Previews = previews,
 			})
@@ -1057,7 +1091,7 @@ local function buildTrainingMachines(model: Model, origin: Vector3, palette: Pal
 		end
 		local half = (area.FloorSize or Vector2.new(area.Radius * 1.6, area.Radius * 1.2)).Y / 2
 		StationMachines.DecorateTraining(model, CFrame.new(origin + area.Offset), {
-			Title = "🏋️ " .. string.upper(Text.GetFor(nil, "station.training.name")),
+			Title = "🏋️ " .. StationMachines.Upper(Text.GetFor(nil, "station.training.name")),
 			Subtitle = Text.GetFor(nil, "station.training.subtitle"),
 		}, spots, -half, half)
 	end
@@ -1192,7 +1226,7 @@ local function buildCutPads(model: Model, origin: Vector3, palette: Palette)
 		local railWorldZ = -(rowDistance + layout.PadSize / 2 + 1.3)
 		local railZ = frame:PointToObjectSpace(origin + Vector3.new(area.Offset.X, 0, railWorldZ)).Z
 		StationMachines.BuildCutForge(model, frame, {
-			Title = string.format("⚔️ %s", string.upper(Text.GetFor(nil, "station.cuts.name"))),
+			Title = string.format("⚔️ %s", StationMachines.Upper(Text.GetFor(nil, "station.cuts.name"))),
 			Subtitle = Text.GetFor(nil, "station.cuts.subtitle"),
 		}, xs, railZ)
 	end
@@ -1233,6 +1267,8 @@ end
 local function bannerReplaced(areaId: string): boolean
 	if areaId == "Training" then
 		return LobbyConfig.TrainingCenter == true
+	elseif areaId == "Eggs" then
+		return LobbyConfig.IncubationArea == true
 	end
 	return false
 end
@@ -1456,7 +1492,7 @@ local function buildPathGate(model: Model, origin: Vector3)
 	signGradient.Rotation = 90
 	signGradient.Color = ColorSequence.new(Color3.fromRGB(255, 236, 160), Color3.fromRGB(255, 186, 60))
 	signGradient.Parent = signLabel
-	signLabel.Text = string.upper(Text.GetFor(nil, "area.tower"))
+	signLabel.Text = StationMachines.Upper(Text.GetFor(nil, "area.tower"))
 	signLabel.Parent = surface
 	surface.Parent = plate
 

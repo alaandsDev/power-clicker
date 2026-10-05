@@ -136,6 +136,19 @@ export type Options = {
 	Theme: Theme?,
 }
 
+-- MAIÚSCULAS com os acentos do português (string.upper só cuida de A–Z).
+local ACCENTS = {
+	["á"] = "Á", ["à"] = "À", ["â"] = "Â", ["ã"] = "Ã", ["é"] = "É", ["ê"] = "Ê",
+	["í"] = "Í", ["ó"] = "Ó", ["ô"] = "Ô", ["õ"] = "Õ", ["ú"] = "Ú", ["ç"] = "Ç",
+}
+function StationMachines.Upper(text: string): string
+	local upper = string.upper(text)
+	for lower, capital in ACCENTS do
+		upper = string.gsub(upper, lower, capital)
+	end
+	return upper
+end
+
 -- Mesma cor, mais escura/clara.
 local function shade(color: Color3, factor: number): Color3
 	return Color3.new(math.clamp(color.R * factor, 0, 1), math.clamp(color.G * factor, 0, 1), math.clamp(color.B * factor, 0, 1))
@@ -1075,7 +1088,7 @@ local function tierPlaque(kit: Kit, at: CFrame, spot: TrainingSpot)
 		item.Parent = gui
 	end
 	label("Tier", ROMAN[spot.Tier], UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.2, 0.8), TIER_COLORS[spot.Tier], Enum.TextXAlignment.Center)
-	label("Name", string.upper(spot.Name), UDim2.fromScale(0.26, 0.08), UDim2.fromScale(0.7, 0.48), Color3.fromRGB(240, 244, 252), Enum.TextXAlignment.Left)
+	label("Name", StationMachines.Upper(spot.Name), UDim2.fromScale(0.26, 0.08), UDim2.fromScale(0.7, 0.48), Color3.fromRGB(240, 244, 252), Enum.TextXAlignment.Left)
 	label("Requirement", spot.Requirement, UDim2.fromScale(0.26, 0.56), UDim2.fromScale(0.7, 0.36), theme.Crystal, Enum.TextXAlignment.Left)
 	gui.Parent = board
 end
@@ -1172,6 +1185,138 @@ function StationMachines.DecorateTraining(parent: Instance, base: CFrame, option
 			end
 		end
 	end
+
+	model:SetAttribute("PartCount", kit.Count)
+	model:SetAttribute("Prototype", "StationMachine")
+	model.Parent = parent
+	return model
+end
+
+-- ── Área de Incubação (Ovos) ────────────────────────────────────────────────
+
+export type EggStand = {
+	Id: string,
+	Base: Vector3, -- centro da bancada no chão (mundo)
+	Facing: Vector3, -- para fora do arco (de onde se chega)
+	Tier: number, -- 1..5 (ordem dos ovos)
+	EggCentre: number, -- altura do centro do ovo
+	EggRadius: number, -- meia largura do ovo
+	PedestalTop: number,
+	PedestalRadius: number,
+	Title: string, -- nome do ovo
+	Price: string, -- "⚡ 2K" / "💎 400"
+	Requirement: string?, -- "⚔️ Estágio 5"
+}
+
+-- Cor do acabamento de cada nível de incubadora (não diz nada de chance).
+local INCUBATOR_COLORS = {
+	Color3.fromRGB(176, 120, 72), -- bronze
+	Color3.fromRGB(176, 184, 198), -- prata
+	Color3.fromRGB(222, 180, 80), -- ouro
+	Color3.fromRGB(176, 120, 255), -- violeta
+	Color3.fromRGB(255, 236, 190), -- perolado
+}
+
+--[[
+	ÁREA DE INCUBAÇÃO. Os OVOS são os protagonistas e continuam iguais (peça,
+	tamanho, cor, prompt); muda o ambiente em volta: cada bancada vira uma
+	incubadora ABERTA — braços em garra ao redor do ovo, sem fechá-lo —, mais
+	elaborada a cada nível (2 → 4 braços, cristais nas pontas, aro de
+	energia no pedestal a partir do III, anel girando no IV e no V), uma
+	placa física com nome, preço e o estágio exigido (o que já está na
+	config; nada sobre chance), cabos no chão ligando cada incubadora ao ovo
+	gigante (a "matriz") e a placa "🥚 OVOS" na frente dele.
+	Trabalha nos eixos do mundo: `base` = identidade.
+]]
+function StationMachines.DecorateEggs(parent: Instance, options: PlateOptions, stands: { EggStand }, landmark: Vector3, landmarkFacing: Vector3): Model
+	local model = Instance.new("Model")
+	model.Name = "Station_Eggs_Machine"
+	local theme = StationMachines.Themes.Training
+	local kit: Kit = { Parent = model, Base = CFrame.identity, Theme = theme, Count = 0 }
+	local Metal, Neon, Slate = Enum.Material.Metal, Enum.Material.Neon, Enum.Material.Slate
+	local dark = Color3.fromRGB(56, 58, 70)
+
+	for _, stand in stands do
+		local accent = INCUBATOR_COLORS[math.clamp(stand.Tier, 1, #INCUBATOR_COLORS)]
+		local arms = if stand.Tier <= 1 then 2 elseif stand.Tier <= 3 then 3 else 4
+		local frame = CFrame.lookAt(stand.Base, stand.Base + stand.Facing)
+		-- Braços em garra: saem da borda do pedestal e sobem até perto do ovo.
+		for index = 0, arms - 1 do
+			local angle = (index + 0.5) * 2 * math.pi / arms + math.pi / 2
+			local dir = Vector3.new(math.cos(angle), 0, math.sin(angle))
+			local from = stand.Base + dir * (stand.PedestalRadius - 0.4) + Vector3.new(0, stand.PedestalTop, 0)
+			local to = stand.Base + dir * (stand.EggRadius + 1.0) + Vector3.new(0, stand.EggCentre + 1.6, 0)
+			local length = (to - from).Magnitude
+			local arm = piece(kit, "IncubatorArm", Vector3.new(0.5, length, 0.5), CFrame.lookAt((from + to) / 2, to) * CFrame.Angles(math.rad(90), 0, 0), if stand.Tier >= 3 then accent else dark, Metal, false)
+			arm:SetAttribute("Tier", stand.Tier)
+			if stand.Tier >= 2 then
+				crystal(kit, "IncubatorGem", to + dir * 0.2 + Vector3.new(0, 0.5, 0), 0.9, Vector3.new(0, 0, 0), accent, 0.15)
+			end
+		end
+		-- Aro de energia no pedestal (III em diante).
+		if stand.Tier >= 3 then
+			piece(kit, "IncubatorGlow", Vector3.new(0.08, stand.PedestalRadius * 2 + 0.3, stand.PedestalRadius * 2 + 0.3), CFrame.new(stand.Base + Vector3.new(0, stand.PedestalTop - 0.2, 0)) * UPRIGHT, accent, Neon, false, 0.55, Enum.PartType.Cylinder)
+		end
+		-- Anel girando em volta do ovo (IV e V).
+		if stand.Tier >= 4 then
+			local ringCentre = CFrame.new(stand.Base + Vector3.new(0, stand.EggCentre - 1.0, 0))
+			local spinning = Instance.new("Model")
+			spinning.Name = "IncubatorRing"
+			local sides = if stand.Tier >= 5 then 8 else 6
+			local radius = stand.EggRadius + 1.6
+			local length = 2 * radius * math.tan(math.pi / sides) + 0.1
+			for index = 0, sides - 1 do
+				piece(kit, "IncubatorRingSegment", Vector3.new(length, 0.22, 0.22), ringCentre * CFrame.Angles(0, index * 2 * math.pi / sides, 0) * CFrame.new(0, 0, -radius), accent, Metal, false, nil, nil, spinning)
+			end
+			spinning:SetAttribute("SpinSpeed", if stand.Tier >= 5 then 16 else 10)
+			spinning:SetAttribute("Centre", ringCentre.Position)
+			spinning:SetAttribute("Axis", Vector3.yAxis)
+			atomic(spinning)
+			spinning.Parent = model
+			spinning:AddTag(StationMachines.TAG_RING)
+		end
+		-- Placa: nome, preço e estágio exigido (de frente para quem chega).
+		local plaqueAt = frame * CFrame.new(0, 0, -(stand.PedestalRadius + 3.8))
+		local board = piece(kit, "EggPlaque_" .. stand.Id, Vector3.new(5.6, 1.9, 0.2), plaqueAt * CFrame.new(0, 2.4, 0) * CFrame.Angles(math.rad(-18), 0, 0), dark, Metal, false)
+		piece(kit, "EggPlaqueBand", Vector3.new(5.8, 0.22, 0.24), plaqueAt * CFrame.new(0, 3.4, 0.03) * CFrame.Angles(math.rad(-18), 0, 0), accent, Metal, false)
+		piece(kit, "EggPlaquePost", Vector3.new(0.5, 1.8, 0.5), plaqueAt * CFrame.new(0, 0.9, 0.25), dark, Metal, false)
+		local gui = Instance.new("SurfaceGui")
+		gui.Name = "Text"
+		gui.Face = Enum.NormalId.Front
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 50
+		gui.LightInfluence = 0.2
+		gui.MaxDistance = 50
+		local function label(name: string, text: string, y: number, height: number, color: Color3)
+			local item = Instance.new("TextLabel")
+			item.Name = name
+			item.BackgroundTransparency = 1
+			item.Position = UDim2.fromScale(0.04, y)
+			item.Size = UDim2.fromScale(0.92, height)
+			item.Font = Enum.Font.GothamBlack
+			item.TextScaled = true
+			item.TextColor3 = color
+			item.Text = text
+			item.Parent = gui
+		end
+		label("Name", StationMachines.Upper(stand.Title), 0.06, 0.42, Color3.fromRGB(242, 246, 252))
+		label("Price", stand.Price .. (if stand.Requirement then "   " .. stand.Requirement else ""), 0.54, 0.36, accent)
+		gui.Parent = board
+		-- Cabo no chão até a matriz (o ovo gigante).
+		local from = stand.Base + Vector3.new(0, 0.42, 0) + (landmark - stand.Base).Unit * 9.2
+		local to = landmark + Vector3.new(0, 0.42, 0) + (stand.Base - landmark).Unit * 6.8
+		from = Vector3.new(from.X, 0.42, from.Z)
+		to = Vector3.new(to.X, 0.42, to.Z)
+		tube(kit, "IncubatorCable", from, to, 0.42, dark)
+		local pulse = piece(kit, "IncubatorFeed", Vector3.new(0.14, 0.06, (to - from).Magnitude), CFrame.lookAt((from + to) / 2 + Vector3.new(0, 0.22, 0), to + Vector3.new(0, 0.22, 0)), accent, Neon, false, 0.6)
+		pulse:SetAttribute("Order", stand.Tier)
+		pulse:AddTag(StationMachines.TAG_PULSE)
+	end
+
+	-- Placa da área na frente do ovo gigante.
+	local headerFrame = CFrame.lookAt(landmark, landmark + landmarkFacing) * CFrame.new(0, 0, -7.8)
+	piece(kit, "EggHeaderStone", Vector3.new(10.4, 2.8, 1.4), headerFrame * CFrame.new(0, 1.4, 0.3), Color3.fromRGB(104, 106, 118), Slate, true)
+	nameplate(kit, headerFrame * CFrame.new(0, 2.0, -0.45), options.Title, options.Subtitle, 8.6)
 
 	model:SetAttribute("PartCount", kit.Count)
 	model:SetAttribute("Prototype", "StationMachine")

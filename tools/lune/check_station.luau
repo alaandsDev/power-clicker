@@ -870,6 +870,119 @@ do
 	end
 end
 
+-- ── E. ÁREA DE INCUBAÇÃO (OVOS) ────────────────────────────────────────────
+do
+	local EggConfig = E.require(E.Shared.Config.EggConfig)
+	local area = world:FindFirstChild("Station_Eggs_Machine", true)
+	check(area ~= nil, "E. área de incubação construída")
+	-- Preços, moedas, estágios e chances: exatamente os mesmos.
+	local want = {
+		BasicEgg = { "Power", 2000, nil, 100 },
+		ForestEgg = { "Gems", 25, nil, 100 },
+		MysticEgg = { "Gems", 150, nil, 100 },
+		TowerEgg = { "Gems", 400, "Gold", 100 },
+		ColossusEgg = { "Gems", 2500, "Colossus", 100 },
+	}
+	local sameEggs = true
+	for id, w in want do
+		local egg = EggConfig.Eggs[id]
+		local total = 0
+		for _, drop in egg and egg.Drops or {} do
+			total += drop.Weight
+		end
+		if not egg or egg.Currency ~= w[1] or egg.Price ~= w[2] or egg.RequiredStage ~= w[3] or math.abs(total - w[4]) > 1e-6 then
+			sameEggs = false
+			print("      " .. id .. " mudou")
+		end
+	end
+	check(sameEggs, "E. ovos intactos: Básico ⚡2.000, Floresta 💎25, Místico 💎150, Caminho 💎400 (estágio 5), Colosso 💎2.500 (estágio 10), chances somando 100")
+	if area then
+		-- Os mesmos prompts, nos próprios ovos.
+		local eggPrompts, okPrompts = 0, true
+		for _, d in world:GetDescendants() do
+			if d:IsA("ProximityPrompt") and d:GetAttribute("OpenPanel") == "Eggs" then
+				eggPrompts += 1
+				local id = string.sub(d.Parent.Name, 5)
+				if string.sub(d.Parent.Name, 1, 4) ~= "Egg_" or d:GetAttribute("TextKey") ~= "world.prompt.hatch" or d:GetAttribute("ObjectKey") ~= "egg." .. id .. ".name" then
+					okPrompts = false
+				end
+			end
+		end
+		check(eggPrompts == 5 and okPrompts, "E. os 5 prompts de sempre, um em cada ovo (abrem o painel de Ovos; a validação antes da cobrança fica no servidor)")
+		-- Placas: nome, preço e estágio exigido.
+		local function plaque(id)
+			local board = area:FindFirstChild("EggPlaque_" .. id)
+			local gui = board and board:FindFirstChildOfClass("SurfaceGui")
+			local nameLabel = gui and gui:FindFirstChild("Name")
+			local priceLabel = gui and gui:FindFirstChild("Price")
+			return nameLabel and nameLabel.Text, priceLabel and priceLabel.Text
+		end
+		local _, towerPrice = plaque("TowerEgg")
+		local colossusName, colossusPrice = plaque("ColossusEgg")
+		local basicName, basicPrice = plaque("BasicEgg")
+		check(basicName == "OVO BÁSICO" and basicPrice == "⚡ 2K" and colossusName == "OVO DO COLOSSO" and string.find(colossusPrice or "", "💎 2.5K", 1, true) and string.find(colossusPrice or "", "Estágio 10", 1, true) and string.find(towerPrice or "", "Estágio 5", 1, true), string.format("E. placas físicas: nome, preço e estágio (\"%s\" / \"%s\")", tostring(colossusName), tostring(colossusPrice)))
+		-- Incubadoras abertas: braços longe do ovo, menores que ele, até 4.
+		local eggs = {}
+		for _, d in world:GetDescendants() do
+			if d:IsA("BasePart") and string.sub(d.Name, 1, 4) == "Egg_" then
+				table.insert(eggs, d)
+			end
+		end
+		local open, armsByTier = true, {}
+		for _, d in area:GetDescendants() do
+			if d.Name == "IncubatorArm" then
+				local tier = d:GetAttribute("Tier")
+				armsByTier[tier] = (armsByTier[tier] or 0) + 1
+				local tip = (d.CFrame * CF.new(0, d.Size.Y / 2, 0)).Position
+				for _, egg in eggs do
+					local centre = egg.CFrame.Position
+					local flat = V3.new(tip.X - centre.X, 0, tip.Z - centre.Z).Magnitude
+					if flat < 5 and flat < egg.Size.X / 2 + 0.5 then
+						open = false
+					end
+					if d.Size.Y >= egg.Size.Y * 1.3 then
+						open = false
+					end
+				end
+			end
+		end
+		check(open and (armsByTier[1] or 0) <= (armsByTier[3] or 0) and (armsByTier[5] or 0) <= 4, string.format("E. incubadoras ABERTAS e menores que o ovo; mais elaboradas por nível (braços: %d, %d, %d, %d, %d)", armsByTier[1] or 0, armsByTier[2] or 0, armsByTier[3] or 0, armsByTier[4] or 0, armsByTier[5] or 0))
+		-- Nada sólido novo perto dos ovos (o caminho até eles fica livre).
+		local blocking = 0
+		for _, d in area:GetDescendants() do
+			if d:IsA("BasePart") and d.CanCollide then
+				for _, egg in eggs do
+					local a = V3.new(d.CFrame.Position.X, 0, d.CFrame.Position.Z)
+					local b = V3.new(egg.CFrame.Position.X, 0, egg.CFrame.Position.Z)
+					if (a - b).Magnitude < 16 then
+						blocking += 1
+					end
+				end
+			end
+		end
+		check(blocking == 0, "E. nenhuma peça sólida nova a menos de 16 studs dos ovos: as bancadas continuam acessíveis")
+		local partsE, lightsE = 0, 0
+		for _, d in area:GetDescendants() do
+			if d:IsA("BasePart") then
+				partsE += 1
+			end
+		end
+		local landmark = world:FindFirstChild("EggLandmark", true)
+		for _, d in world:GetDescendants() do
+			if d:IsA("PointLight") and d.Parent and d.Parent:IsA("BasePart") and (V3.new(d.Parent.CFrame.Position.X, 0, d.Parent.CFrame.Position.Z) - V3.new(LobbyConfig.Areas.Eggs.Offset.X, 0, LobbyConfig.Areas.Eggs.Offset.Z)).Magnitude < LobbyConfig.Areas.Eggs.Radius then
+				lightsE += 1
+			end
+		end
+		check(partsE <= 90 and lightsE == 0 and landmark and world:FindFirstChild("AreaSign_Eggs", true) == nil, string.format("E. %d peças (%d instâncias), sem luz constante (o ovo gigante tinha PointLight 18) e sem estandarte repetido", partsE, #area:GetDescendants()))
+		-- Reverter.
+		LobbyConfig.IncubationArea = false
+		local oldE = build()
+		local oldEgg = oldE:FindFirstChild("Egg_BasicEgg", true)
+		check(oldE:FindFirstChild("Station_Eggs_Machine", true) == nil and oldEgg and oldEgg:FindFirstChildOfClass("BillboardGui") and oldE:FindFirstChild("AreaSign_Eggs", true), "E. IncubationArea = false volta as bancadas de antes")
+		LobbyConfig.IncubationArea = true
+	end
+end
+
 -- ── C. FORJA DE CORTES ─────────────────────────────────────────────────────
 do
 	local forge = world:FindFirstChild("Station_Cuts_Machine", true)
@@ -996,7 +1109,7 @@ do
 		local clean = true
 		for _, path in { "src/server/World/StationMachines.luau", "src/client/Controllers/StationFxController.luau" } do
 			local source = fsMod.readFile(E.Root .. "/" .. path)
-			for _, word in { "CutConfig", "CutLogic", "FireServer", "InvokeServer", "Damage", "Price" } do
+			for _, word in { "CutConfig", "CutLogic", "FireServer", "InvokeServer", "Damage", "cut.Price", "PerClick" } do
 				if string.find(source, word, 1, true) then
 					clean = false
 					print("      " .. path .. " usa " .. word)

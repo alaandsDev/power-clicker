@@ -39,6 +39,8 @@ return {
 	["station.training.name"] = "Training",
 	["station.training.subtitle"] = "GET STRONGER",
 	["training.free"] = "FREE",
+	["station.eggs.name"] = "Eggs",
+	["station.eggs.subtitle"] = "FIND NEW PETS",
 	["menu.rebirth"] = "Rebirth",
 
 	["upgrades.title"] = "{icon} Upgrades",

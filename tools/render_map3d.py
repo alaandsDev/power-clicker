@@ -229,4 +229,5 @@ if __name__ == "__main__":
     if altar:
         station_views("rebirth", "RebirthCore", (-altar["p"][0], -altar["p"][2]), 7, 26)
     station_views("training", "GymGateBeam", (0, -1), 6, 34)
+    station_views("eggs", "EggHeaderStone", (0, 1), 8, 84)
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")

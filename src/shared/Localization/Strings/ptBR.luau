@@ -45,6 +45,8 @@ return {
 	["station.training.name"] = "Treino",
 	["station.training.subtitle"] = "FIQUE MAIS FORTE",
 	["training.free"] = "LIVRE",
+	["station.eggs.name"] = "Ovos",
+	["station.eggs.subtitle"] = "ENCONTRE NOVOS PETS",
 	["menu.rebirth"] = "Renascer",
 
 	-- Painel de melhorias

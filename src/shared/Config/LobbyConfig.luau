@@ -211,6 +211,14 @@ return {
 	]]
 	TrainingCenter = true,
 
+	--[[
+		ÁREA DE INCUBAÇÃO: true = incubadoras abertas em volta dos ovos, placas
+		físicas (nome, preço, estágio), cabos até o ovo gigante e a placa
+		"🥚 OVOS"; false/nil = bancadas de antes. Ovos, preços, chances e
+		prompts são os mesmos nos dois.
+	]]
+	IncubationArea = true,
+
 	CutForge = {
 		Position = Vector3.new(130, 0, -28),
 		Facing = Vector3.new(0, 0, 1), -- para a avenida (z = 0)
