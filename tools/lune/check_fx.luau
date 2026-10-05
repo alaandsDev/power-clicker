@@ -396,6 +396,26 @@ check(math.abs(impacts[1].Point.X - (face - 0.3)) < 0.01, "2. o impacto nasce na
 check(impacts[1].Options.Intensity == CutVisuals.For("Cut1").Impact and impacts[1].Theme.StageId == "Wood", "2. intensidade do Corte atual e tema da barreira atingida")
 check(woodRow.Color ~= nil, "1. BARREIRA: a superfície reage (flash) — e o dano real chegou pelo WallState")
 
+-- Combo visual (A→B→C): o efeito nasce um pouco para o lado do fim da lâmina
+-- (A esquerda, B direita, C centro), o C é o fecho marcado; a intensidade do
+-- Corte (e o dano) não mudam.
+do
+	local hrp = localPlayer.Character.HumanoidRootPart
+	local at = hrp.CFrame.Position
+	hrp.CFrame = CF.lookAt(at, at + V3.new(1, 0, 0)) -- de frente para a barreira (+X)
+	frames(1.5)
+	local first = #impacts + 1
+	for _ = 1, 3 do
+		Slash.Play()
+		frames(0.3)
+	end
+	local ia, ib, ic = impacts[first], impacts[first + 1], impacts[first + 2]
+	check(ia and ib and ic and ia.Point.Z < ic.Point.Z and ib.Point.Z > ic.Point.Z and math.abs(ia.Point.X - ic.Point.X) < 1e-6 and math.abs(ib.Point.X - ic.Point.X) < 1e-6, "COMBO. impacto A à esquerda, B à direita, C no centro — sempre na face da mesma fileira")
+	check(ia and ib and ic and not ia.Options.Finisher and not ib.Options.Finisher and ic.Options.Finisher == true, "COMBO. só o 3º golpe (C) é o fecho marcado")
+	check(ia and ic and ia.Options.Intensity == ic.Options.Intensity and ia.Options.Strong == ic.Options.Strong, "COMBO. o C não é crítico: mesma intensidade do Corte e mesmo \"hit forte\" (dano igual)")
+	hrp.CFrame = CF.new(at)
+end
+
 -- 3. Temas.
 check(#BarrierThemes.Missing() == 0, "3. todos os estágios do WallConfig têm tema de efeito")
 local signature = {}

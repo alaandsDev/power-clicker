@@ -12,6 +12,11 @@
 	  continua afastado das pernas e o resto do corpo fica com a locomoção.
 	- GOLPE (prioridade sobre a postura): PREPARAÇÃO → CORTE → IMPACTO →
 	  RETORNO, partindo da pose em que o braço estava e terminando na postura.
+	  Em COMBO VISUAL de 3: A (diagonal direita→esquerda), B (esquerda→direita,
+	  espelho) e C (vertical, o "PÁ" mais marcado), sempre A→B→C→A...; volta
+	  para A depois de COMBO_RESET sem golpes, no respawn e na troca de
+	  espada. É só a ordem dos MOVIMENTOS: o C não dá dano nem Power a mais
+	  (este módulo nem conhece dano).
 
 	Por que procedural e não AnimationTrack:
 	- a espada é uma Tool com ManualActivationOnly (clicar é a entrada do jogo),
@@ -51,8 +56,9 @@ SwordSwing.FAST_INTERVAL = 0.2 -- golpes a menos que isso um do outro = "rápido
 -- Fração do golpe em que a lâmina passa pelo meio do corte (o impacto): é
 -- aqui que o corte (CutFx) e o arco aparecem.
 SwordSwing.IMPACT = 0.4
--- A terceira variação (de cima para baixo) entra a cada tantos golpes.
-SwordSwing.OVERHEAD_EVERY = 7
+-- Sem golpe por tanto tempo, o combo visual recomeça no A.
+SwordSwing.COMBO_RESET = 1.2
+local ORDER: { Variant } = { "A", "B", "C" }
 
 local ZERO = Vector3.zero
 local KEYS = { "Shoulder", "Elbow", "Wrist", "Waist", "Neck", "LShoulder", "LElbow" }
@@ -68,20 +74,41 @@ local NEUTRAL: Pose = { Shoulder = ZERO, Elbow = ZERO, Wrist = ZERO, Waist = ZER
 	Articulação que o golpe não cita fica na postura do momento.
 ]]
 local SHAPES: { [Variant]: { Windup: { [string]: Vector3 }, Strike: { [string]: Vector3 } } } = {
-	-- A: diagonal de cima/direita para baixo/esquerda.
+	-- A: diagonal de cima/direita para baixo/esquerda. O tronco gira junto e
+	-- o braço esquerdo recua para equilibrar.
 	A = {
-		Windup = { Shoulder = Vector3.new(55, -30, -25), Elbow = Vector3.new(25, 0, 0), Wrist = Vector3.new(15, 0, 0), Waist = Vector3.new(0, -8, 0) },
-		Strike = { Shoulder = Vector3.new(-35, 40, 20), Elbow = Vector3.new(0, 0, 0), Wrist = Vector3.new(-20, 0, 0), Waist = Vector3.new(0, 10, 0) },
+		Windup = {
+			Shoulder = Vector3.new(55, -30, -25), Elbow = Vector3.new(25, 0, 0), Wrist = Vector3.new(15, 0, 0),
+			Waist = Vector3.new(2, -10, 0), LShoulder = Vector3.new(10, 0, -14), LElbow = Vector3.new(25, 0, 0),
+		},
+		Strike = {
+			Shoulder = Vector3.new(-35, 40, 20), Elbow = Vector3.new(5, 0, 0), Wrist = Vector3.new(-40, 0, 0),
+			Waist = Vector3.new(-3, 12, 0), LShoulder = Vector3.new(-12, 0, -20), LElbow = Vector3.new(18, 0, 0),
+		},
 	},
-	-- B: diagonal de cima/esquerda para baixo/direita (volta do A).
+	-- B: diagonal de cima/esquerda para baixo/direita (o espelho do A).
 	B = {
-		Windup = { Shoulder = Vector3.new(50, 30, 25), Elbow = Vector3.new(30, 0, 0), Wrist = Vector3.new(15, 0, 0), Waist = Vector3.new(0, 8, 0) },
-		Strike = { Shoulder = Vector3.new(-35, -35, -20), Elbow = Vector3.new(0, 0, 0), Wrist = Vector3.new(-20, 0, 0), Waist = Vector3.new(0, -10, 0) },
+		Windup = {
+			Shoulder = Vector3.new(50, 30, 25), Elbow = Vector3.new(30, 0, 0), Wrist = Vector3.new(15, 0, 0),
+			Waist = Vector3.new(2, 10, 0), LShoulder = Vector3.new(-8, 0, -18), LElbow = Vector3.new(18, 0, 0),
+		},
+		Strike = {
+			Shoulder = Vector3.new(-35, -35, -20), Elbow = Vector3.new(5, 0, 0), Wrist = Vector3.new(-40, 0, 0),
+			Waist = Vector3.new(-3, -12, 0), LShoulder = Vector3.new(12, 0, -10), LElbow = Vector3.new(25, 0, 0),
+		},
 	},
-	-- C: de cima para baixo, ocasional.
+	-- C: de cima para baixo, o fecho do combo: preparação mais alta, o tronco
+	-- recua e desce junto com a lâmina, os dois braços entram.
 	C = {
-		Windup = { Shoulder = Vector3.new(75, 0, 0), Elbow = Vector3.new(30, 0, 0), Wrist = Vector3.new(20, 0, 0), Waist = Vector3.new(-4, 0, 0) },
-		Strike = { Shoulder = Vector3.new(-45, 5, 0), Elbow = Vector3.new(0, 0, 0), Wrist = Vector3.new(-25, 0, 0), Waist = Vector3.new(6, 0, 0) },
+		Windup = {
+			Shoulder = Vector3.new(85, 0, 5), Elbow = Vector3.new(40, 0, 0), Wrist = Vector3.new(25, 0, 0),
+			Waist = Vector3.new(6, 0, 0), LShoulder = Vector3.new(20, 0, -12), LElbow = Vector3.new(30, 0, 0),
+		},
+		Strike = {
+			-- punho -40: a lâmina termina à frente, na horizontal (a do Colosso não chega ao chão)
+			Shoulder = Vector3.new(-50, 5, 5), Elbow = Vector3.new(0, 0, 0), Wrist = Vector3.new(-40, 0, 0),
+			Waist = Vector3.new(-8, 0, 0), LShoulder = Vector3.new(-15, 0, -18), LElbow = Vector3.new(15, 0, 0),
+		},
 	},
 }
 
@@ -225,12 +252,14 @@ function SwordSwing.Lerp(a: Pose, b: Pose, t: number): Pose
 	return lerpPose(a, b, t)
 end
 
--- A variação do golpe número `count` (1, 2, 3...): A, B, A, B... e um C de vez em quando.
+-- A variação do golpe número `count` do combo (1, 2, 3...): A, B, C, A, B, C...
 function SwordSwing.VariantFor(count: number): Variant
-	if count % SwordSwing.OVERHEAD_EVERY == 0 then
-		return "C"
-	end
-	return if count % 2 == 1 then "A" else "B"
+	return ORDER[(math.max(count, 1) - 1) % #ORDER + 1]
+end
+
+-- O golpe que fecha o combo (só o visual fica um pouco mais marcado).
+function SwordSwing.IsFinisher(variant: Variant?): boolean
+	return variant == "C"
 end
 
 -- Duração do golpe dado o intervalo desde o anterior.
@@ -301,6 +330,7 @@ export type Rig = {
 	Applied: boolean, -- alguma articulação fora do original
 	Phase: number, -- defasagem da respiração (personagens não respiram juntos)
 	Speed: number, -- velocidade do personagem (suavizada)
+	Blade: Instance?, -- a lâmina na mão (trocou = combo recomeça)
 	BladeLength: number, -- comprimento da lâmina (suavizado: trocar de espada não dá tranco)
 	LastRoot: Vector3?,
 }
@@ -385,6 +415,7 @@ function SwordSwing.NewRig(character: Model): Rig?
 		Applied = false,
 		Phase = (#character.Name * 0.77) % BREATH_SECONDS,
 		Speed = 0,
+		Blade = nil,
 		BladeLength = SwordSwing.BASE_BLADE,
 		LastRoot = nil,
 	}
@@ -467,6 +498,9 @@ end
 	no meio do anterior parte da pose atual: nunca há dois golpes ao mesmo tempo.
 ]]
 function SwordSwing.Start(rig: Rig, now: number): (Variant, number)
+	if now - rig.LastAt > SwordSwing.COMBO_RESET then
+		rig.Count = 0
+	end
 	rig.Count += 1
 	local duration = SwordSwing.DurationFor(now - rig.LastAt)
 	rig.LastAt = now
@@ -498,6 +532,11 @@ function SwordSwing.Step(rig: Rig, now: number): boolean
 		apply(rig, rig.Rest)
 	end
 	return false
+end
+
+-- O combo visual recomeça no A (troca de espada).
+function SwordSwing.ResetCombo(rig: Rig)
+	rig.Count = 0
 end
 
 -- Devolve tudo ao original (personagem saindo, morrendo, sendo trocado).

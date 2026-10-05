@@ -105,9 +105,10 @@ end
 --[[
 	Toca o corte em `origin` (o olhar de `origin` é para onde o risco "corta").
 	`scale` encolhe só o tamanho (a vitrine usa < 1); `roll` gira o conjunto em
-	graus (o golpe varia a cada clique para não parecer carimbo).
+	graus (a direção do golpe do combo); `sweep` = 1 ou -1, o sentido em que
+	o risco varre enquanto some (o golpe espelhado varre ao contrário).
 ]]
-function CutFx.Play(rig: Rig, recipe: CutVisuals.Recipe, origin: CFrame, scale: number?, roll: number?)
+function CutFx.Play(rig: Rig, recipe: CutVisuals.Recipe, origin: CFrame, scale: number?, roll: number?, sweep: number?)
 	if not rig.Alive then
 		return
 	end
@@ -118,6 +119,7 @@ function CutFx.Play(rig: Rig, recipe: CutVisuals.Recipe, origin: CFrame, scale: 
 	local info = TweenInfo.new(recipe.FadeSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	local length = recipe.Length * size
 	local width = recipe.Width * size
+	local half = recipe.Sweep / 2 * (if sweep and sweep < 0 then -1 else 1)
 	for index, part in slot do
 		local angle = angles[index]
 		if angle == nil then
@@ -128,12 +130,12 @@ function CutFx.Play(rig: Rig, recipe: CutVisuals.Recipe, origin: CFrame, scale: 
 		part.Color = recipe.Color
 		part.Material = if recipe.Glow then Enum.Material.Neon else Enum.Material.SmoothPlastic
 		part.Size = Vector3.new(recipe.Thickness, length * 0.45, width)
-		part.CFrame = origin * CFrame.Angles(0, 0, math.rad(tilt - recipe.Sweep / 2))
+		part.CFrame = origin * CFrame.Angles(0, 0, math.rad(tilt - half))
 		part.Transparency = if recipe.Glow then 0.1 else 0.3
 		TweenService:Create(part, info, {
 			Transparency = 1,
 			Size = Vector3.new(recipe.Thickness, length, width * 0.4),
-			CFrame = origin * CFrame.Angles(0, 0, math.rad(tilt + recipe.Sweep / 2)),
+			CFrame = origin * CFrame.Angles(0, 0, math.rad(tilt + half)),
 		}):Play()
 	end
 

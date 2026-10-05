@@ -9,7 +9,8 @@
 	impacto que Swing() devolve, então lâmina, corte e impacto coincidem.
 
 	- Jogador local: golpe completo a cada hit (até ~9/s; um golpe novo
-	  continua da pose atual). "Efeitos reduzidos" NÃO tira o golpe: é a
+	  continua da pose atual), no combo visual A→B→C (SwordSwing). Trocar de
+	  espada recomeça o combo no A. "Efeitos reduzidos" NÃO tira o golpe: é a
 	  informação básica de que você está atacando.
 	- Outros jogadores perto (até REMOTE_DISTANCE): o servidor marca o atributo
 	  "SwingSeq" no jogador no máximo ~4 vezes por segundo enquanto ele clica
@@ -128,6 +129,7 @@ function SwordSwingController.Swing(): (number, SwordSwing.Variant?)
 	end
 	local variant, impact = SwordSwing.Start(rig, now())
 	setTrail(rig.Character, Players.LocalPlayer:GetAttribute("EquippedSword"), true)
+	SwordTrail.Emphasis(rig.Character, SwordSwing.IsFinisher(variant))
 	return impact, variant
 end
 
@@ -212,9 +214,16 @@ end
 local function stepRig(rig: SwordSwing.Rig, at: number, dt: number, swordId: any)
 	local character = rig.Character
 	local armed = character:FindFirstChild("CutBlade") ~= nil
+	local blade = if armed then bladeOf(character) else nil
+	if blade and blade ~= rig.Blade then
+		if rig.Blade then
+			SwordSwing.ResetCombo(rig) -- espada nova: o combo recomeça no A
+		end
+		rig.Blade = blade
+	end
 	local root = rootOf(character)
 	local moving = SwordSwing.Track(rig, if root then root.Position else nil, dt)
-	SwordSwing.Settle(rig, at, dt, armed, moving, bladeLength(if armed then bladeOf(character) else nil))
+	SwordSwing.Settle(rig, at, dt, armed, moving, bladeLength(blade))
 	local wasActive = rig.Active
 	local swinging = SwordSwing.Step(rig, at)
 	if swinging or wasActive then
@@ -260,7 +269,8 @@ function SwordSwingController.Step(at: number)
 		if rig then
 			if at < remote.BurstUntil and at >= remote.NextAt then
 				remote.NextAt = at + REMOTE_SWING_SPACING
-				SwordSwing.Start(rig, at)
+				local variant = SwordSwing.Start(rig, at)
+				SwordTrail.Emphasis(rig.Character, SwordSwing.IsFinisher(variant))
 			end
 			stepRig(rig, at, dt, player:GetAttribute("EquippedSword"))
 		end

@@ -190,17 +190,21 @@ export type ImpactOptions = {
 	CutColor: Color3,
 	Strong: boolean, -- o hit tirou uma fatia grande da fileira
 	Reduced: boolean,
+	Finisher: boolean?, -- 3º golpe do combo visual: um pouco maior e com onda (dano igual)
 }
 
 --[[
 	Um hit no ponto `point` da face. Tudo nasce ali e vai na direção do golpe
 	de volta (Normal) e um pouco para os lados — nada espalhado pela tela.
 ]]
+-- O fecho do combo (golpe C) cresce só isto: um pouco mais marcado, nunca um "crítico".
+local FINISHER_BOOST = 1.2
+
 function BarrierFx.Impact(fx: Fx, theme: Theme, point: Vector3, options: ImpactOptions)
 	if not fx.Alive then
 		return
 	end
-	local intensity = math.clamp(options.Intensity, 0.5, 3) * (if options.Strong then 1.4 else 1)
+	local intensity = math.clamp(options.Intensity, 0.5, 3) * (if options.Strong then 1.4 else 1) * (if options.Finisher then FINISHER_BOOST else 1)
 	local normal = options.Normal.Unit
 	local face = CFrame.lookAt(point, point + normal)
 
@@ -238,8 +242,8 @@ function BarrierFx.Impact(fx: Fx, theme: Theme, point: Vector3, options: ImpactO
 	rig.Burst:Emit(math.floor(4 * intensity) + (if options.Strong then 6 else 0))
 	rig.Dust:Emit(if options.Strong then 4 else 2)
 
-	-- Onda curta na superfície (hit forte ou corte forte).
-	if options.Strong or options.Intensity >= 1.5 then
+	-- Onda curta na superfície (hit forte, corte forte ou fecho do combo).
+	if options.Strong or options.Finisher or options.Intensity >= 1.5 then
 		local ring = take(fx, "Rings")
 		ring.Color = options.CutColor
 		ring.CFrame = CFrame.new(point) -- eixo do cilindro em X = a normal da face do corredor

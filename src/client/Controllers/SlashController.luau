@@ -14,15 +14,30 @@
 
 	The arcs are pooled — creating and destroying parts at click speed is what
 	makes a clicker stutter on a weak phone.
+
+	Combo visual (SwordSwing A→B→C): cada golpe diz a DIREÇÃO do risco — A
+	"/" (direita→esquerda), B "\" (esquerda→direita), C vertical — e o
+	arco/corte segue, um pouco deslocado para o lado onde a lâmina termina.
+	O C (fecho) desenha o MESMO Corte um pouco maior; cor, quantidade de
+	riscos e partículas continuam sendo do Corte. Espada = movimento,
+	Corte = poder, skin = aparência. Dano: nenhum número passa por aqui.
+
+	Auto Click: enquanto o servidor diz que está ligado (atributo
+	"AutoClickOn"), o personagem golpeia no MESMO ritmo dos ticks do
+	servidor (EconomyConfig.AutoClick.TicksPerSecond), seguindo o mesmo
+	combo. Só visual: os ticks de verdade continuam no servidor. Se o
+	jogador está clicando, os golpes manuais já mostram o ataque.
 ]]
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local SwordConfig = require(Shared:WaitForChild("Config"):WaitForChild("SwordConfig"))
 local CutVisuals = require(Shared:WaitForChild("Formulas"):WaitForChild("CutVisuals"))
+local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("EconomyConfig"))
 
 local CutFx = require(script.Parent.Parent.Effects.CutFx)
 
@@ -42,6 +57,10 @@ local MIN_INTERVAL = 0.05 -- never more than ~20 arcs a second
 local CUT_MIN_INTERVAL = 0.1
 local CUT_PLAYS = 7
 local CUT_SPARK_COOLDOWN = 0.3 -- sparks at most ~3 times a second
+-- O fecho do combo (C): o mesmo Corte, um pouco maior.
+local FINISHER_SCALE = 1.15
+-- Auto Click: um golpe visual por tick do servidor.
+local AUTO_INTERVAL = 1 / EconomyConfig.AutoClick.TicksPerSecond
 
 local SlashController = {}
 
@@ -49,6 +68,8 @@ local pool: { BasePart } = {}
 local poolIndex = 0
 local lastAt = 0
 local lastCutAt = 0
+local lastManualAt = -math.huge
+local nextAutoAt = 0
 local folder: Folder
 local cutRig: CutFx.Rig
 
@@ -75,9 +96,22 @@ local function createArc(): BasePart
 	return part
 end
 
--- Inclinação do arco/corte de cada variação do golpe (graus em torno do
--- olhar): o risco segue a diagonal que a lâmina faz.
-local VARIANT_ROLL = { A = 45, B = -45, C = 0 }
+--[[
+	Cada variação do golpe: inclinação do risco (graus em torno do olhar;
+	positivo = topo para a ESQUERDA de quem olha por trás), sentido em que ele
+	varre enquanto some e para que lado (studs) ele nasce.
+	A "/" direita→esquerda, B "\" esquerda→direita, C vertical no centro.
+]]
+local VARIANTS: { [string]: { Roll: number, Sweep: number, Side: number } } = {
+	A = { Roll = -45, Sweep = 1, Side = -0.5 },
+	B = { Roll = 45, Sweep = -1, Side = 0.5 },
+	C = { Roll = 0, Sweep = 1, Side = 0 },
+}
+local ROLL_JITTER = 8
+
+function SlashController.VariantInfo(variant: string): { Roll: number, Sweep: number, Side: number }?
+	return VARIANTS[variant]
+end
 
 local function draw(variant: string?)
 	local character = Players.LocalPlayer.Character
@@ -86,37 +120,43 @@ local function draw(variant: string?)
 		return
 	end
 	local now = os.clock()
-	-- Sem golpe (R6, montando): inclinação variada, como antes.
-	local roll = if variant then VARIANT_ROLL[variant] + math.random(-10, 10)
+	-- Sem golpe (personagem montando): inclinação variada, como antes.
+	local info = if variant then VARIANTS[variant] else nil
+	local roll = if info then info.Roll + math.random(-ROLL_JITTER, ROLL_JITTER)
 		else math.random(25, 65) * (if math.random() < 0.5 then 1 else -1)
+	local side = if info then info.Side else 0
+	local finisher = variant == "C"
+	local scale = if finisher then FINISHER_SCALE else 1
 
 	poolIndex = (poolIndex % POOL_SIZE) + 1
 	local arc = pool[poolIndex]
 	local sword = equippedSword()
 	arc.Color = sword.ArcColor
+	local arcScale = sword.ArcScale * scale
 	arc.CFrame = root.CFrame
-		* CFrame.new(math.random(-12, 12) / 10, 0.4, -ARC_DISTANCE)
+		* CFrame.new(side + math.random(-4, 4) / 10, 0.4, -ARC_DISTANCE)
 		* CFrame.Angles(0, 0, math.rad(roll))
 	arc.Transparency = 0.25
-	arc.Size = ARC_SIZE * sword.ArcScale
+	arc.Size = ARC_SIZE * arcScale
 
 	TweenService:Create(arc, TweenInfo.new(ARC_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Transparency = 1,
 		Size = Vector3.new(
-			ARC_SIZE.X * sword.ArcScale,
-			ARC_SIZE.Y * sword.ArcScale * 1.5,
-			ARC_SIZE.Z * sword.ArcScale * 0.4
+			ARC_SIZE.X * arcScale,
+			ARC_SIZE.Y * arcScale * 1.5,
+			ARC_SIZE.Z * arcScale * 0.4
 		),
 	}):Play()
 
 	local recipe = CutVisuals.ForBest(Players.LocalPlayer:GetAttribute("BestCut"))
 	if now - lastCutAt >= CUT_MIN_INTERVAL then
 		lastCutAt = now
-		local origin = root.CFrame * CFrame.new(math.random(-8, 8) / 10, 0.4, -ARC_DISTANCE - 0.3)
-		CutFx.Play(cutRig, recipe, origin, 1, roll - 45)
+		local origin = root.CFrame * CFrame.new(side + math.random(-3, 3) / 10, 0.4, -ARC_DISTANCE - 0.3)
+		-- O Corte tem a própria inclinação (1 risco = 45°): soma para cair na do golpe.
+		CutFx.Play(cutRig, recipe, origin, scale, roll - 45, if info then info.Sweep else 1)
 	end
 	-- No mesmo instante: o impacto na barreira (se o golpe acertou uma).
-	CombatFxController.OnSwingImpact(recipe)
+	CombatFxController.OnSwingImpact(recipe, variant)
 end
 
 --[[
@@ -126,18 +166,21 @@ end
 	"Efeitos reduzidos" tira o arco e o corte, mas NÃO o golpe da espada nem
 	a indicação básica do impacto (o flash no ponto de contato).
 ]]
-function SlashController.Play()
+function SlashController.Play(auto: boolean?)
+	local now = os.clock()
+	if not auto then
+		lastManualAt = now
+	end
 	local impact, variant = SwordSwingController.Swing()
 	local settings = DataController.Get("Settings")
 	if settings and settings.ReducedEffects == true then
 		if impact > 0 then
-			task.delay(impact, CombatFxController.OnSwingImpact, nil)
+			task.delay(impact, CombatFxController.OnSwingImpact, nil, variant)
 		else
-			CombatFxController.OnSwingImpact(nil)
+			CombatFxController.OnSwingImpact(nil, variant)
 		end
 		return
 	end
-	local now = os.clock()
 	if now - lastAt < MIN_INTERVAL then
 		return
 	end
@@ -149,6 +192,26 @@ function SlashController.Play()
 	end
 end
 
+--[[
+	Um quadro do golpe automático (exposto para os testes): com o Auto Click
+	ligado e o jogador sem clicar, um golpe por tick do servidor.
+]]
+function SlashController.StepAuto(at: number)
+	if Players.LocalPlayer:GetAttribute("AutoClickOn") ~= true then
+		nextAutoAt = at
+		return
+	end
+	if at - lastManualAt < AUTO_INTERVAL then
+		nextAutoAt = at + AUTO_INTERVAL -- clicando: os golpes manuais já aparecem
+		return
+	end
+	if at >= nextAutoAt then
+		-- Ritmo fixo; depois de uma pausa longa recomeça daqui (sem rajada).
+		nextAutoAt = if at - nextAutoAt > AUTO_INTERVAL then at + AUTO_INTERVAL else nextAutoAt + AUTO_INTERVAL
+		SlashController.Play(true)
+	end
+end
+
 function SlashController.Init()
 	folder = Instance.new("Folder")
 	folder.Name = "SlashEffects"
@@ -157,6 +220,12 @@ function SlashController.Init()
 		pool[index] = createArc()
 	end
 	cutRig = CutFx.NewRig("Cut", folder, CUT_PLAYS, CUT_SPARK_COOLDOWN)
+end
+
+function SlashController.Start()
+	RunService.Heartbeat:Connect(function()
+		SlashController.StepAuto(os.clock())
+	end)
 end
 
 return SlashController

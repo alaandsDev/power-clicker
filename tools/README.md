@@ -80,8 +80,8 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
 - **check_swing** — o golpe procedural da espada (`SwordSwing` +
   `SwordSwingController`) e o `SlashController` reais sobre um personagem R15
   montado no Lune, com relógio simulado: hit dispara o golpe; 9 hits/s por
-  30 s sem acumular instâncias nem criar Animation; A/B alternados (C
-  ocasional); o golpe volta para a postura (e, sem espada, o C0 volta
+  30 s sem acumular instâncias nem criar Animation; combo estrito A→B→C;
+  o golpe volta para a postura (e, sem espada, o C0 volta
   exatamente ao original); troca de skin e respawn no meio do golpe; corte
   (CutFx) desenhado no impacto e na diagonal do golpe; "Efeitos reduzidos"
   mantém o golpe; outros jogadores golpeiam perto e nada longe; o golpe não
@@ -91,11 +91,20 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   transições sem tranco (máx. por quadro) em parado↔andando, golpe→postura,
   equipar/guardar, trocar de lâmina e respawn; nenhuma skin encosta a ponta
   no chão (modelo no plano do corpo); R6 e Joint Upgrade; outros jogadores
-  perto também ficam na postura.
+  perto também ficam na postura. COMBO VISUAL (bloco K): A, B, C e volta ao
+  A; spam a 9/s e Auto Click (no ritmo dos ticks do servidor, 30 s sem
+  acumular) seguem o ciclo; clicando com o Auto ligado não há golpe extra;
+  o Corte segue a direção (A "/", B "\", C vertical) e o sentido de varrer,
+  mantendo cor/riscos; o C só fica um pouco mais marcado (Corte 1,15×,
+  rastro mais longo) com a mesma duração; recomeça no A após 1,2 s parado,
+  no respawn e na troca de espada; R6/R15/Joint Upgrade; reduzidos mantêm o
+  movimento; ponto do impacto deslocado (A esq., B dir., C centro) na mesma
+  face; nada do combo conhece dano/Power e o ritmo do servidor não muda.
 - **check_fx** — os controllers reais do combate (`WallController`,
   `SwordSwingController`, `SlashController`, `CombatFxController`) sobre o
   mapa, com um "servidor" mínimo mandando o `WallState` do jogador e relógio
-  simulado: golpe, corte e impacto no mesmo instante e no ponto de contato;
+  simulado: golpe, corte e impacto no mesmo instante e no ponto de contato
+  (combo: A à esquerda, B à direita, C no centro e marcado, sem crítico);
   tema por barreira; evolução dos Cortes; rachaduras pelo HP; hit forte,
   câmera por nível, hit stop e quebra final/Colosso; números agrupados (≤ 4);
   "Efeitos reduzidos"; golpe de outro jogador sem impacto na minha barreira;

@@ -68,6 +68,29 @@ function SwordTrail.Ensure(character: Model, swordId: any): Trail?
 	return trail
 end
 
+--[[
+	O golpe que fecha o combo (C) risca um rastro um pouco mais longo. Vale
+	para o rastro local e o da skin (o original fica guardado no atributo
+	"BaseLifetime" e volta no golpe seguinte). Só visual.
+]]
+local FINISHER_TRAIL = 1.6
+function SwordTrail.Emphasis(character: Model?, strong: boolean)
+	local blade = if character then bladeOf(character) else nil
+	if not blade then
+		return
+	end
+	for _, child in blade:GetChildren() do
+		if child:IsA("Trail") then
+			local base = child:GetAttribute("BaseLifetime")
+			if type(base) ~= "number" then
+				base = child.Lifetime
+				child:SetAttribute("BaseLifetime", base)
+			end
+			child.Lifetime = (base :: number) * (if strong then FINISHER_TRAIL else 1)
+		end
+	end
+end
+
 function SwordTrail.Set(character: Model?, swordId: any, enabled: boolean)
 	if not character then
 		return

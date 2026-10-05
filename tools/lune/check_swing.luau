@@ -10,7 +10,7 @@
 	  1. um hit dispara o golpe (o braço sai da pose de segurar);
 	  2. spam a 9 hits/s por 30 s: nenhuma instância nova acumulando, nenhuma
 	     Animation/AnimationTrack, um golpe por vez;
-	  3. variações A/B alternadas (e um C ocasional);
+	  3. combo visual estrito A→B→C→A... (ver bloco K);
 	  4. o golpe volta para a POSTURA de combate (e, sem espada, cada C0 volta
 	     EXATAMENTE ao original);
 	  5. trocar a skin (a Tool inteira) no meio do golpe não quebra nada e o
@@ -29,6 +29,12 @@
 	     desequipar, trocar de espada); lâminas grandes não tocam o chão
 	     (modelo no plano do corpo, toda skin do SwordConfig); R6 e Joint
 	     Upgrade também; respawn começa limpo; outros jogadores perto também.
+	  K. COMBO VISUAL de 3 golpes: A, B, C e volta ao A; spam a 9/s e Auto
+	     Click (no ritmo do servidor) seguem o ciclo; o Corte segue a
+	     direção (A "/", B "\\", C vertical) e o sentido de varrer; o C não
+	     muda dano/Power nem o ritmo; volta ao A depois de 1,2 s parado, no
+	     respawn e na troca de espada; R6/R15/Joint Upgrade; "Efeitos
+	     reduzidos" mantém o movimento; nada acumulando.
 
 	Adaptação SÓ AQUI: `.Position` -> `.CFrame.Position` no controller.
 
@@ -56,6 +62,7 @@ local function check(condition: any, message: string)
 end
 
 -- ── Ambiente ────────────────────────────────────────────────────────────────
+local attributes = { BestCut = "Cut4" }
 local Signal = E.require(E.Shared.Utils.Signal)
 local now = 1000
 E.extraGlobals.os = setmetatable({ clock = function()
@@ -173,7 +180,7 @@ local localPlayer = {
 	CharacterAdded = characterAdded,
 	CharacterRemoving = characterRemoving,
 	GetAttribute = function(_, key)
-		return if key == "BestCut" then "Cut4" else nil
+		return attributes[key]
 	end,
 	GetAttributeChangedSignal = function()
 		return Sig
@@ -209,9 +216,9 @@ end }
 local CutFx = E.require(E.Client.Effects.CutFx)
 local cutPlays = {}
 local originalPlay = CutFx.Play
-CutFx.Play = function(rig, recipe, origin, scale, roll)
-	table.insert(cutPlays, { At = now, Roll = roll, CutId = recipe.CutId })
-	return originalPlay(rig, recipe, origin, scale, roll)
+CutFx.Play = function(rig, recipe, origin, scale, roll, sweep)
+	table.insert(cutPlays, { At = now, Roll = roll, CutId = recipe.CutId, Scale = scale, Sweep = sweep, Slashes = recipe.Slashes, Color = recipe.Color })
+	return originalPlay(rig, recipe, origin, scale, roll, sweep)
 end
 roblox.implementMethod("ParticleEmitter", "Emit", function() end)
 
@@ -319,7 +326,8 @@ check(#cutPlays == 1, "7. o corte (CutFx) foi desenhado uma vez para o hit")
 check(rig.Duration >= 0.10 and rig.Duration <= 0.16, string.format("golpe curto (%.2f s, entre 0,10 e 0,16)", rig.Duration))
 check(math.abs((cutPlays[1].At - 1000) - impact) <= 1 / 60 + 1e-6, string.format("7. o corte aparece no IMPACTO do golpe (%.3f s depois do clique; impacto em %.3f s)", cutPlays[1].At - 1000, impact))
 check(cutPlays[1].CutId == "Cut4", "7. o corte desenhado é o do melhor Corte (CutVisuals), não o da espada")
-check(cutPlays[1].Roll >= -10 and cutPlays[1].Roll <= 10, "7. variação A: corte na diagonal do golpe A")
+-- Roll do CutFx = inclinação do golpe - 45 (o risco único do Corte já nasce a 45°).
+check(cutPlays[1].Roll >= -98 and cutPlays[1].Roll <= -82, "7. golpe A: corte na diagonal \"/\" do golpe A")
 
 -- 4. Volta para a postura.
 check(atRest(character, base, rig) and not atBase(character, base), "4. depois do golpe, o corpo volta EXATAMENTE para a postura de combate (espada na mão)")
@@ -332,16 +340,12 @@ for _ = 1, 14 do
 	frames(0.3)
 end
 local seq = table.concat(variants, "")
-local expected = {}
-for index = 2, 15 do
-	table.insert(expected, SwordSwing.VariantFor(index))
-end
-check(seq == table.concat(expected, "") and string.find(seq, "AB") and string.find(seq, "BA") and string.find(seq, "C"), "3. golpes alternam A/B, com um C ocasional (" .. seq .. ")")
+check(seq == "BCABCABCABCABC", "3. combo estrito A→B→C→A... (depois do A do teste 1: " .. seq .. ")")
 local rolls = {}
 for index = 2, #cutPlays do
 	rolls[variants[index - 1]] = cutPlays[index].Roll
 end
-check(rolls.A and rolls.B and rolls.A > -20 and rolls.B < -70, "7. o corte acompanha a variação (A e B em diagonais opostas)")
+check(rolls.A and rolls.B and rolls.C and rolls.A < -80 and rolls.B > -10 and rolls.B < 10 and rolls.C > -55 and rolls.C < -35, "7. o corte acompanha o golpe (A e B em diagonais opostas, C vertical)")
 
 -- 2. Spam a 9 hits/s por 30 s.
 local before = countInstances()
@@ -436,6 +440,13 @@ do
 	check(not same(shoulder.C0, base) and (shoulder.C0.Position - base.Position).Magnitude < 1e-6, "9b. R6: o braço golpeia (gira no ombro, sem sair do lugar)")
 	frames(0.3)
 	check(same(shoulder.C0, base), "9b. R6: volta exatamente à pose original")
+	local cycle = { Swing.LocalRig().Variant }
+	for _ = 1, 3 do
+		Slash.Play()
+		table.insert(cycle, Swing.LocalRig().Variant)
+		frames(0.3)
+	end
+	check(table.concat(cycle) == "ABCA", "K13. R6: combo A→B→C→A (" .. table.concat(cycle) .. ")")
 end
 do
 	local upgraded = Instance.new("Model")
@@ -463,6 +474,13 @@ do
 	check(not same(rigAttachment.CFrame, base), "9b. Joint Upgrade: o braço golpeia (pela Attachment0 da articulação)")
 	frames(0.3)
 	check(same(rigAttachment.CFrame, base), "9b. Joint Upgrade: volta exatamente à pose original")
+	local cycle = { Swing.LocalRig().Variant }
+	for _ = 1, 3 do
+		Slash.Play()
+		table.insert(cycle, Swing.LocalRig().Variant)
+		frames(0.3)
+	end
+	check(table.concat(cycle) == "ABCA", "K15. Joint Upgrade: combo A→B→C→A (" .. table.concat(cycle) .. ")")
 end
 do
 	local fresh = newCharacter("Local")
@@ -616,7 +634,19 @@ do
 		local length = 0.6 + sword.BladeSize.Y
 		for _, kind in { "R15", "R6" } do
 			local r15 = kind == "R15"
-			for _, pose in { SwordSwing.Stance(sword.BladeSize.Y, r15, r15), SwordSwing.Carry(sword.BladeSize.Y, r15, r15) } do
+			local stanceOf = SwordSwing.Stance(sword.BladeSize.Y, r15, r15)
+			local poses = { stanceOf, SwordSwing.Carry(sword.BladeSize.Y, r15, r15) }
+			for _, variant in { "A", "B", "C" } do
+				for step = 0, 50 do
+					local pose = SwordSwing.Pose(variant, step / 50, stanceOf, stanceOf)
+					if not r15 then
+						pose = table.clone(pose)
+						pose.Elbow, pose.Wrist = V3.zero, V3.zero
+					end
+					table.insert(poses, pose)
+				end
+			end
+			for _, pose in poses do
 				local arm = math.rad(90 + pose.Shoulder.X)
 				local fore = math.rad(90 + pose.Shoulder.X + pose.Elbow.X)
 				local hand = if r15 then 4.5 - 1.1 * math.cos(arm) - 1.1 * math.cos(fore) else 4.5 - 2 * math.cos(arm)
@@ -628,7 +658,7 @@ do
 			end
 		end
 	end
-	check(worst > 0.2, string.format("P13. nenhuma lâmina toca o chão parada/andando (ponta mais baixa %.2f studs: %s)", worst, worstName))
+	check(worst > 0.2, string.format("P13. nenhuma lâmina toca o chão parada, andando ou golpeando A/B/C (ponta mais baixa %.2f studs: %s)", worst, worstName))
 
 	-- R6 e Joint Upgrade: postura também.
 	local r6 = Instance.new("Model")
@@ -703,6 +733,221 @@ do
 	check(countKind("Animation") == 0 and countKind("AnimationTrack") == 0, "P7. nenhuma Animation/AnimationTrack em nenhuma etapa")
 end
 
+-- ── K. COMBO VISUAL DE 3 GOLPES ────────────────────────────────────────────
+do
+	local Combat = E.require(E.Client.Controllers.CombatFxController)
+	local impactsK = {}
+	local originalImpactK = Combat.OnSwingImpact
+	Combat.OnSwingImpact = function(recipe, variant)
+		table.insert(impactsK, { At = now, Variant = variant })
+		return originalImpactK(recipe, variant)
+	end
+	local swings = {}
+	local originalSwing = Swing.Swing
+	Swing.Swing = function()
+		local impact, variant = originalSwing()
+		table.insert(swings, { At = now, Variant = variant })
+		return impact, variant
+	end
+	local function seqOf(list, from)
+		local out = {}
+		for index = from or 1, #list do
+			table.insert(out, list[index].Variant or "?")
+		end
+		return table.concat(out)
+	end
+	local me = localPlayer.Character
+	local blade = me.CutBlade.Blade
+
+	-- K1–4: A, B, C e de volta ao A (golpes isolados).
+	frames(1.5)
+	local mark, cutMark = #swings, #cutPlays
+	for _ = 1, 4 do
+		Slash.Play()
+		frames(0.3)
+	end
+	check(seqOf(swings, mark + 1) == "ABCA", "K1–4. 1º golpe A, 2º B, 3º C, 4º volta ao A (" .. seqOf(swings, mark + 1) .. ")")
+	local byVariant = {}
+	for index = cutMark + 1, #cutPlays do
+		byVariant[swings[mark + index - cutMark].Variant] = cutPlays[index]
+	end
+	local a, b, c = byVariant.A, byVariant.B, byVariant.C
+	-- Inclinação efetiva do risco único = 45 + Roll (CutFx): A -45 "/", B +45 "\", C 0.
+	check(a and b and c and math.abs(45 + a.Roll + 45) <= 8 and math.abs(45 + b.Roll - 45) <= 8 and math.abs(45 + c.Roll) <= 8, "K7. o Corte segue a direção do golpe: A \"/\", B \"\\\", C vertical")
+	check(a and b and a.Sweep == 1 and b.Sweep == -1, "K7. A e B varrem em sentidos opostos (espelho)")
+	check(a and b and c and a.Slashes == c.Slashes and b.Slashes == c.Slashes and a.Color == c.Color and a.CutId == c.CutId, "K7. o Corte mantém a identidade (mesma cor e quantidade de riscos em A, B e C)")
+	check(a and c and a.Scale == 1 and c.Scale > 1 and c.Scale <= 1.2, string.format("K-C. o 3º golpe marca um pouco mais o Corte (escala %.2f), sem virar outro Corte", if c then c.Scale else 0))
+
+	-- Rastro do C um pouco mais longo; volta no golpe seguinte.
+	frames(1.5)
+	Slash.Play() -- A
+	local trail = blade:FindFirstChild("SwingTrail")
+	local lifeA = trail and trail.Lifetime
+	frames(0.3)
+	Slash.Play() -- B
+	frames(0.3)
+	Slash.Play() -- C
+	local lifeC = trail and trail.Lifetime
+	local durationC = Swing.LocalRig().Duration
+	frames(0.3)
+	Slash.Play() -- A
+	local lifeA2 = trail and trail.Lifetime
+	local durationA = Swing.LocalRig().Duration
+	frames(0.3)
+	check(lifeA and lifeC and lifeC > lifeA and math.abs(lifeA2 - lifeA) < 1e-6, string.format("K-C. rastro do C um pouco mais longo (%.2f → %.2f s) e volta no A", lifeA or 0, lifeC or 0))
+	check(durationA == durationC, "K9. o C não muda o ritmo: mesma duração de golpe (nunca segura o próximo hit)")
+
+	-- K5: spam a 9/s segue o ciclo, sem voltar à postura entre hits.
+	frames(1.5)
+	mark = #swings
+	local nextHit = now
+	local t0 = now
+	local idleBetween = false
+	while now - t0 < 3 do
+		if now >= nextHit then
+			Slash.Play()
+			nextHit += 1 / 9
+		end
+		now += 1 / 60
+		renderStep()
+		runDelayed()
+		if #swings > mark + 1 and not Swing.LocalRig().Active then
+			idleBetween = true
+		end
+	end
+	local spam = seqOf(swings, mark + 1)
+	check(#spam >= 26 and spam == string.rep("ABC", math.floor(#spam / 3)) .. string.sub("ABC", 1, #spam % 3), "K5. spam a 9 hits/s: ciclo A-B-C sem quebrar (" .. #spam .. " golpes)")
+	check(not idleBetween, "K5. hits contínuos: IDLE → A → B → C sem voltar à postura entre os hits")
+	check(#impactsK > 0 and impactsK[#impactsK].Variant ~= nil, "K18. o impacto recebe o golpe do combo (para deslocar o ponto do efeito)")
+	frames(0.5)
+
+	-- K10: parado mais de 1,2 s → volta ao A.
+	frames(1.5)
+	mark = #swings
+	Slash.Play()
+	frames(0.3)
+	Slash.Play()
+	frames(1.3)
+	Slash.Play()
+	frames(0.3)
+	check(seqOf(swings, mark + 1) == "ABA", "K10. depois de ~1,2 s sem golpe o combo recomeça no A (" .. seqOf(swings, mark + 1) .. ")")
+	Slash.Play()
+	frames(0.9)
+	Slash.Play()
+	frames(0.3)
+	check(seqOf(swings, mark + 4) == "BC", "K10. pausa curta (< 1,2 s) continua o combo")
+
+	-- K12: trocar de espada → A.
+	frames(1.5)
+	mark = #swings
+	Slash.Play()
+	frames(0.3)
+	Slash.Play()
+	frames(0.1)
+	me.CutBlade:Destroy()
+	newTool(5.4).Parent = me
+	frames(0.1)
+	Slash.Play()
+	frames(0.3)
+	check(seqOf(swings, mark + 1) == "ABA", "K12. trocar de espada recomeça o combo no A (" .. seqOf(swings, mark + 1) .. ")")
+	blade = me.CutBlade.Blade
+
+	-- K16: Efeitos reduzidos: o movimento A-B-C continua; arco/corte não.
+	frames(1.5)
+	settings.ReducedEffects = true
+	mark = #swings
+	local cutsBefore, impactsBefore = #cutPlays, #impactsK
+	for _ = 1, 3 do
+		Slash.Play()
+		check(Swing.LocalRig().Active, "K16. reduzidos: golpe " .. Swing.LocalRig().Variant .. " continua")
+		frames(0.3)
+	end
+	local reducedImpacts = {}
+	for index = impactsBefore + 1, #impactsK do
+		table.insert(reducedImpacts, impactsK[index].Variant)
+	end
+	check(seqOf(swings, mark + 1) == "ABC" and #cutPlays == cutsBefore and table.concat(reducedImpacts) == "ABC", "K16. reduzidos: ciclo A-B-C no movimento e no impacto básico, sem arco/corte")
+	settings.ReducedEffects = false
+
+	-- K6: Auto Click: mesmo ciclo, no ritmo dos ticks do servidor.
+	local EconomyConfig = E.require(E.Shared.Config.EconomyConfig)
+	local tick = 1 / EconomyConfig.AutoClick.TicksPerSecond
+	frames(1.5)
+	attributes.AutoClickOn = true
+	mark = #swings
+	local beforeAuto = countInstances()
+	local autoStart = now
+	while now - autoStart < 30 do
+		now += 1 / 60
+		Slash.StepAuto(now)
+		renderStep()
+		runDelayed()
+	end
+	local auto = seqOf(swings, mark + 1)
+	local worstGap = 0
+	for index = mark + 2, #swings do
+		worstGap = math.max(worstGap, math.abs((swings[index].At - swings[index - 1].At) - tick))
+	end
+	local expectedAuto = math.floor(30 / tick)
+	check(math.abs(#auto - expectedAuto) <= 1, string.format("K6. Auto Click: %d golpes em 30 s (servidor: %d ticks/s)", #auto, EconomyConfig.AutoClick.TicksPerSecond))
+	check(worstGap <= 1 / 60 + 1e-6, string.format("K6. Auto Click: ritmo fixo de %.2f s (desvio máx. %.3f s)", tick, worstGap))
+	check(string.sub(auto, 1, 9) == "ABCABCABC" and auto == string.rep("ABC", math.floor(#auto / 3)) .. string.sub("ABC", 1, #auto % 3), "K6. Auto Click segue o ciclo A-B-C")
+	check(countInstances() == beforeAuto and countKind("Animation") == 0, "K17. 30 s de Auto Click: nenhuma instância acumulando, nenhuma Animation")
+	-- Clicando com o Auto ligado: os golpes manuais mostram o ataque (o Auto não dobra).
+	mark = #swings
+	local manual = 0
+	local manualStart = now
+	nextHit = now
+	while now - manualStart < 2 do
+		if now >= nextHit then
+			Slash.Play()
+			manual += 1
+			nextHit += 1 / 9
+		end
+		now += 1 / 60
+		Slash.StepAuto(now)
+		renderStep()
+		runDelayed()
+	end
+	check(#swings - mark == manual, string.format("K6. clicando com Auto ligado: só os golpes dos cliques (%d), sem golpe extra do Auto", #swings - mark))
+	attributes.AutoClickOn = nil
+	mark = #swings
+	frames(1)
+	for _ = 1, 60 do
+		now += 1 / 60
+		Slash.StepAuto(now)
+	end
+	check(#swings == mark, "K6. Auto desligado: nenhum golpe automático")
+
+	-- K18: ponto do efeito: A um pouco à esquerda, B à direita, C no centro;
+	-- o alvo (a fileira) é o mesmo.
+	local row = Instance.new("Part")
+	row.Size = V3.new(4, 12, 20)
+	row.CFrame = CF.new(50, 6, 0)
+	local root = Instance.new("Part")
+	root.CFrame = CF.lookAt(V3.new(40, 3, 0), V3.new(50, 3, 0))
+	local pa, pb, pc = Combat.ImpactPoint(row, root, "A"), Combat.ImpactPoint(row, root, "B"), Combat.ImpactPoint(row, root, "C")
+	check(pa.Z < pc.Z and pb.Z > pc.Z and math.abs(pa.Z - pc.Z) <= 1 and math.abs(pb.Z - pc.Z) <= 1 and pa.X == pc.X and pb.X == pc.X, string.format("K18. impacto: A à esquerda (%.1f), C no centro (%.1f), B à direita (%.1f), sempre na face", pa.Z, pc.Z, pb.Z))
+	check(Combat.ImpactPoint(row, root, nil) == pc, "K18. sem golpe conhecido: ponto de contato normal")
+
+	-- K11: respawn → A.
+	frames(1.5)
+	Slash.Play()
+	frames(0.3)
+	Slash.Play()
+	frames(0.1)
+	local fresh = newCharacter("Local")
+	fresh.Parent = nil
+	respawnAs(fresh)
+	mark = #swings
+	Slash.Play()
+	frames(0.3)
+	check(seqOf(swings, mark + 1) == "A", "K11/K14. respawn (R15): o combo recomeça no A")
+
+	Swing.Swing = originalSwing
+	Combat.OnSwingImpact = originalImpactK
+end
+
 -- 6. O golpe não lê dano nem economia.
 local sources = {
 	fs.readFile(E.Root .. "/src/client/Effects/SwordSwing.luau"),
@@ -720,7 +965,22 @@ end
 check(clean, "6. o golpe é só visual: não lê Corte, Power, moeda nem espada e não manda nada ao servidor")
 local clickSource = fs.readFile(E.Root .. "/src/server/Services/ClickService.luau")
 local processBody = string.match(clickSource, "local function processClick.-\nend\n")
-check(processBody and not string.find(processBody, "SwingSeq", 1, true), "6. o sinal do golpe fica fora do cálculo do clique (processClick não muda)")
+check(processBody and not string.find(processBody, "SwingSeq", 1, true) and not string.find(processBody, "signalSwing", 1, true), "6. o sinal do golpe fica fora do cálculo do clique (processClick não muda)")
+check(string.find(clickSource, "local interval = 1 / EconomyConfig.AutoClick.TicksPerSecond", 1, true) ~= nil, "K9. ritmo do Auto Click no servidor continua o mesmo (TicksPerSecond)")
+-- K8: o C não dá nada a mais: nenhuma parte do combo conhece dano/Power.
+local comboClean = true
+for _, path in { "src/client/Controllers/SlashController.luau", "src/client/Effects/SwordTrail.luau", "src/client/Effects/CutFx.luau" } do
+	local source = fs.readFile(E.Root .. "/" .. path)
+	for _, word in { "PowerFormula", "FireServer", "Invoke(", "Damage", "PerClick" } do
+		if string.find(source, word, 1, true) then
+			comboClean = false
+			print("      " .. path .. " usa " .. word)
+		end
+	end
+end
+local combat = fs.readFile(E.Root .. "/src/client/Controllers/CombatFxController.luau")
+local impactBody = string.match(combat, "function CombatFxController.OnSwingImpact.-\nend\n")
+check(comboClean and impactBody and not string.find(impactBody, "FireServer", 1, true), "K8. o combo é só visual: o C não muda dano, Power nem manda nada ao servidor")
 
 if #problems > 0 then
 	print(#problems .. " problema(s).")

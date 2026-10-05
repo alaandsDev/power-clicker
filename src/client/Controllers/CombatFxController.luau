@@ -15,7 +15,10 @@
 	  golpe. Se há uma fileira À FRENTE e ao alcance (a mesma regra do
 	  servidor, WallController.TargetRow), o impacto nasce no ponto de contato
 	  com a intensidade do Corte (CutVisuals.Recipe.Impact). É previsão VISUAL:
-	  o dano continua sendo decidido no servidor.
+	  o dano continua sendo decidido no servidor. O golpe do combo visual
+	  (A/B/C) só desloca o PONTO do efeito para o lado em que a lâmina termina
+	  (A esquerda, B direita, C centro: VARIANT_SIDE, nada de hitbox/alcance)
+	  e o C (fecho) fica um pouco mais marcado — nenhum dano muda.
 	- WallController.RowDamaged / RowBroken / RowRestored: o estado DESTE
 	  jogador (WallState). Rachaduras, número de dano real e quebra vêm daqui —
 	  então nada do que outro jogador faz aparece como dano na barreira dele.
@@ -53,6 +56,8 @@ local CRACK_DISTANCE = 120
 -- "Hit stop" visual na quebra (segundos de pose segurada).
 local HIT_STOP = 0.045
 local FINAL_HIT_STOP = 0.06
+-- Deslocamento lateral do ponto do efeito por golpe do combo (studs; + = direita do jogador).
+local VARIANT_SIDE: { [string]: number } = { A = -0.7, B = 0.7, C = 0 }
 
 local CombatFxController = {}
 
@@ -71,10 +76,15 @@ local function showNumbers(): boolean
 	return not settings or settings.ShowFloatingNumbers ~= false
 end
 
-local function rootPosition(): Vector3?
+local function rootPart(): BasePart?
 	local character = Players.LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	return if root and root:IsA("BasePart") then root.Position else nil
+	return if root and root:IsA("BasePart") then root else nil
+end
+
+local function rootPosition(): Vector3?
+	local root = rootPart()
+	return if root then root.Position else nil
 end
 
 local function stageOf(stageId: any): WallConfig.WallStage?
@@ -102,12 +112,13 @@ local FACE_NORMAL = Vector3.new(-1, 0, 0)
 	O impacto do golpe local (chamado pelo SlashController no instante do
 	impacto). Devolve a fileira atingida (ou nil, se o golpe foi no ar).
 ]]
-function CombatFxController.OnSwingImpact(recipe: CutVisuals.Recipe?): BasePart?
+function CombatFxController.OnSwingImpact(recipe: CutVisuals.Recipe?, variant: string?): BasePart?
 	local state = fx
-	local position = rootPosition()
-	if not state or not position then
+	local root = rootPart()
+	if not state or not root then
 		return nil
 	end
+	local position = root.Position
 	local row = WallController.TargetRow(position)
 	if not row then
 		return nil
@@ -120,18 +131,34 @@ function CombatFxController.OnSwingImpact(recipe: CutVisuals.Recipe?): BasePart?
 	local cut = recipe or currentRecipe()
 	local strong = CombatFxController.IsStrong(GameStateController.GetPowerInfo().PerClick, stage.Hp)
 	local isReduced = reduced()
-	BarrierFx.Impact(state, theme, WallController.ContactPoint(row, position), {
+	BarrierFx.Impact(state, theme, CombatFxController.ImpactPoint(row, root, variant), {
 		Normal = FACE_NORMAL,
 		Intensity = cut.Impact,
 		CutColor = cut.Color,
 		Strong = strong,
 		Reduced = isReduced,
+		Finisher = variant == "C",
 	})
 	SoundController.Play("WallHit")
 	if not isReduced then
 		CameraFx.Shake(if strong then "Strong" else "Hit")
 	end
 	return row
+end
+
+-- Onde nasce o efeito do golpe: o ponto de contato, deslocado para o lado em
+-- que a lâmina do golpe termina (só visual; o alvo é o mesmo).
+function CombatFxController.ImpactPoint(row: BasePart, root: BasePart, variant: string?): Vector3
+	local point = WallController.ContactPoint(row, root.Position)
+	local side = if variant then VARIANT_SIDE[variant] or 0 else 0
+	if side == 0 then
+		return point
+	end
+	-- A direita do jogador, no plano da face (o ponto não sai da superfície).
+	local right = root.CFrame.RightVector
+	local along = right - FACE_NORMAL * right:Dot(FACE_NORMAL)
+	along = Vector3.new(along.X, 0, along.Z)
+	return if along.Magnitude > 1e-3 then point + along.Unit * side else point
 end
 
 local function nearRow(row: BasePart): boolean
