@@ -380,3 +380,24 @@ PB.14. Celular: andar do portão até a Barreira 3 e voltar — leitura das 3 re
 PB.15. FPS: comparar com a Fase A no mesmo aparelho no meio de cada área 1–3 (+109 peças, 0 luzes novas, 2 emissores com LOD); sem queda perceptível.
 
 Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 10 (landmarks 1–3, molduras das barreiras, transições físicas, cenário fora da safe lane / da frente da barreira / das fileiras / dos pads / da câmera, estágios 4–10 sem cenário, orçamento por estágio, emissores ≤ 2 locais e desligados, controlador com LOD e Efeitos reduzidos) e `python tools/render_power_path.py <json> <saida> <tag> B` (câmeras da Fase B).
+
+### Caminho do Poder — Fase C: temas 4–6 (PC) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+PC.1. Gelo → Cristal: depois da Barreira 3, a lasca de cristal; no começo do 4, formações de GELO com ponta de CRISTAL violeta (angular), depois o primeiro veio de energia no chão. Não é "azul → ciano": o cristal é violeta/mineral, a energia é só a linha clara.
+PC.2. Estágio 4: o "vale de cristais" — a formação maior à esquerda (3 prismas, veio de energia, motes subindo devagar), a menor à direita; cristais saindo das paredes; piso escuro com veios finos. Nada de "boate ciano".
+PC.3. Barreira 4: pilares de cristal com veio nas bordas, linhas de energia no chão junto às paredes indo até eles e a barra de cristal por cima — "alimentada pelos cristais". Placa de HP legível contra o cristal e o ciano da barreira.
+PC.4. Cristal → Ouro: no fim do 4, cristais em pedestais com cinta de ouro; depois da Barreira 4, bloco de cantaria com friso de ouro; no começo do 5, um resto de cristal num berço de ouro.
+PC.5. Estágio 5: templo PRESERVADO e organizado (não ruína): pilastras com capitel de ouro, nichos, medalhão no piso da faixa, os dois PÓRTICOS simétricos com o símbolo de ouro na parede. O corredor NÃO é amarelo: pedra quente com ouro só nos acabamentos.
+PC.6. Barreira 5: portão selado do templo — pilares com capitel de ouro e o frontão triangular com o símbolo acima das fileiras.
+PC.7. Ouro → Ancestral: no fim do 5 aparecem blocos pesados de granito com UMA runa; o ouro some.
+PC.8. Estágio 6: granito escuro, placas enormes na faixa, blocos gigantes embutidos nas paredes, poucos sulcos rúnicos e três MONÓLITOS irregulares com uma runa cada — o jogador parece pequeno. Conferir se os monólitos não somem contra a parede escura na luz real.
+PC.9. Barreira 6: selo ancestral — duas pedras enormes com energia vazando pela face interna e a pedra de cobertura com uma runa longa.
+PC.10. Primeiro calor do 7: no último terço do 6 e depois da Barreira 6, fissuras com brasa, pedra escurecida e brasas raras subindo de um respiro junto à parede. SEM lava.
+PC.11. Placa de HP nas barreiras 4–6: inteira e legível em todas as posições laterais (contra cristal, ouro e runas).
+PC.12. CutFx nas barreiras 4–6: o Corte e os pedaços não somem atrás de pilar de cristal, pilar do templo ou pedra do selo.
+PC.13. Pets: correr do 4 ao fim do 6 com 1, 3 e o máximo — no meio e nas bordas da faixa (±16) ninguém prende (atenção aos pórticos e monólitos).
+PC.14. Dois jogadores: os dois veem o mesmo cenário; motes e brasas são locais (ligam só para quem está perto).
+PC.15. Efeitos reduzidos: nenhum mote nem brasa; landmarks, arquitetura, runas e barreira continuam.
+PC.16. Celular: as 3 regiões reconhecíveis sem texto; nada cobre CLIQUE/Auto.
+PC.17. FPS: comparar com a Fase B no meio de cada área 4–6 (+107 peças, 0 luzes novas, 2 emissores novos com LOD, 0 loops novos).
+
+Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 10 (landmarks 1–6, molduras 1–6, transições 3→4, 4→5, 5→6 e calor do 7, Neon só como acento, cenário fora da safe lane / frente da barreira / fileiras / pads / câmera, estágios 7–10 sem cenário, orçamento por estágio e por fase, emissores ≤ 5 com um único controlador) e `python tools/render_power_path.py <json> <saida> <tag> C`.

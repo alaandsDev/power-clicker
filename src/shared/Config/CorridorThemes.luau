@@ -14,7 +14,7 @@
 	o que cada tema define aqui é MATERIAL e SILHUETA — a Fase A já não
 	diferencia estágio só por cor.
 
-	Fases futuras (B: 1–3, C: 4–6, D: 7–9, E: Colosso) preenchem `Props`,
+	Fases (B: 1–3 e C: 4–6 feitas; D: 7–9, E: Colosso) preenchem `Props`,
 	`Ambient` e os landmarks de cada tema; a estrutura não muda.
 ]]
 
@@ -33,8 +33,9 @@ export type Surface = { Material: Enum.Material, Color: Color3? }
 	  Scale tamanho relativo (1 = padrão do builder).
 	  Yaw   giro em graus (peças soltas).
 	  Landmark  a peça é o marco do estágio (o check exige ao menos um).
+	  Fx    VFX ambiental (preset do PowerPathDecor) nesta peça; poucos, com LOD.
 ]]
-export type Decor = { Kind: string, At: number | string, Side: number?, Z: number?, Scale: number?, Yaw: number?, Landmark: boolean? }
+export type Decor = { Kind: string, At: number | string, Side: number?, Z: number?, Scale: number?, Yaw: number?, Landmark: boolean?, Fx: string? }
 export type Theme = {
 	Floor: Surface, -- piso das laterais (fora da faixa central)
 	Lane: Surface, -- a faixa central: o "Caminho" em si
@@ -48,6 +49,7 @@ export type Theme = {
 	Ambient: string?, -- (Fases B–E) VFX ambiental permitido
 	Decor: { Decor }, -- cenário: landmark + secundários + transição
 	PlateShade: number, -- contraste entre placas vizinhas da faixa (1 = liso)
+	PlateLength: number?, -- placas da faixa deste tema (padrão: Rules.PlateLength)
 }
 
 local CorridorThemes = {}
@@ -185,26 +187,103 @@ local THEMES: { [string]: { [string]: any } } = {
 			{ Kind = "CrystalHint", At = 1.94, Side = 1, Z = 38 },
 		},
 	},
+	--[[
+		4 CRISTAL ENERGIZADO — o primeiro estágio com ENERGIA do Caminho. O
+		gelo vira mineral: formações de gelo com ponta de cristal na entrada,
+		depois prismas angulares (corpo sólido + veio de energia) crescendo da
+		rocha escura e das paredes — um "vale de cristais" assimétrico que
+		aponta para a barreira, alimentada por dois pilares de cristal. No fim,
+		pedestais e cintas de ouro: alguém construiu em volta dessa energia.
+	]]
 	Crystal = {
-		Floor = { Material = M.Slate },
-		Lane = { Material = M.Glass },
-		Wall = { Material = M.Rock },
-		Trim = { Material = M.Glass },
+		Floor = { Material = M.Slate, Color = Color3.fromRGB(68, 64, 86) },
+		Lane = { Material = M.Glass, Color = Color3.fromRGB(116, 110, 146) },
+		Wall = { Material = M.Rock, Color = Color3.fromRGB(56, 52, 72) },
+		Trim = { Material = M.Glass, Color = Color3.fromRGB(110, 196, 232) },
 		Profile = { 38, 46, 42, 40 },
+		PlateShade = 0.88,
+		Ambient = "CrystalMotes",
+		Decor = {
+			-- Gelo → cristal.
+			{ Kind = "FrostCrystal", At = 0.06, Side = 1, Z = 34 },
+			{ Kind = "FrostCrystal", At = 0.14, Side = -1, Z = 36, Scale = 0.8, Yaw = 20 },
+			{ Kind = "CrystalVein", At = 0.22, Side = 1, Z = 30, Yaw = 15 },
+			{ Kind = "WallCrystal", At = 0.3, Side = -1 },
+			-- O vale de cristais (assimétrico: o maior à esquerda).
+			{ Kind = "CrystalFormation", At = 0.48, Side = -1, Z = 33, Landmark = true, Fx = "CrystalMotes" },
+			{ Kind = "CrystalFormation", At = 0.6, Side = 1, Z = 34, Scale = 0.72, Yaw = 10, Landmark = true },
+			{ Kind = "CrystalVein", At = 0.74, Side = -1, Z = 28, Yaw = -10 },
+			-- Cristal → arquitetura dourada.
+			{ Kind = "GoldBracket", At = 0.8, Side = -1, Z = 35 },
+			{ Kind = "GoldBracket", At = 0.86, Side = 1, Z = 37, Scale = 0.8 },
+			{ Kind = "CrystalConduit", At = "Barrier" },
+			{ Kind = "TempleBlock", At = 1.08, Side = 1, Z = 40 },
+		},
 	},
+	--[[
+		5 TEMPLO DOURADO — civilização antiga e PRESERVADA (as Ruínas do 2
+		são quebradas; aqui tudo está inteiro e organizado): pedra quente,
+		pilastras e nichos na parede, medalhão no piso da faixa, os dois
+		PÓRTICOS simétricos com símbolo de ouro e o portão selado do templo.
+		O ouro é acabamento (capitéis, frisos, símbolos), nunca a superfície.
+		No fim, blocos ancestrais com runas: algo mais antigo vem depois.
+	]]
 	Gold = {
-		Floor = { Material = M.Sandstone },
-		Lane = { Material = M.Marble },
-		Wall = { Material = M.Sandstone },
-		Trim = { Material = M.Metal },
+		Floor = { Material = M.Sandstone, Color = Color3.fromRGB(138, 116, 88) },
+		Lane = { Material = M.Marble, Color = Color3.fromRGB(176, 166, 146) },
+		Wall = { Material = M.Sandstone, Color = Color3.fromRGB(112, 90, 66) },
+		Trim = { Material = M.Metal, Color = Color3.fromRGB(186, 146, 64) },
 		Profile = { 40, 36, 46, 42 },
+		PlateShade = 0.9,
+		PlateLength = 10,
+		Decor = {
+			{ Kind = "GoldRemnant", At = 0.06, Side = 1, Z = 38 },
+			{ Kind = "TemplePilaster", At = 0.26, Side = -1 },
+			{ Kind = "TemplePilaster", At = 0.26, Side = 1 },
+			{ Kind = "TempleNiche", At = 0.4, Side = -1 },
+			{ Kind = "TempleNiche", At = 0.4, Side = 1 },
+			{ Kind = "GoldenPortico", At = 0.6, Landmark = true },
+			{ Kind = "FloorMedallion", At = 0.6 },
+			{ Kind = "TemplePilaster", At = 0.74, Side = -1 },
+			{ Kind = "TemplePilaster", At = 0.74, Side = 1 },
+			-- Ouro → ancestral: o ouro some, a pedra pesa, surge a runa.
+			{ Kind = "AncientBlock", At = 0.82, Side = -1, Z = 38 },
+			{ Kind = "AncientBlock", At = 0.92, Side = 1, Z = 41, Scale = 0.8, Yaw = 8 },
+			{ Kind = "TempleGate", At = "Barrier" },
+			{ Kind = "AncientBlock", At = 1.06, Side = -1, Z = 40, Scale = 0.7, Yaw = -10 },
+		},
 	},
+	--[[
+		6 PEDRA ANCESTRAL ENERGIZADA — menos brilho, mais presença: granito
+		escuro, placas enormes na faixa, blocos gigantes embutidos nas paredes,
+		poucos sulcos rúnicos e três MONÓLITOS irregulares com UMA runa cada.
+		A barreira é um selo de pedras com energia vazando. No fim, o primeiro
+		calor (fissuras com brasa, pedra escurecida, brasas raras) — sem lava.
+	]]
 	Ancient = {
-		Floor = { Material = M.Sandstone },
-		Lane = { Material = M.Cobblestone },
-		Wall = { Material = M.Sandstone },
-		Trim = { Material = M.Slate },
+		Floor = { Material = M.Slate, Color = Color3.fromRGB(70, 70, 66) },
+		Lane = { Material = M.Slate, Color = Color3.fromRGB(104, 102, 94) },
+		Wall = { Material = M.Granite, Color = Color3.fromRGB(84, 84, 78) },
+		Trim = { Material = M.Slate, Color = Color3.fromRGB(58, 58, 56) },
 		Profile = { 42, 48, 44, 42 },
+		PlateShade = 0.86,
+		PlateLength = 18,
+		Decor = {
+			{ Kind = "MassiveBlock", At = 0.1, Side = -1 },
+			{ Kind = "RuneGroove", At = 0.18, Side = 1, Z = 28, Yaw = 12 },
+			{ Kind = "MassiveBlock", At = 0.26, Side = 1, Scale = 1.2 },
+			{ Kind = "RunicMonolith", At = 0.4, Side = -1, Z = 34, Yaw = 8, Landmark = true },
+			{ Kind = "RunicMonolith", At = 0.54, Side = 1, Z = 35, Scale = 0.8, Yaw = -12, Landmark = true },
+			{ Kind = "RunicMonolith", At = 0.64, Side = -1, Z = 37, Scale = 0.6, Yaw = 20 },
+			{ Kind = "RuneGroove", At = 0.7, Side = -1, Z = 26, Yaw = -8 },
+			{ Kind = "MassiveBlock", At = 0.76, Side = 1, Scale = 0.9 },
+			-- Primeiro calor (indício do 7).
+			{ Kind = "HeatFissure", At = 0.86, Side = 1, Z = 30, Yaw = 10 },
+			{ Kind = "AncientSeal", At = "Barrier" },
+			{ Kind = "HeatFissure", At = 1.08, Side = -1, Z = 30, Yaw = -14 },
+			{ Kind = "EmberVent", At = 1.9, Side = 1, Z = 42, Fx = "Embers" },
+			{ Kind = "HeatFissure", At = 1.92, Side = -1, Z = 32, Yaw = 6 },
+		},
 	},
 	Volcanic = {
 		Floor = { Material = M.Basalt },
@@ -272,6 +351,7 @@ function CorridorThemes.For(stageId: string): Theme
 		Ambient = custom.Ambient,
 		Decor = custom.Decor or {},
 		PlateShade = custom.PlateShade or 0.93,
+		PlateLength = custom.PlateLength,
 	}
 	cache[stageId] = theme
 	return theme

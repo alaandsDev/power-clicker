@@ -13,9 +13,13 @@
 	  · frente da barreira (placa de HP): x ∈ [B-12, B], |z| < 38, y 0,3–14
 	    livre; molduras ficam em |z| ≥ 38 ou acima das fileiras (y > 30,5);
 	  · nada sobre os pads nem dentro das fileiras;
-	  · sem loop: tudo estático e ancorado. O único dinâmico são os emissores
-	    do gelo (tag PowerPathAmbient, desligados aqui; o cliente liga perto da
-	    câmera e respeita "Efeitos reduzidos" — PowerPathAmbientController).
+	  · câmera chegando na barreira: nada sobre a faixa entre y 14 e 24 nos
+	    40 studs antes dela;
+	  · Neon só como ACENTO (veios, runas, fissuras: peças finas);
+	  · sem loop: tudo estático e ancorado. O único dinâmico são os poucos
+	    emissores ambientais (tag PowerPathAmbient, desligados aqui; o cliente
+	    liga perto da câmera e respeita "Efeitos reduzidos" —
+	    PowerPathEnvironmentController, um sistema só para todos os estágios).
 ]]
 
 local Shared = game:GetService("ReplicatedStorage").Shared
@@ -47,6 +51,22 @@ local C = {
 	IceDeep = Color3.fromRGB(120, 180, 214),
 	Icicle = Color3.fromRGB(205, 232, 246),
 	Snow = Color3.fromRGB(236, 244, 250),
+	-- Cristal energizado (4): mineral violeta, veio de energia claro.
+	Crystal = Color3.fromRGB(108, 88, 184),
+	CrystalDeep = Color3.fromRGB(72, 58, 132),
+	Energy = Color3.fromRGB(140, 232, 255),
+	CrystalRock = Color3.fromRGB(52, 48, 66),
+	-- Templo dourado (5): pedra quente + ouro envelhecido (acabamento).
+	Temple = Color3.fromRGB(164, 144, 112),
+	TempleDark = Color3.fromRGB(118, 98, 74),
+	Gold = Color3.fromRGB(196, 154, 64),
+	-- Ancestral (6): granito pesado, runas de energia fria.
+	Ancient = Color3.fromRGB(78, 78, 74),
+	AncientDark = Color3.fromRGB(58, 58, 56),
+	Rune = Color3.fromRGB(110, 226, 186),
+	-- Calor (indício do 7).
+	Scorched = Color3.fromRGB(46, 38, 36),
+	Heat = Color3.fromRGB(255, 112, 40),
 }
 
 type Ctx = {
@@ -58,6 +78,7 @@ type Ctx = {
 	Half: number,
 	Kind: string,
 	Landmark: boolean,
+	Fx: string?, -- VFX ambiental pedido pela entrada do Decor (preset)
 }
 
 type Opts = { Shape: Enum.PartType?, Wedge: boolean?, Transparency: number?, Shadow: boolean? }
@@ -273,22 +294,41 @@ B.IceSpire = function(ctx, x, side, z, s, yaw)
 	piece(ctx, Vector3.new(6, 3, 6), at(x, 1.3, side * z) * CFrame.Angles(0, RAD(20), 0), C.IceDeep, M.Glacier, false)
 end
 
--- Cintilação local do gelo: poucas partículas, DESLIGADAS no servidor.
-local function frostSparkle(owner: BasePart)
-	local sparkle = Instance.new("ParticleEmitter")
-	sparkle.Name = "FrostSparkle"
-	sparkle.Enabled = false
-	sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	sparkle.Rate = 5
-	sparkle.Lifetime = NumberRange.new(1.4, 2.4)
-	sparkle.Speed = NumberRange.new(0.3, 1.2)
-	sparkle.SpreadAngle = Vector2.new(180, 180)
-	sparkle.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0) })
-	sparkle.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
-	sparkle.LightEmission = 0.6
-	sparkle.Color = ColorSequence.new(C.Icicle)
-	sparkle.Parent = owner
-	sparkle:AddTag(PowerPathDecor.TAG_AMBIENT)
+--[[
+	VFX ambiental: poucas partículas, DESLIGADAS no servidor (tag
+	PowerPathAmbient). Um único controlador no cliente (PowerPathEnvironment-
+	Controller) liga cada um só perto da câmera e sem "Efeitos reduzidos".
+	Presets por nome (Theme.Ambient / Decor.Fx).
+]]
+type Preset = { Rate: number, Life: NumberRange, Speed: NumberRange, Spread: number, Size: number, Color: Color3, Light: number, Accel: Vector3? }
+local PRESETS: { [string]: Preset } = {
+	FrostSparkle = { Rate = 5, Life = NumberRange.new(1.4, 2.4), Speed = NumberRange.new(0.3, 1.2), Spread = 180, Size = 0.5, Color = C.Icicle, Light = 0.6 },
+	-- Motes de energia subindo devagar dos cristais (estágio 4).
+	CrystalMotes = { Rate = 4, Life = NumberRange.new(2.5, 3.5), Speed = NumberRange.new(0.6, 1.4), Spread = 25, Size = 0.35, Color = Color3.fromRGB(150, 236, 255), Light = 0.8 },
+	-- Brasas raras no fim do 6: o primeiro sinal do vulcânico.
+	Embers = { Rate = 3, Life = NumberRange.new(1.8, 2.8), Speed = NumberRange.new(1, 2.2), Spread = 20, Size = 0.25, Color = Color3.fromRGB(255, 130, 50), Light = 1, Accel = Vector3.new(0, 0.8, 0) },
+}
+
+local function ambient(owner: BasePart, presetName: string)
+	local preset = PRESETS[presetName]
+	assert(preset, "PowerPathDecor: VFX ambiental desconhecido " .. presetName)
+	local fx = Instance.new("ParticleEmitter")
+	fx.Name = presetName
+	fx.Enabled = false
+	fx.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	fx.Rate = preset.Rate
+	fx.Lifetime = preset.Life
+	fx.Speed = preset.Speed
+	fx.SpreadAngle = Vector2.new(preset.Spread, preset.Spread)
+	fx.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, preset.Size), NumberSequenceKeypoint.new(1, 0) })
+	fx.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+	fx.LightEmission = preset.Light
+	fx.Color = ColorSequence.new(preset.Color)
+	if preset.Accel then
+		fx.Acceleration = preset.Accel
+	end
+	fx.Parent = owner
+	fx:AddTag(PowerPathDecor.TAG_AMBIENT)
 end
 
 -- LANDMARK 3: formação de gelo — três agulhas em leque sobre um monte de
@@ -299,7 +339,7 @@ B.IceFormation = function(ctx, x, side, z, s, _yaw)
 	spire(ctx, x - 5 * s, z - 1, side, 18 * s, 3.4, 16, 0.12)
 	spire(ctx, x + 5.5 * s, z + 7, side, 22 * s, 3.6, 4, 0.12)
 	if ctx.Theme.Ambient == "FrostSparkle" then
-		frostSparkle(main)
+		ambient(main, "FrostSparkle")
 	end
 end
 
@@ -331,6 +371,211 @@ B.CrystalHint = function(ctx, x, side, z, s, _yaw)
 	piece(ctx, Vector3.new(1.6, 5, 1.6) * s, at(x, 2, side * z) * CFrame.Angles(side * RAD(-14), RAD(30), 0), color, M.Glass, false, { Transparency = 0.2 })
 end
 
+-- ── 4 Cristal energizado ────────────────────────────────────────────────────
+
+--[[
+	Prisma de cristal: corpo + ponta em CUNHA (o corte angular que o gelo não
+	tem) + veio de energia atravessando as faces (Neon fino: o cristal
+	continua sólido, a energia é o detalhe). `base` = centro da base, já com
+	inclinação e giro. 2–3 peças por prisma.
+]]
+local function prism(ctx: Ctx, base: CFrame, w: number, h: number, tip: number, color: Color3, material: Enum.Material, vein: boolean): BasePart
+	local body = piece(ctx, Vector3.new(w, h, w), base * CFrame.new(0, h / 2, 0), color, material, true, { Transparency = if material == M.Glass then 0.15 else 0 })
+	piece(ctx, Vector3.new(w, tip, w), base * CFrame.new(0, h + tip / 2, 0), color, material, false, { Wedge = true, Transparency = if material == M.Glass then 0.15 else 0 })
+	if vein then
+		piece(ctx, Vector3.new(math.min(w * 0.16, 0.5), h * 0.7, w + 0.12), base * CFrame.new(0, h * 0.42, 0), C.Energy, M.Neon, false)
+	end
+	return body
+end
+
+-- Inclina o topo para a faixa (tilt em graus) e gira (yaw).
+local function lean(x: number, z: number, side: number, tilt: number, yaw: number): CFrame
+	return at(x, -0.4, side * z) * CFrame.Angles(side * RAD(-tilt), RAD(yaw), 0)
+end
+
+-- Transição 3 → 4: formação de GELO (corpo irregular, translúcido) que
+-- termina em ponta de CRISTAL — o gelo virando mineral.
+B.FrostCrystal = function(ctx, x, side, z, s, yaw)
+	local h = 14 * s
+	local base = lean(x, z, side, 10, 45 + yaw)
+	piece(ctx, Vector3.new(4.4, h, 4.4) * Vector3.new(s, 1, s), base * CFrame.new(0, h / 2, 0), C.Ice, M.Ice, true, { Transparency = 0.12 })
+	piece(ctx, Vector3.new(4.4 * s, 6 * s, 4.4 * s), base * CFrame.new(0, h + 3 * s, 0), C.Crystal, M.Glass, false, { Wedge = true, Transparency = 0.15 })
+end
+
+-- LANDMARK 4: formação de cristais energizados — três prismas de alturas
+-- diferentes saindo de uma base de rocha, inclinados para enquadrar a
+-- barreira. Só o maior tem veio (e o VFX, se a entrada pedir).
+B.CrystalFormation = function(ctx, x, side, z, s, yaw)
+	piece(ctx, Vector3.new(14, 3.5, 10) * s, at(x, 1, side * (z + 3)) * CFrame.Angles(0, RAD(yaw), RAD(4)), C.CrystalRock, M.Rock, true)
+	local main = prism(ctx, lean(x, z + 2, side, 8, 20 + yaw), 6 * s, 30 * s, 8 * s, C.Crystal, M.Glass, true)
+	prism(ctx, lean(x - 6 * s, z - 1, side, 18, -15 + yaw), 4 * s, 18 * s, 5 * s, C.CrystalDeep, M.Glass, false)
+	if s >= 0.9 then
+		prism(ctx, lean(x + 6 * s, z + 4, side, 4, 40 + yaw), 3.6 * s, 13 * s, 4 * s, C.Crystal, M.Glass, false)
+	end
+	if ctx.Fx then
+		ambient(main, ctx.Fx)
+	end
+end
+
+-- Cristal crescendo DA parede (metade enterrada nela), apontando para a faixa.
+B.WallCrystal = function(ctx, x, side, _z, s, yaw)
+	local top = wallHeight(ctx, x)
+	local base = at(x, top * 0.35, side * (ctx.Half + 1)) * CFrame.Angles(side * RAD(-62), RAD(yaw), 0)
+	prism(ctx, base, 4 * s, 9 * s, 4 * s, C.Crystal, M.Glass, false)
+end
+
+-- Veio de energia rachando o chão das laterais (rente: topo < 0,3).
+B.CrystalVein = function(ctx, x, side, z, s, yaw)
+	piece(ctx, Vector3.new(16 * s, 0.14, 0.6), at(x, 0.07, side * z) * CFrame.Angles(0, RAD(yaw * side), 0), C.Energy, M.Neon, false)
+end
+
+-- Transição 4 → 5: cristal num PEDESTAL construído, preso por uma cinta de
+-- ouro — "alguém construiu ao redor dessa energia".
+B.GoldBracket = function(ctx, x, side, z, s, _yaw)
+	piece(ctx, Vector3.new(5, 3, 5) * s, at(x, 1.5 * s, side * z), C.Temple, M.Sandstone, true)
+	prism(ctx, at(x, 3 * s, side * z) * CFrame.Angles(0, RAD(45), 0), 2.6 * s, 7 * s, 3 * s, C.Crystal, M.Glass, false)
+	piece(ctx, Vector3.new(5.4, 0.7, 5.4) * s, at(x, 2.9 * s, side * z), C.Gold, M.Metal, false)
+end
+
+-- Barreira 4 ALIMENTADA pelos cristais: dois pilares de cristal com veio nas
+-- bordas, linhas de energia no chão junto às paredes convergindo para eles
+-- e a barra de cristal por cima das fileiras.
+B.CrystalConduit = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(3.4, 30, 3.4), at(x - 3, 15, side * (half - 2)), C.Crystal, M.Glass, true, { Transparency = 0.15 })
+		piece(ctx, Vector3.new(0.5, 22, 3.6), at(x - 3, 12, side * (half - 2)), C.Energy, M.Neon, false)
+		piece(ctx, Vector3.new(26, 0.12, 0.5), at(x - 17, 0.06, side * (half - 1.5)), C.Energy, M.Neon, false)
+	end
+	piece(ctx, Vector3.new(6, 2.5, half * 2 - 2), at(segment.Barrier + 3, 32, 0), C.CrystalDeep, M.Glass, false, { Transparency = 0.15, Shadow = true })
+end
+
+-- ── 5 Templo dourado ────────────────────────────────────────────────────────
+
+-- Bloco de cantaria com friso de ouro (transição 4 → 5).
+B.TempleBlock = function(ctx, x, side, z, s, yaw)
+	piece(ctx, Vector3.new(6, 4, 5) * s, at(x, 2 * s, side * z) * CFrame.Angles(0, RAD(yaw), 0), C.Temple, M.Sandstone, true)
+	piece(ctx, Vector3.new(6.2, 0.6, 5.2) * s, at(x, 3.7 * s, side * z) * CFrame.Angles(0, RAD(yaw), 0), C.Gold, M.Metal, false)
+end
+
+-- Resto de cristal num berço de ouro (começo do 5: a energia ficou para trás).
+B.GoldRemnant = function(ctx, x, side, z, s, _yaw)
+	prism(ctx, at(x, 0.6, side * z) * CFrame.Angles(side * RAD(-6), RAD(45), 0), 2.4 * s, 5 * s, 2.4 * s, C.CrystalDeep, M.Glass, false)
+	piece(ctx, Vector3.new(4.6, 1.2, 4.6) * s, at(x, 0.6, side * z), C.Gold, M.Metal, false)
+end
+
+-- Pilastra na parede com capitel de ouro (parede organizada do templo).
+B.TemplePilaster = function(ctx, x, side, _z, s, _yaw)
+	local h = wallHeight(ctx, x) - 1
+	piece(ctx, Vector3.new(3.4 * s, h, 2), at(x, h / 2, side * (ctx.Half - 0.9)), C.Temple, M.Sandstone, true)
+	piece(ctx, Vector3.new(4.4 * s, 1.4, 2.8), at(x, h - 1.2, side * (ctx.Half - 1.3)), C.Gold, M.Metal, false)
+end
+
+-- Nicho na parede: painel recuado escuro com moldura de ouro.
+B.TempleNiche = function(ctx, x, side, _z, s, _yaw)
+	piece(ctx, Vector3.new(8 * s, 12 * s, 0.6), at(x, 9 * s, side * (ctx.Half - 0.25)), C.TempleDark, M.Sandstone, false)
+	piece(ctx, Vector3.new(9 * s, 0.8, 0.9), at(x, 15.4 * s, side * (ctx.Half - 0.4)), C.Gold, M.Metal, false)
+end
+
+-- Medalhão no piso da faixa (rente: topo < 0,3) — a geometria antiga.
+B.FloorMedallion = function(ctx, x, _side, _z, s, _yaw)
+	piece(ctx, Vector3.new(0.1, 14 * s, 14 * s), at(x, 0.05, 0) * VERTICAL, C.TempleDark, M.Sandstone, false, { Shape = Enum.PartType.Cylinder })
+	piece(ctx, Vector3.new(0.16, 9 * s, 9 * s), at(x, 0.08, 0) * VERTICAL, C.Gold, M.Metal, false, { Shape = Enum.PartType.Cylinder })
+end
+
+--[[
+	LANDMARK 5: PÓRTICO dourado de cada lado do caminho (simétrico — é um
+	templo, preservado): duas colunas, entablamento de pedra com friso de
+	ouro e o símbolo (disco de ouro) na parede ao fundo. A avenida fica livre.
+]]
+B.GoldenPortico = function(ctx, x, _side, _z, s, _yaw)
+	local h = 26 * s
+	for _, side in { -1, 1 } do
+		for _, dx in { -7, 7 } do
+			piece(ctx, Vector3.new(h, 4.2, 4.2), at(x + dx, h / 2, side * 31) * VERTICAL, C.Temple, M.Sandstone, true, { Shape = Enum.PartType.Cylinder, Shadow = true })
+		end
+		piece(ctx, Vector3.new(20, 3.6, 8), at(x, h + 1.8, side * 32), C.TempleDark, M.Sandstone, false, { Shadow = true })
+		piece(ctx, Vector3.new(20.4, 1, 8.4), at(x, h + 0.4, side * 32), C.Gold, M.Metal, false)
+		piece(ctx, Vector3.new(0.6, 11, 11), at(x, 18, side * (ctx.Half - 0.3)) * CFrame.Angles(0, math.pi / 2, 0), C.Gold, M.Metal, false, { Shape = Enum.PartType.Cylinder })
+	end
+end
+
+-- Barreira 5: PORTÃO SELADO do templo — pilares com capitel de ouro nas
+-- bordas e o frontão triangular (duas cunhas) com o símbolo de ouro acima
+-- das fileiras.
+B.TempleGate = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(4, 32, 4), at(x - 3, 16, side * (half - 2)), C.Temple, M.Sandstone, true)
+		piece(ctx, Vector3.new(5, 1.6, 5), at(x - 3, 31.4, side * (half - 2.4)), C.Gold, M.Metal, false)
+		-- Meio frontão: a face vertical da cunha fica no centro.
+		piece(ctx, Vector3.new(4, 5, half - 1), at(segment.Barrier + 2, 33.1, side * (half - 1) / 2) * CFrame.Angles(0, if side > 0 then math.pi else 0, 0), C.TempleDark, M.Sandstone, false, { Wedge = true, Shadow = true })
+	end
+	piece(ctx, Vector3.new(0.5, 4.4, 4.4), at(segment.Barrier - 0.3, 32.8, 0), C.Gold, M.Metal, false, { Shape = Enum.PartType.Cylinder })
+end
+
+-- ── 6 Pedra ancestral energizada ────────────────────────────────────────────
+
+-- Bloco ancestral pesado com UMA runa (transição 5 → 6 e paredes do 6).
+B.AncientBlock = function(ctx, x, side, z, s, yaw)
+	piece(ctx, Vector3.new(8, 9, 6) * s, at(x, 4.2 * s, side * z) * CFrame.Angles(0, RAD(yaw), RAD(3)), C.Ancient, M.Granite, true)
+	piece(ctx, Vector3.new(0.4, 4 * s, 0.4), at(x, 5 * s, side * (z - 3 * s - 0.15)) * CFrame.Angles(0, RAD(yaw), 0), C.Rune, M.Neon, false)
+end
+
+-- Bloco enorme EMBUTIDO na parede (massa, não ornamento).
+B.MassiveBlock = function(ctx, x, side, _z, s, _yaw)
+	piece(ctx, Vector3.new(16 * s, 20 * s, 4), at(x, 10 * s - 0.5, side * (ctx.Half - 1)), C.AncientDark, M.Granite, true)
+end
+
+-- Sulco rúnico no chão das laterais (rente).
+B.RuneGroove = function(ctx, x, side, z, s, yaw)
+	piece(ctx, Vector3.new(10 * s, 0.12, 0.45), at(x, 0.06, side * z) * CFrame.Angles(0, RAD(yaw * side), 0), C.Rune, M.Neon, false)
+end
+
+--[[
+	LANDMARK 6: monólito / estela ancestral — laje enorme, levemente
+	inclinada, com UMA runa vertical de energia na face voltada para a faixa
+	e um pé de pedra. Cada um com altura e inclinação diferentes.
+]]
+B.RunicMonolith = function(ctx, x, side, z, s, yaw)
+	local h, w, d = 40 * s, 9 * s, 4.5 * s
+	local base = at(x, -0.5, side * z) * CFrame.Angles(side * RAD(-4), RAD(yaw), RAD(3 * side))
+	piece(ctx, Vector3.new(w, h, d), base * CFrame.new(0, h / 2, 0), C.AncientDark, M.Granite, true, { Shadow = true })
+	piece(ctx, Vector3.new(0.6, h * 0.55, 0.3), base * CFrame.new(0, h * 0.55, -side * (d / 2 + 0.1)), C.Rune, M.Neon, false)
+	piece(ctx, Vector3.new(w + 4, 2.4, d + 4), at(x, 0.8, side * z) * CFrame.Angles(0, RAD(yaw), 0), C.Ancient, M.Granite, true)
+end
+
+-- Barreira 6: SELO ANCESTRAL — duas pedras enormes nas bordas com energia
+-- vazando pela face interna, e a pedra de cobertura com uma runa longa.
+B.AncientSeal = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(4.4, 36, 4.4), at(x - 3, 17.5, side * (half - 1.8)) * CFrame.Angles(side * RAD(-2), 0, 0), C.AncientDark, M.Granite, true)
+		piece(ctx, Vector3.new(0.4, 20, 0.4), at(x - 3, 10, side * (half - 4.3)), C.Rune, M.Neon, false)
+	end
+	piece(ctx, Vector3.new(10, 4, half * 2 + 2), at(segment.Barrier + 3, 32.5, 0), C.Ancient, M.Granite, false, { Shadow = true })
+	piece(ctx, Vector3.new(0.3, 0.8, 30), at(segment.Barrier - 2.15, 32.5, 0), C.Rune, M.Neon, false)
+end
+
+-- ── Calor (indício do 7, discreto) ──────────────────────────────────────────
+
+-- Fissura quente: pedra escurecida rente ao chão com uma linha de brasa.
+B.HeatFissure = function(ctx, x, side, z, s, yaw)
+	local cf = at(x, 0, side * z) * CFrame.Angles(0, RAD(yaw * side), 0)
+	piece(ctx, Vector3.new(9 * s, 0.1, 3), cf * CFrame.new(0, 0.05, 0), C.Scorched, M.Basalt, false)
+	piece(ctx, Vector3.new(7 * s, 0.16, 0.35), cf * CFrame.new(0, 0.08, 0), C.Heat, M.Neon, false)
+end
+
+-- Respiro quente junto da parede: pedra escura com uma fresta de brasa e
+-- (se a entrada pedir) brasas raras subindo.
+B.EmberVent = function(ctx, x, side, z, s, _yaw)
+	local rock = piece(ctx, Vector3.new(5, 2.6, 4) * s, at(x, 1, side * z) * CFrame.Angles(0, RAD(25), RAD(5)), C.Scorched, M.Basalt, true)
+	piece(ctx, Vector3.new(3 * s, 0.3, 0.3), at(x, 2.35 * s, side * z) * CFrame.Angles(0, RAD(25), 0), C.Heat, M.Neon, false)
+	if ctx.Fx then
+		ambient(rock, ctx.Fx)
+	end
+end
+
 PowerPathDecor.Kinds = B
 
 -- X de uma entrada do Decor: fração da área (0–1), zona de decisão (1–2) ou a barreira.
@@ -348,7 +593,7 @@ end
 
 --[[
 	O cenário de um estágio (Model "Decor" dentro do PowerPath_<Id>). Estágios
-	sem Decor no tema não ganham nada (Fases C–E).
+	sem Decor no tema não ganham nada (Fases D–E).
 ]]
 function PowerPathDecor.Build(parent: Model, origin: Vector3, segment: CorridorLayout.Segment): Model?
 	local theme = CorridorThemes.For(segment.Id)
@@ -366,12 +611,14 @@ function PowerPathDecor.Build(parent: Model, origin: Vector3, segment: CorridorL
 		Half = segment.Width / 2,
 		Kind = "",
 		Landmark = false,
+		Fx = nil,
 	}
 	for _, entry in theme.Decor do
 		local builder = B[entry.Kind]
 		assert(builder, "PowerPathDecor: Kind desconhecido " .. entry.Kind)
 		ctx.Kind = entry.Kind
 		ctx.Landmark = entry.Landmark == true
+		ctx.Fx = entry.Fx
 		builder(ctx, PowerPathDecor.XFor(segment, entry.At), entry.Side or 1, entry.Z or 34, entry.Scale or 1, entry.Yaw or 0)
 	end
 	model:SetAttribute("StageId", segment.Id)

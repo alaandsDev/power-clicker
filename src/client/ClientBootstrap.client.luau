@@ -61,7 +61,7 @@ local CONTROLLER_ORDER = {
 	"StationFxController", -- lobby station machines: core spin, rings, rising arrows, technician
 	"TrainingFieldController", -- training field: padlock per player, dummies react to whoever trains
 	"RewardChestController", -- rewards chest glows when the daily reward can be claimed (same state as the menu badge)
-	"PowerPathAmbientController", -- Power Path ice sparkle: on only near the camera, off with Reduced Effects
+	"PowerPathEnvironmentController", -- Power Path ambient VFX (all stages): on only near the camera, off with Reduced Effects
 	"SpawnCameraController", -- aims the camera along the spawn marker after the server teleport
 	"InteractController", -- world stations (ProximityPrompts) open panels
 	"TutorialController", -- must come after every controller that adds menu buttons

@@ -1,5 +1,5 @@
 --[[
-	check_power_path.luau — Caminho do Poder: fundação (Fase A) e temas 1–3 (Fase B).
+	check_power_path.luau — Caminho do Poder: fundação (Fase A), temas 1–3 (Fase B) e 4–6 (Fase C).
 
 		lune run tools/lune/check_power_path.luau [raiz]
 
@@ -20,9 +20,11 @@
 	  8. nenhuma decoração global (ilhas do céu, árvores, pedras) dentro do
 	     corredor;
 	  9. orçamento: peças, PointLights e emissores do corredor;
-	 10. Fase B (estágios 1–3): landmark, molduras das barreiras, transições
-	     físicas, cenário fora da safe lane / da frente da barreira / das
-	     fileiras / dos pads, orçamento por estágio, emissores locais.
+	 10. Fases B e C (estágios 1–6): landmark, molduras das barreiras,
+	     transições físicas (1→2 … 6→calor do 7), cenário fora da safe lane /
+	     da frente da barreira / das fileiras / dos pads / da câmera, Neon só
+	     como acento, orçamento por estágio, emissores locais com um único
+	     controlador.
 
 	REQUER VALIDAÇÃO NO ROBLOX STUDIO: escala, materiais, luz e leitura em
 	3ª pessoa; pets de verdade seguindo o jogador.
@@ -455,22 +457,46 @@ for name, n in lightKinds do
 	table.insert(kinds, name .. " " .. n)
 end
 check(parts - decorParts <= 1250, string.format("9. orçamento da fundação (Fase A): %d peças fora do cenário — meta 1.100–1.250", parts - decorParts))
-check(decorParts >= 80 and decorParts <= 130 and parts <= 1400, string.format("9. orçamento da Fase B: +%d peças de cenário (meta 80–110, teto 130); corredor com %d peças (%d instâncias), final ≤ 1.600", decorParts, parts, instances))
-check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; Fase B não adiciona; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
-local emittersOk = emitters <= 2
+-- Peças de cenário por fase (Fase B: 1–3; Fase C: 4–6).
+local phaseOf = { Wood = "B", Ruins = "B", Ice = "B", Crystal = "C", Gold = "C", Ancient = "C" }
+local decorPhase = { B = 0, C = 0 }
+for _, d in path:GetDescendants() do
+	if d:IsA("BasePart") and d:GetAttribute("Decor") ~= nil then
+		local stage = d:FindFirstAncestorWhichIsA("Model")
+		stage = stage and stage.Parent
+		local id = stage and stage:GetAttribute("StageId")
+		local phase = id and phaseOf[id] or "?"
+		decorPhase[phase] = (decorPhase[phase] or 0) + 1
+	end
+end
+check(decorPhase.B >= 80 and decorPhase.B <= 130, string.format("9. orçamento da Fase B (1–3): +%d peças de cenário (meta 80–110, teto 130)", decorPhase.B))
+check(decorPhase.C >= 90 and decorPhase.C <= 130 and parts <= 1400 and decorParts == decorPhase.B + decorPhase.C, string.format("9. orçamento da Fase C (4–6): +%d peças de cenário (meta 90–115, teto 130); corredor com %d peças (%d instâncias), final ≈ 1.600 (teto 1.700)", decorPhase.C, parts, instances))
+check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; Fases B e C não adicionam; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
+-- Emissores: poucos, só onde o tema pede, desligados no servidor, com tag
+-- (o PowerPathEnvironmentController liga perto da câmera).
+local emitterStages = { Ice = 2, Crystal = 1, Ancient = 1 }
+local emitterCount = {}
+local emittersOk = emitters <= 5
 for _, emitter in emitterList do
 	local owner = emitter.Parent
 	local stage = owner and owner:FindFirstAncestorWhichIsA("Model")
 	stage = stage and stage.Parent
-	if emitter.Enabled or not emitter:HasTag("PowerPathAmbient") or not owner or owner:GetAttribute("Landmark") ~= true or not stage or stage.Name ~= "PowerPath_Ice" or emitter.Rate > 10 then
+	local id = stage and stage:GetAttribute("StageId")
+	emitterCount[id or "?"] = (emitterCount[id or "?"] or 0) + 1
+	if emitter.Enabled or not emitter:HasTag("PowerPathAmbient") or not owner or owner:GetAttribute("Decor") == nil or not id or not emitterStages[id] or emitter.Rate > 10 then
 		emittersOk = false
 		print("      emissor fora da regra: " .. emitter:GetFullName())
 	end
 end
-check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 2, só no landmark do Gelo, desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
+for id, max in emitterStages do
+	if (emitterCount[id] or 0) > max then
+		emittersOk = false
+	end
+end
+check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 5: gelo 2, cristal 1, brasas do fim do 6 1; desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
 
--- ── 10. Fase B: cenário dos estágios 1–3 ────────────────────────────────────
-local themed = { Wood = true, Ruins = true, Ice = true }
+-- ── 10. Fases B e C: cenário dos estágios 1–6 ───────────────────────────────
+local themed = { Wood = true, Ruins = true, Ice = true, Crystal = true, Gold = true, Ancient = true }
 local decorBy = {}
 for _, segment in segments do
 	local decor = stageModels[segment.Id]:FindFirstChild("Decor")
@@ -523,8 +549,57 @@ for _, segment in segments do
 	end
 end
 check(landmarkOk, string.format("10. landmark nos estágios 1–3 (peças marcadas Landmark, acima de y 24): floresta %d, ruínas %d, gelo %d peças de cenário", counts.Wood, counts.Ruins, counts.Ice))
-check(onlyThemed, "10. estágios 4–10 sem cenário (Fases C–E); o estágio 4 só tem o indício no fim do 3")
+check(landmarkOk, string.format("10. landmark nos estágios 4–6 (peças marcadas Landmark, acima de y 24): cristal %d, ouro %d, ancestral %d peças de cenário", counts.Crystal, counts.Gold, counts.Ancient))
+check(onlyThemed, "10. estágios 7–10 sem cenário (Fases D–E); o 7 só tem o indício de calor no fim do 6")
 check(counts.Wood >= 20 and counts.Wood <= 40 and counts.Ruins >= 25 and counts.Ruins <= 45 and counts.Ice >= 30 and counts.Ice <= 50 and counts.Wood < counts.Ice and counts.Ruins <= counts.Ice, string.format("10. orçamento por estágio (guia 25–35 / 30–40 / 35–45) e intensidade subindo até o gelo: %d / %d / %d", counts.Wood, counts.Ruins, counts.Ice))
+check(counts.Crystal >= 25 and counts.Crystal <= 45 and counts.Gold >= 25 and counts.Gold <= 45 and counts.Ancient >= 22 and counts.Ancient <= 45, string.format("10. orçamento por estágio da Fase C (guia 30–40 cada, sem landmark de 80 peças): %d / %d / %d", counts.Crystal, counts.Gold, counts.Ancient))
+-- Nenhum landmark gasta o orçamento sozinho.
+local heavy = {}
+for _, segment in segments do
+	local perKind = {}
+	for _, d in decorBy[segment.Id] do
+		if d:GetAttribute("Landmark") == true then
+			local key = d:GetAttribute("Decor")
+			perKind[key] = (perKind[key] or 0) + 1
+		end
+	end
+	for key, n in perKind do
+		if n > 20 then
+			table.insert(heavy, segment.Id .. ":" .. key .. " " .. n)
+		end
+	end
+end
+check(#heavy == 0, "10. landmarks eficientes (≤ 20 peças por tipo de landmark no estágio) " .. table.concat(heavy, ", "))
+-- Neon é ACENTO: peças finas (veio, runa, fissura) com pouca área visível.
+local neonOk, neonInfo = true, {}
+local function face(d)
+	local a, b, c = d.Size.X, d.Size.Y, d.Size.Z
+	return a * b + b * c + a * c
+end
+for _, segment in segments do
+	local neonArea, totalArea = 0, 0
+	for _, d in decorBy[segment.Id] do
+		totalArea += face(d)
+		if d.Material == Enum.Material.Neon then
+			-- A área de uma linha fina é o comprimento × a espessura visível.
+			local smallest = math.min(d.Size.X, d.Size.Y, d.Size.Z)
+			local longest = math.max(d.Size.X, d.Size.Y, d.Size.Z)
+			neonArea += longest * math.max(smallest, 0.5) * 2
+			if smallest > 0.6 then
+				neonOk = false
+				print("      Neon largo demais: " .. d.Name)
+			end
+		end
+	end
+	if totalArea > 0 then
+		local share = neonArea / totalArea
+		table.insert(neonInfo, string.format("%s %.1f%%", segment.Id, share * 100))
+		if share > 0.05 then
+			neonOk = false
+		end
+	end
+end
+check(neonOk, "10. Neon só como acento (linhas finas ≤ 0,6 stud, ≤ 5% da área do cenário de cada estágio): " .. table.concat(neonInfo, ", "))
 
 -- Regras de posição do cenário.
 local laneHits, frontHits, rowHits, padHits, cameraHits = {}, {}, {}, {}, {}
@@ -572,15 +647,20 @@ check(#padHits == 0, "10. nada do cenário sobre os pads de vitória / Voltar " 
 check(#cameraHits == 0, "10. câmera chegando na barreira sem nada sobre a faixa (y 14–24, 40 studs antes) " .. table.concat(cameraHits, ", "))
 
 -- Molduras das barreiras e transições físicas.
-local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal" }
+local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal", Crystal = "CrystalConduit", Gold = "TempleGate", Ancient = "AncientSeal" }
+local segmentById = {}
+for _, segment in segments do
+	segmentById[segment.Id] = segment
+end
 local framesOk = true
 for id, kind in frames do
-	local segment = segments[id == "Wood" and 1 or id == "Ruins" and 2 or 3]
+	local segment = segmentById[id]
 	if not kindsIn(decorBy[id], segment.Barrier - 6, segment.Barrier + segment.Depth)[kind] then
 		framesOk = false
+		print("      sem moldura: " .. id)
 	end
 end
-check(framesOk, "10. barreiras 1–3 emolduradas pelo tema (raízes/troncos, umbral de ruína, selo de gelo)")
+check(framesOk, "10. barreiras 1–6 emolduradas pelo tema (raízes, umbral de ruína, selo de gelo, pilares de cristal, portão do templo, selo ancestral)")
 local w, r, i = segments[1], segments[2], segments[3]
 local thirdW, thirdR = (w.Barrier - w.AreaStart) / 3, (r.Barrier - r.AreaStart) / 3
 local t12 = kindsIn(decorBy.Wood, w.AreaStart + 2 * thirdW, w.End)
@@ -592,6 +672,25 @@ local t34 = kindsIn(decorBy.Ice, i.Barrier, i.End)
 check((t12.WorkedStone or t12.ColumnDrum) and not t12a.WorkedStone and not t12a.ColumnDrum, "10. transição 1→2 física: pedra trabalhada e tambor de coluna só no fim da floresta")
 check(t23.RuinColumn and (t23.FrostPatch or t23.FrostCap) and (t23b.IceCrust or t23b.IceShard) and not t23a.FrostPatch and not t23a.IceCrust, "10. transição 2→3 física: pedra → frost (terço 3) → gelo (depois da barreira 2)")
 check(t34.CrystalHint and not kindsIn(decorBy.Ice, i.AreaStart, i.Barrier).CrystalHint, "10. indício do estágio 4 só depois da barreira 3 (discreto)")
+-- Fase C: transições físicas 3→4, 4→5, 5→6 e o primeiro calor do 7.
+local function parts3(id)
+	local seg = segmentById[id]
+	local third = (seg.Barrier - seg.AreaStart) / 3
+	return kindsIn(decorBy[id], seg.AreaStart, seg.AreaStart + third), kindsIn(decorBy[id], seg.AreaStart, seg.AreaStart + 2 * third), kindsIn(decorBy[id], seg.AreaStart + 2 * third, seg.End)
+end
+local c1, c12, c3 = parts3("Crystal")
+local g1, g12, g3 = parts3("Gold")
+local _, a12, a3 = parts3("Ancient")
+check(c1.FrostCrystal and not c3.FrostCrystal, "10. transição 3→4 física: gelo com ponta de cristal só no começo do cristal (o gelo vira mineral)")
+check((c3.GoldBracket or c3.TempleBlock) and not c12.GoldBracket and not c12.TempleBlock and g1.GoldRemnant, "10. transição 4→5: pedestais/cintas de ouro só no fim do cristal; resto de cristal num berço de ouro no começo do templo")
+check(g3.AncientBlock and not g12.AncientBlock and g12.GoldenPortico, "10. transição 5→6: blocos ancestrais com runa só no fim do templo (o ouro diminui)")
+local lava = false
+for _, d in decorBy.Ancient do
+	if d.Material == Enum.Material.CrackedLava then
+		lava = true
+	end
+end
+check((a3.HeatFissure or a3.EmberVent) and not a12.HeatFissure and not a12.EmberVent and not lava, "10. primeiro calor do 7 só no fim do 6 (fissuras e brasas, sem lava)")
 
 -- Cenário estático: sem script, sem prompt, sem luz.
 local staticOk = true
@@ -626,17 +725,37 @@ do
 	end, Changed = Sig }
 	local camera = { CFrame = CF.new(i.AreaStart + 40, 8, 0) }
 	E.stubs.Workspace = setmetatable({ CurrentCamera = camera }, { __index = E.Workspace })
-	local Ambient = E.require(E.Client.Controllers.PowerPathAmbientController)
-	Ambient.Init()
-	local near = Ambient.Step()
+	local Env = E.require(E.Client.Controllers.PowerPathEnvironmentController)
+	Env.Init()
+	-- Cada emissor liga com a câmera perto dele, e só os perto ligam.
+	local eachOk, maxOn = true, 0
+	for _, emitter in emitterList do
+		camera.CFrame = CF.new(emitter.Parent.CFrame.Position + V3.new(0, 6, 0))
+		local on = Env.Step()
+		maxOn = math.max(maxOn, on)
+		if not emitter.Enabled or on >= emitters then
+			eachOk = false
+			print("      não ligou sozinho: " .. emitter:GetFullName())
+		end
+	end
 	settings.ReducedEffects = true
-	local reducedOn = Ambient.Step()
+	local reducedOn = Env.Step()
 	settings.ReducedEffects = false
 	camera.CFrame = CF.new(w.AreaStart, 8, 0)
-	local far = Ambient.Step()
-	local source = require("@lune/fs").readFile(E.Root .. "/src/client/Controllers/PowerPathAmbientController.luau")
-	check(Ambient.Count() == emitters and emitters > 0 and near == emitters and reducedOn == 0 and far == 0 and not string.find(source, "RenderStepped", 1, true) and not string.find(source, "Heartbeat", 1, true) and not string.find(source, "Lighting", 1, true),
-		string.format("10. cintilação do gelo LOCAL: liga perto (%d), apaga com Efeitos reduzidos (%d) e longe (%d); sem loop por quadro, sem mexer na Lighting", near, reducedOn, far))
+	local far = Env.Step()
+	local source = require("@lune/fs").readFile(E.Root .. "/src/client/Controllers/PowerPathEnvironmentController.luau")
+	local _, loops = string.gsub(source, "while true do", "")
+	check(Env.Count() == emitters and emitters > 0 and eachOk and reducedOn == 0 and far == 0 and loops == 1 and not string.find(source, "RenderStepped", 1, true) and not string.find(source, "Heartbeat", 1, true) and not string.find(source, "Lighting", 1, true),
+		string.format("10. VFX ambiental LOCAL (gelo, cristal, brasas): cada um liga só perto (no máx. %d juntos), apaga com Efeitos reduzidos (%d) e longe (%d); 1 loop só, sem quadro a quadro, sem Lighting", maxOn, reducedOn, far))
+	-- Um sistema só: nenhum controlador de ambiente por estágio.
+	local fs = require("@lune/fs")
+	local envControllers = {}
+	for _, name in fs.readDir(E.Root .. "/src/client/Controllers") do
+		if string.find(name, "^PowerPath") or string.find(name, "^Crystal") or string.find(name, "^Gold") or string.find(name, "^Ancient") then
+			table.insert(envControllers, name)
+		end
+	end
+	check(#envControllers == 1 and envControllers[1] == "PowerPathEnvironmentController.luau", "10. um único controlador de ambiente do Caminho (sem CrystalController/GoldController/AncientController): " .. table.concat(envControllers, ", "))
 end
 
 if #problems > 0 then

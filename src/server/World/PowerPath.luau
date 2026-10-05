@@ -111,7 +111,7 @@ local function buildSection(model: Model, origin: Vector3, half: number, section
 	-- Faixa central: placas na área (o "Caminho"); na zona de decisão, uma
 	-- laje só (o pouso depois da barreira).
 	if section.Area then
-		local count = math.max(math.round(length / rules.PlateLength), 1)
+		local count = math.max(math.round(length / (fromTheme.PlateLength or rules.PlateLength)), 1)
 		local plate = length / count
 		for k = 1, count do
 			local useNext = plateIsNext(k, count, blend)

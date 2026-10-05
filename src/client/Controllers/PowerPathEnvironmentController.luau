@@ -1,15 +1,20 @@
 --!strict
 --[[
-	PowerPathAmbientController
-	O VFX ambiental do Caminho do Poder (Fase B: a cintilação das formações de
-	gelo do estágio 3). O servidor cria os emissores DESLIGADOS com a tag
-	PowerPathAmbient (PowerPathDecor); aqui cada um só liga se:
+	PowerPathEnvironmentController
+	O ÚNICO sistema dinâmico do cenário do Caminho do Poder, para todos os
+	estágios (Fase B: cintilação do gelo; Fase C: motes do cristal e brasas
+	do fim do 6; Fases D–E usam o mesmo). O servidor cria os emissores
+	DESLIGADOS com a tag PowerPathAmbient (PowerPathDecor); aqui cada um só
+	liga se:
 
-	  · a câmera está a até CorridorThemes.Rules.AmbientDistance dele;
+	  · a câmera está a até CorridorThemes.Rules.AmbientDistance dele (ou o
+	    atributo "Range" do emissor, se houver);
 	  · "Efeitos reduzidos" está desligado.
 
-	Sem loop por quadro: confere a cada CHECK_EVERY segundos (task.wait), e
-	só escreve Enabled quando muda. O cenário estático não tem script.
+	Um loop só, sem quadro a quadro: confere a cada CHECK_EVERY segundos
+	(task.wait) e só escreve Enabled quando muda. Novos estágios NÃO criam
+	controlador próprio: só marcam o emissor com a tag. O cenário estático
+	(landmarks, arquitetura, barreira) nunca depende disto.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -23,7 +28,7 @@ local DataController = require(script.Parent.DataController)
 local TAG = "PowerPathAmbient"
 local CHECK_EVERY = 0.5
 
-local PowerPathAmbientController = {}
+local PowerPathEnvironmentController = {}
 
 -- Lista (poucos itens: 2 na Fase B); nomes repetidos não colidem.
 local emitters: { ParticleEmitter } = {}
@@ -50,14 +55,16 @@ local function reduced(): boolean
 end
 
 -- Uma conferência (exposta para os testes). Devolve quantos ficaram ligados.
-function PowerPathAmbientController.Step(): number
+function PowerPathEnvironmentController.Step(): number
 	local camera = Workspace.CurrentCamera
 	local eye = if camera then camera.CFrame.Position else nil
 	local allowed = eye ~= nil and not reduced()
-	local range = CorridorThemes.Rules.AmbientDistance
+	local default = CorridorThemes.Rules.AmbientDistance
 	local on = 0
 	for _, emitter in emitters do
 		local owner = emitter.Parent
+		local custom = emitter:GetAttribute("Range")
+		local range = if type(custom) == "number" then custom else default
 		local near = allowed and owner ~= nil and owner:IsA("BasePart") and (owner.CFrame.Position - (eye :: Vector3)).Magnitude <= range
 		if emitter.Enabled ~= near then
 			emitter.Enabled = near
@@ -67,11 +74,11 @@ function PowerPathAmbientController.Step(): number
 	return on
 end
 
-function PowerPathAmbientController.Count(): number
+function PowerPathEnvironmentController.Count(): number
 	return #emitters
 end
 
-function PowerPathAmbientController.Init()
+function PowerPathEnvironmentController.Init()
 	for _, item in CollectionService:GetTagged(TAG) do
 		register(item)
 	end
@@ -79,13 +86,13 @@ function PowerPathAmbientController.Init()
 	CollectionService:GetInstanceRemovedSignal(TAG):Connect(forget)
 end
 
-function PowerPathAmbientController.Start()
+function PowerPathEnvironmentController.Start()
 	task.spawn(function()
 		while true do
-			PowerPathAmbientController.Step()
+			PowerPathEnvironmentController.Step()
 			task.wait(CHECK_EVERY)
 		end
 	end)
 end
 
-return PowerPathAmbientController
+return PowerPathEnvironmentController

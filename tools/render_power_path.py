@@ -17,6 +17,11 @@ Câmeras (todas derivadas do CorridorLayout, a mesma conta do WorldBuilder):
   floresta, transição 1→2, ruínas, transição 2→3 (3 posições), gelo, folha
   comparativa 1/2/3 SEM TEXTO na mesma câmera relativa e o gelo olhando
   para trás.
+
+  Com o 4º argumento "C": o conjunto da Fase C (estágios 4–6) — transições
+  3→4, 4→5, 5→6 e o primeiro calor do 7, entrada / landmark / câmera
+  normal / barreira / aérea de cada estágio, folhas 4/5/6 e 1→6 SEM TEXTO
+  na mesma câmera relativa e vistas longas com vários estágios.
 """
 import os
 import sys
@@ -93,6 +98,63 @@ def phase_b(parts, out, tag):
     sheet.save(f"{out}/b60_comparacao_1_2_3_sem_texto.png")
 
 
+def phase_c(parts, out, tag):
+    """Câmeras da Fase C (estágios 4–6), relativas ao CorridorLayout."""
+    A = [s["start"] for s in SEG]
+    B = [s["wall"] for s in SEG]
+    D = [s["depth"] for s in SEG]
+    END = [s["end"] for s in SEG]
+
+    def shot(name, eye, target, title, fov=70, text=True):
+        R.render(parts, R.Cam(eye, target, fov=fov), f"{out}/{name}.png", f"{tag} - {title}", show_text=text)
+
+    def aerial(name, index, title):
+        cx = (A[index] + END[index]) / 2
+        span = END[index] - A[index] + 20
+        R.render(parts, None, f"{out}/{name}.png", f"{tag} - {title}", show_text=False, ortho=(cx, 0, W / span))
+
+    def stage(prefix, i, label, landmark_target):
+        shot(f"{prefix}0_entrada", [A[i] + 6, 9, -4], [B[i], 12, 4], f"{i + 1} {label}: entrada")
+        shot(f"{prefix}1_landmark", [A[i] + 28, 9, 12], landmark_target, f"{i + 1} {label}: landmark")
+        shot(f"{prefix}2_camera_jogador", [A[i] + 48, 8, 3], [A[i] + 90, 7, 0], f"{i + 1} {label}: camera normal do jogador")
+        shot(f"{prefix}3_aproximando_b{i + 1}", [B[i] - 46, 10, -16], [B[i], 12, 0], f"{i + 1} {label}: aproximando da Barreira {i + 1}", fov=72)
+        aerial(f"{prefix}4_aerea", i, f"{i + 1} {label}: aerea")
+
+    # Transição 3 → 4 (gelo → cristal).
+    shot("c00_trans34_depois_b3", [B[2] + D[2] + 4, 12, -24], [A[3] + 40, 8, 6], "transicao 3-4: depois da Barreira 3")
+    shot("c01_trans34_entrando", [A[3] - 6, 9, 6], [A[3] + 80, 10, -4], "transicao 3-4: entrando no cristal")
+    stage("c1", 3, "cristal", [A[3] + 60, 18, -32])
+    # Transição 4 → 5 (cristal → arquitetura dourada).
+    shot("c20_trans45_fim_cristal", [A[3] + 70, 9, 12], [B[3] + 10, 9, -10], "transicao 4-5: fim do cristal")
+    shot("c21_trans45_depois_b4", [B[3] + D[3] + 4, 12, -24], [A[4] + 40, 8, 6], "transicao 4-5: depois da Barreira 4")
+    stage("c3", 4, "ouro antigo", [A[4] + 56, 18, 34])
+    # Transição 5 → 6 (ouro → ancestral).
+    shot("c40_trans56_fim_ouro", [A[4] + 70, 9, -12], [B[4] + 10, 9, 10], "transicao 5-6: fim do templo")
+    shot("c41_trans56_depois_b5", [B[4] + D[4] + 4, 12, 24], [A[5] + 40, 8, -6], "transicao 5-6: depois da Barreira 5")
+    stage("c5", 5, "ancestral", [A[5] + 60, 20, -32])
+    # Primeiros sinais do 7 (calor) no fim do 6.
+    shot("c55_final_primeiro_calor", [B[5] + D[5] + 2, 10, -20], [END[5] + 6, 3, 18], "fim do 6: primeiros sinais do vulcanico")
+    shot("c56_fim_do_6_olhando_o_7", [A[5] + 80, 11, 8], [END[5] + 40, 8, -4], "ultimo terco do 6 ate a Barreira 6")
+
+    def sheet(indices, name, cols):
+        panels = []
+        for i in indices:
+            R.render(parts, R.Cam([A[i] + 20, 9, -10], [A[i] + 110, 10, 6], fov=70), f"{out}/_cmp.png", None, show_text=False)
+            panels.append(Image.open(f"{out}/_cmp.png").resize((640, 360)))
+        os.remove(f"{out}/_cmp.png")
+        rows = (len(panels) + cols - 1) // cols
+        img = Image.new("RGB", (644 * cols - 4, 364 * rows - 4), (255, 255, 255))
+        for k, im in enumerate(panels):
+            img.paste(im, ((k % cols) * 644, (k // cols) * 364))
+        img.save(f"{out}/{name}.png")
+
+    sheet([3, 4, 5], "c60_comparacao_4_5_6_sem_texto", 3)
+    sheet([0, 1, 2, 3, 4, 5], "c61_comparacao_1_a_6_sem_texto", 3)
+    # Vistas longas: vários estágios em sequência.
+    shot("c62_vista_longa_3_a_6", [A[3] - 90, 85, -170], [A[4] + 80, 10, 0], "vista longa: gelo, cristal, ouro, ancestral", fov=72, text=False)
+    shot("c63_vista_longa_pelo_corredor", [A[3] - 20, 48, 0], [A[6] + 40, 10, 0], "vista longa pelo corredor: 4 -> 7", fov=60, text=False)
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "build", "map_parts.json")
@@ -102,6 +164,9 @@ def main():
     parts, _ = R.load(src)
     if len(sys.argv) > 4 and sys.argv[4] == "B":
         phase_b(parts, out, tag)
+        return
+    if len(sys.argv) > 4 and sys.argv[4] == "C":
+        phase_c(parts, out, tag)
         return
 
     def shot(name, cam, title, text=True):
