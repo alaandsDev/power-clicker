@@ -130,7 +130,14 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   plataforma de interação na frente e ao alcance; reverter pelo LobbyConfig
   (sem `Style`) volta o quiosque; no cliente núcleo/anéis giram, setas
   sobem, técnico olha para quem chega, nada roda longe nem é criado.
-  `render_map3d.py` gera `_upgrades_{far,mid,near}.png`.
+  Polimento (bloco P): ≤ 120 peças; núcleo maior e em camadas (anel
+  frontal → núcleo → halo traseiro com braços); anéis medidos em toda a
+  volta sem entrar em coluna/bacia/tampa/halo; colunas com painel
+  embutido; console-terminal inclinado com tela; doca no piso (plataforma
+  rente, rampa, seta gravada); hierarquia da placa; gema da Loja 30% menor
+  com a Loja acessível; estado "jogador no ponto de uso" (núcleo/setas um
+  pouco mais rápidos, tela responde, volta ao sair).
+  `render_map3d.py` gera `_upgrades_{far,mid,near,side}.png`.
 - **check_polish** — nenhuma luz constante presa ao personagem (auras de
   poder e cosméticas, pets); espada parada contida (luz baixa, rastro
   desligado, skins neon com fio de energia); pets ~25% menores e em formação

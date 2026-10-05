@@ -206,4 +206,8 @@ if __name__ == "__main__":
         for name, dist, height, fov in (("far", 70, 9, 55), ("mid", 32, 7, 60), ("near", 15, 6.5, 70)):
             eye = target + d * dist + side * dist * 0.18 + np.array([0, height - 8, 0])
             render(parts, Cam(eye, target - np.array([0, 1.5 if name == "near" else 0, 0]), fov=fov), out_prefix + f"_upgrades_{name}.png", f"{label} - Melhorias ({name}: {dist} studs)")
+        # 3/4 lateral próxima: para julgar a profundidade (colunas, núcleo,
+        # anéis, console e o encaixe da base no chão).
+        eye = target + d * 11 + side * 11 + np.array([0, -1.5, 0])
+        render(parts, Cam(eye, target + np.array([0, -1.5, 0]) - side * 1.0, fov=68), out_prefix + "_upgrades_side.png", f"{label} - Melhorias (3/4 lateral, ~15 studs)")
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*}.png")

@@ -18,6 +18,12 @@
 	  6. plataforma de interação na frente, ao alcance do prompt;
 	  7. reverter = tirar Style do LobbyConfig: volta o quiosque antigo, com o
 	     mesmo prompt;
+	  P. POLIMENTO: núcleo maior e em camadas (anel frontal → núcleo → halo
+	     traseiro), anéis livres em toda a volta (não entram em coluna,
+	     bacia, tampa nem halo), colunas com painel embutido, console-terminal
+	     inclinado para o jogador com tela, doca no piso com rampa e seta
+	     gravada, placa com hierarquia (título >> subtítulo), emblema com
+	     suporte, gema da Loja menor (Loja intacta);
 	  8. cliente: núcleo e anéis giram (sem sair do raio), setas acendem de
 	     baixo para cima, técnico vira para quem chega; longe nada roda; nada
 	     é criado.
@@ -83,7 +89,7 @@ for _, d in machine:GetDescendants() do
 	end
 end
 local total = #machine:GetDescendants()
-check(parts <= 130, string.format("2. orçamento: %d peças (%d instâncias no total; limite 130 peças)", parts, total))
+check(parts <= 120, string.format("2. orçamento: %d peças (%d instâncias no total; meta ≤ 120 peças)", parts, total))
 check(lights == 0, "2. nenhuma luz (o brilho vem de material, partícula e movimento)")
 check(billboards == 0, "2. nenhum BillboardGui (a placa é física)")
 check(emitters <= 3 and rate <= 15, string.format("2. partículas controladas (%d emissores, %d/s no total)", emitters, rate))
@@ -202,6 +208,74 @@ check(ahead > 3, string.format("6. plataforma de interação NA FRENTE da máqui
 check((pad.CFrame.Position - console.CFrame.Position).Magnitude <= prompt.MaxActivationDistance - 3, string.format("6. de cima da plataforma o prompt alcança (%.1f studs; alcance %d)", (pad.CFrame.Position - console.CFrame.Position).Magnitude, prompt.MaxActivationDistance))
 check(pad.Size.X <= 7 and pad.Size.Z <= 6, "6. marca discreta (não é um círculo neon gigante)")
 
+-- P. Polimento.
+local fwd = toPlaza
+local side = V3.new(fwd.Z, 0, -fwd.X)
+local origin3 = V3.new(base.X, 0, base.Z)
+-- Coordenadas da máquina: lateral, altura e "profundidade" (+ = para a praça).
+local function machineLocal(p)
+	local d = p - origin3
+	return d:Dot(side), p.Y, d:Dot(fwd)
+end
+local function find(name)
+	return machine:FindFirstChild(name, true)
+end
+local crystalPart, corePart = find("CoreCrystal"), find("PowerCore")
+check(crystalPart and crystalPart.Size.Y >= 3.1 * 1.15 and crystalPart.Size.Y <= 3.1 * 1.3, string.format("P. núcleo maior (cristal %.1f studs de altura; antes 3,1)", crystalPart and crystalPart.Size.Y or 0))
+local energyRing, goldRing, halo = find("CoreRingEnergy"), find("CoreRingGold"), find("CoreHalo")
+local _, _, dEnergy = machineLocal(energyRing:GetAttribute("Centre"))
+local _, _, dCore = machineLocal(corePart.CFrame.Position)
+local _, _, dHalo = machineLocal(halo.CFrame.Position)
+check(dEnergy > dCore and dCore > dHalo + 1, string.format("P. profundidade: anel frontal (%.2f) → núcleo (%.2f) → halo traseiro (%.2f)", dEnergy, dCore, dHalo))
+check(#machine:GetDescendants() > 0 and find("CoreArm") and find("CoreHaloRim"), "P. armação: halo com aro dourado preso às colunas por braços")
+local panelCount, pilasters = 0, 0
+for _, d in machine:GetDescendants() do
+	if d.Name == "PanelRecess" then
+		panelCount += 1
+	elseif d.Name == "PanelPilaster" then
+		pilasters += 1
+	end
+end
+check(panelCount == 2 and pilasters == 4, "P. colunas com painel embutido (moldura de pilastras + rebaixo + canal) atrás das setas")
+local screen = find("ConsoleScreen")
+local screenGui = screen and screen:FindFirstChildOfClass("SurfaceGui")
+check(screenGui and screenGui:FindFirstChild("Bar3") and screenGui:FindFirstChild("Arrow") and screenGui.Face == roblox.Enum.NormalId.Top, "P. console com tela embutida (↑ + barras subindo)")
+local _, consoleY = machineLocal(console.CFrame.Position)
+check(console.CFrame.UpVector:Dot(fwd) > 0.3 and consoleY >= 3.5 and consoleY <= 5, string.format("P. console inclinado para o jogador, na altura do peito (%.1f studs)", consoleY))
+check(find("ConsoleCable") and find("ConsoleBezel") and find("ConsoleCheek"), "P. console ligado à máquina (cabo) com moldura e laterais")
+local ramp, plinth = find("Ramp"), find("Plinth")
+local padTop = pad.CFrame.Position.Y + pad.Size.Y / 2
+local rampLow = ramp.CFrame.Position.Y - ramp.Size.Y / 2
+local plinthTop = plinth.CFrame.Position.Y + plinth.Size.Y / 2
+check(math.abs(rampLow - padTop) < 0.05 and math.abs(ramp.CFrame.Position.Y + ramp.Size.Y / 2 - plinthTop) < 0.05, string.format("P. doca: piso → plataforma (topo %.2f) → rampa → base (topo %.2f), sem degrau solto", padTop, plinthTop))
+check(padTop - 0.59 <= 0.2, "P. plataforma rente ao piso (encaixada num aro), não um bloco em cima dele")
+local arrowPart = find("PadArrow")
+check(arrowPart and arrowPart.CFrame.Position.Y + 0.05 - padTop < 0.08, "P. seta do chão gravada na plataforma")
+local titleArea = title.Size.X * title.Size.Y
+local subArea = subtitle.Size.X * subtitle.Size.Y
+check(titleArea >= 4 * subArea and find("SignFrame"), string.format("P. hierarquia da placa: MELHORIAS %.0fx maior que o subtítulo, com moldura dourada", titleArea / subArea))
+local braces = 0
+for _, d in machine:GetDescendants() do
+	if d.Name == "CrestBrace" then
+		braces += 1
+	end
+end
+check(braces == 2 and find("CrestPedestal"), "P. emblema ⬆ assentado num pedestal com braços ligando à verga")
+check(gem.Size.X <= 4.6 * 0.75 and gem.Size.X >= 4.6 * 0.6, string.format("P. gema da Loja %.0f%% menor (%.1f studs; antes 4,6)", (1 - gem.Size.X / 4.6) * 100, gem.Size.X))
+local shopPrompt = nil
+for _, d in world:GetDescendants() do
+	if d:IsA("ProximityPrompt") and d:GetAttribute("OpenPanel") == "Shop" then
+		shopPrompt = d
+	end
+end
+check(shopPrompt ~= nil, "P. Loja continua com o prompt dela (acessível)")
+local npcModel = find("Technician")
+if npcModel then
+	local nx, _, nd = machineLocal(npcModel.PrimaryPart.CFrame.Position)
+	local px, _, pd = machineLocal(pad.CFrame.Position)
+	check((V3.new(nx, 0, nd) - V3.new(px, 0, pd)).Magnitude > 6, "P. técnico fora da plataforma e do caminho até o console")
+end
+
 -- 7. Reverter pelo config.
 local style, npc = station.Style, station.Npc
 station.Style, station.Npc = nil, nil
@@ -251,11 +325,13 @@ E.patches["StarterPlayer.Client.Controllers.StationFxController"] = {
 	{ "root.Position", "root.CFrame.Position", "all" },
 	{ "core.Part.Position", "core.Part.CFrame.Position", "all" },
 	{ "pulse.Part.Position", "pulse.Part.CFrame.Position", "all" },
+	{ "localRoot.Position", "localRoot.CFrame.Position", "all" },
+	{ "screen.Part.Position", "screen.Part.CFrame.Position", "all" },
 }
 local Fx = E.require(E.Client.Controllers.StationFxController)
 Fx.Init()
 local counts = Fx.Counts()
-check(counts.Spin == 2 and counts.Ring == 2 and counts.Core == 1 and counts.Npc == (if npc then 1 else 0) and counts.Pulse >= 12, string.format("8. peças animadas registradas (giro %d, anéis %d, núcleo %d, setas %d, técnico %d)", counts.Spin, counts.Ring, counts.Core, counts.Pulse, counts.Npc))
+check(counts.Spin == 2 and counts.Ring == 2 and counts.Core == 1 and counts.Npc == (if npc then 1 else 0) and counts.Pulse >= 12 and counts.Screen == 1, string.format("8. peças animadas registradas (giro %d, anéis %d, núcleo %d, setas %d, técnico %d, tela %d)", counts.Spin, counts.Ring, counts.Core, counts.Pulse, counts.Npc, counts.Screen))
 
 local core = machine:FindFirstChild("PowerCore", true)
 local ringModel = machine:FindFirstChild("CoreRingGold", true)
@@ -312,7 +388,7 @@ end
 local spun = math.deg(math.acos(math.clamp(core.CFrame.LookVector:Dot(coreStart.LookVector), -1, 1)))
 check(spun > 10 and (core.CFrame.Position - coreStart.Position).Magnitude < 1e-3, string.format("8. núcleo gira no lugar (%.0f° em 3 s)", spun))
 check((segment.CFrame.Position - segStart).Magnitude > 0.2 and math.abs((segment.CFrame.Position - ringCentre).Magnitude - radius0) < 1e-3, "8. anéis giram em volta do núcleo, sem sair do raio")
-check(core.Transparency >= 0.08 and core.Transparency <= 0.25, string.format("8. núcleo pulsa sutil (transparência %.2f)", core.Transparency))
+check(core.Transparency >= 0.03 and core.Transparency <= 0.25, string.format("8. núcleo pulsa sutil, nunca some nem estoura (transparência %.2f)", core.Transparency))
 check(brightest[1] and brightest[2] and brightest[3] and brightest[1] < brightest[2] and brightest[2] < brightest[3], "8. setas de energia acendem de BAIXO para CIMA (↑↑↑)")
 if npcRoot then
 	local toPlayer = (playerRoot.CFrame.Position - npcRoot.CFrame.Position)
@@ -322,6 +398,56 @@ if npcRoot then
 	check(after > before0 + 0.05, string.format("8. técnico vira para o jogador que chega (alinhamento %.2f → %.2f)", before0, after))
 end
 check(#machine:GetDescendants() == before, "8. nada criado por quadro")
+
+-- Anéis livres em TODA a volta (não entram em coluna, bacia, tampa, halo).
+local haloFront = dHalo + halo.Size.X / 2
+local worstSide, worstLow, worstHigh, worstBack = 0, math.huge, -math.huge, math.huge
+local function sampleRings()
+	for _, ringModel in { energyRing, goldRing } do
+		for _, seg in ringModel:GetChildren() do
+			for _, sign in { -1, 1 } do
+				local p = (seg.CFrame * CF.new(sign * seg.Size.X / 2, 0, 0)).Position
+				local lx, ly, ld = machineLocal(p)
+				worstSide = math.max(worstSide, math.abs(lx))
+				worstLow = math.min(worstLow, ly)
+				worstHigh = math.max(worstHigh, ly)
+				worstBack = math.min(worstBack, ld)
+			end
+		end
+	end
+end
+
+-- Estado de interação: jogador no ponto de uso → a máquina "acorda" de leve.
+local function coreRate(seconds)
+	local total = 0
+	local last = core.CFrame.LookVector
+	for _ = 1, math.floor(seconds * 60) do
+		t += 1 / 60
+		Fx.Step(t)
+		sampleRings()
+		local now = core.CFrame.LookVector
+		total += math.deg(math.acos(math.clamp(now:Dot(last), -1, 1)))
+		last = now
+	end
+	return total / seconds
+end
+local bar = screen:FindFirstChildOfClass("SurfaceGui"):FindFirstChild("Bar2")
+playerRoot.CFrame = CF.new(origin3 + fwd * 60 + V3.new(0, 3, 0))
+coreRate(2)
+local idleRate = coreRate(1)
+local idleBar = bar.BackgroundTransparency
+check(Fx.Engagement(screen) < 0.05, "8. longe do console: estação em repouso")
+playerRoot.CFrame = CF.new(pad.CFrame.Position + V3.new(0, 3, 0))
+coreRate(1.5)
+local engagedRate = coreRate(1)
+check(Fx.Engagement(screen) > 0.9, string.format("8. jogador na plataforma: a estação acorda (%.2f)", Fx.Engagement(screen)))
+check(engagedRate > idleRate * 1.25 and engagedRate < idleRate * 1.6, string.format("8. núcleo um pouco mais rápido no ponto de uso (%.0f°/s → %.0f°/s)", idleRate, engagedRate))
+check(bar.BackgroundTransparency < idleBar - 0.1, "8. a tela do console responde (barras mais vivas)")
+playerRoot.CFrame = CF.new(origin3 + fwd * 60 + V3.new(0, 3, 0))
+coreRate(2)
+check(Fx.Engagement(screen) < 0.05, "8. saindo, volta ao repouso")
+check(worstSide <= 3.85 and worstLow >= 4.7 and worstHigh <= 10.95 and worstBack >= haloFront + 0.05, string.format("8. anéis girando nunca entram em coluna/bacia/tampa/halo (lateral %.2f ≤ 3,85; altura %.2f–%.2f; atrás %.2f ≥ %.2f)", worstSide, worstLow, worstHigh, worstBack, haloFront + 0.05))
+check(#machine:GetDescendants() == before, "8. nada criado no estado de interação")
 -- Longe: nada roda.
 camera.CFrame = CF.new(0, 50, 400)
 local frozen = core.CFrame

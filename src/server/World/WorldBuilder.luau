@@ -629,10 +629,13 @@ local function buildStations(model: Model, origin: Vector3, palette: Palette)
 	local shop = areaOf("Shop")
 	local showcase = origin + shop.Offset
 	block(model, CFrame.new(showcase + Vector3.new(0, 1.5, 0)), Vector3.new(6, 3, 6), palette.Pad, Enum.Material.Marble)
-	local gem = block(model, CFrame.new(showcase + Vector3.new(0, 8, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)), Vector3.new(4.6, 4.6, 4.6), Color3.fromRGB(90, 210, 255), Enum.Material.Neon, false)
+	-- 30% menor, mais baixa, um pouco mais translúcida e com luz mais curta:
+	-- era do mesmo ciano do núcleo da estação de Melhorias ao lado e
+	-- disputava a atenção com ele. (A Loja será revista à parte.)
+	local gem = block(model, CFrame.new(showcase + Vector3.new(0, 6.6, 0)) * CFrame.Angles(math.rad(45), 0, math.rad(45)), Vector3.new(3.2, 3.2, 3.2), Color3.fromRGB(90, 210, 255), Enum.Material.Neon, false)
 	gem.Name = "ShopGem"
-	gem.Transparency = 0.1
-	light(gem, Color3.fromRGB(90, 210, 255), 16, 1.2)
+	gem.Transparency = 0.25
+	light(gem, Color3.fromRGB(90, 210, 255), 9, 0.6)
 end
 
 -- Board frame; the live ranking is drawn by the client (ScoreboardController),

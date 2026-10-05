@@ -9,7 +9,11 @@
 	- os dois anéis giram em volta do núcleo;
 	- as setas de energia nas colunas acendem de baixo para cima (↑↑↑), em
 	  onda — "upgrade" sem precisar ler;
-	- o técnico respira e vira um pouco para o jogador que chega perto.
+	- o técnico respira e vira um pouco para o jogador que chega perto;
+	- a tela do console mostra barras subindo;
+	- JOGADOR NO PONTO DE USO (a até ENGAGE_DISTANCE da tela): a máquina
+	  "acorda" de leve — núcleo ~10% mais intenso e mais rápido, setas mais
+	  rápidas, tela mais viva — e volta ao normal quando ele sai. Só visual.
 
 	Peças achadas pelas tags (CollectionService) que o servidor põe; funciona
 	com StreamingEnabled (peça que chega/sai é registrada/esquecida). Só mexe
@@ -30,6 +34,11 @@ local ARROW_GLOW = 0.45 -- quanto dura o brilho de cada seta
 local NPC_LOOK_DISTANCE = 20
 local NPC_MAX_TURN = math.rad(50)
 local NPC_TURN_RATE = 3
+local ENGAGE_DISTANCE = 12
+local ENGAGE_RATE = 4 -- quão rápido acorda/adormece (por segundo)
+local ENGAGE_SPEED = 0.4 -- giro +40% com o jogador no ponto de uso
+local ENGAGE_GLOW = 0.04 -- núcleo um pouco menos transparente (~10% mais intenso)
+local ENGAGE_ARROWS = 1.0 -- ciclo das setas vira isto (de ARROW_CYCLE)
 
 local TAGS = {
 	Spin = "StationSpin",
@@ -37,13 +46,19 @@ local TAGS = {
 	Pulse = "StationPulse",
 	Core = "StationCore",
 	Npc = "StationNpc",
+	Screen = "StationScreen",
 }
 
-type Spin = { Part: BasePart, Base: CFrame, Speed: number }
-type Ring = { Model: Model, Centre: Vector3, Axis: Vector3, Speed: number, Members: { { Part: BasePart, Offset: CFrame } } }
-type Pulse = { Part: BasePart, Order: number }
-type Core = { Part: BasePart, Base: number }
+-- Estado de cada estação (o Model "..._Machine", pela chave = caminho dele):
+-- quanto está "acordada" e a fase da onda das setas (acumulada, para mudar
+-- de velocidade sem salto).
+type Station = { Weight: number, Phase: number }
+type Spin = { Part: BasePart, Base: CFrame, Speed: number, Angle: number, Station: string? }
+type Ring = { Model: Model, Centre: Vector3, Axis: Vector3, Speed: number, Angle: number, Members: { { Part: BasePart, Offset: CFrame } }, Station: string? }
+type Pulse = { Part: BasePart, Order: number, Station: string? }
+type Core = { Part: BasePart, Base: number, Station: string? }
 type Npc = { Model: Model, Root: CFrame, Members: { { Part: BasePart, Offset: CFrame } }, Yaw: number }
+type Screen = { Part: BasePart, Bars: { Frame }, Arrow: TextLabel?, Station: string? }
 
 local StationFxController = {}
 
@@ -52,6 +67,32 @@ local rings: { [Instance]: Ring } = {}
 local pulses: { [Instance]: Pulse } = {}
 local cores: { [Instance]: Core } = {}
 local npcs: { [Instance]: Npc } = {}
+local screens: { [Instance]: Screen } = {}
+local stations: { [string]: Station } = {}
+
+-- A estação (Model "..._Machine") a que uma peça pertence, pela chave.
+local function stationOf(item: Instance): string?
+	local current = item.Parent
+	while current do
+		if current:IsA("Model") and string.sub(current.Name, -8) == "_Machine" then
+			return current:GetFullName()
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
+local function stateOf(station: string?): Station
+	if not station then
+		return { Weight = 0, Phase = 0 }
+	end
+	local state = stations[station]
+	if not state then
+		state = { Weight = 0, Phase = 0 }
+		stations[station] = state
+	end
+	return state
+end
 local started = os.clock()
 local lastStep: number? = nil
 
@@ -77,7 +118,7 @@ end
 
 local function register(tag: string, item: Instance)
 	if tag == TAGS.Spin and item:IsA("BasePart") then
-		spins[item] = { Part = item, Base = item.CFrame, Speed = numberAttribute(item, "SpinSpeed", 20) }
+		spins[item] = { Part = item, Base = item.CFrame, Speed = numberAttribute(item, "SpinSpeed", 20), Angle = 0, Station = stationOf(item) }
 	elseif tag == TAGS.Ring and item:IsA("Model") then
 		local centre = vectorAttribute(item, "Centre", item:GetPivot().Position)
 		rings[item] = {
@@ -85,12 +126,27 @@ local function register(tag: string, item: Instance)
 			Centre = centre,
 			Axis = vectorAttribute(item, "Axis", Vector3.yAxis).Unit,
 			Speed = numberAttribute(item, "SpinSpeed", 30),
+			Angle = 0,
 			Members = members(item, CFrame.new(centre)),
+			Station = stationOf(item),
 		}
 	elseif tag == TAGS.Pulse and item:IsA("BasePart") then
-		pulses[item] = { Part = item, Order = numberAttribute(item, "Order", 1) }
+		pulses[item] = { Part = item, Order = numberAttribute(item, "Order", 1), Station = stationOf(item) }
 	elseif tag == TAGS.Core and item:IsA("BasePart") then
-		cores[item] = { Part = item, Base = item.Transparency }
+		cores[item] = { Part = item, Base = item.Transparency, Station = stationOf(item) }
+	elseif tag == TAGS.Screen and item:IsA("BasePart") then
+		local gui = item:FindFirstChildOfClass("SurfaceGui")
+		local bars = {}
+		if gui then
+			for index = 1, 3 do
+				local bar = gui:FindFirstChild("Bar" .. index)
+				if bar and bar:IsA("Frame") then
+					table.insert(bars, bar)
+				end
+			end
+		end
+		local arrow = if gui then gui:FindFirstChild("Arrow") else nil
+		screens[item] = { Part = item, Bars = bars, Arrow = if arrow and arrow:IsA("TextLabel") then arrow else nil, Station = stationOf(item) }
 	elseif tag == TAGS.Npc and item:IsA("Model") then
 		local root = item.PrimaryPart
 		if root then
@@ -106,6 +162,7 @@ local function forget(item: Instance)
 	pulses[item] = nil
 	cores[item] = nil
 	npcs[item] = nil
+	screens[item] = nil
 end
 
 local function near(position: Vector3, camera: Vector3): boolean
@@ -139,14 +196,30 @@ function StationFxController.Step(at: number)
 	local eye = camera.CFrame.Position
 	local t = at - started
 
+	-- Quanto cada estação está "acordada" (jogador local no ponto de uso).
+	local localCharacter = Players.LocalPlayer and Players.LocalPlayer.Character
+	local localRoot = if localCharacter then localCharacter:FindFirstChild("HumanoidRootPart") else nil
+	local mine = if localRoot and localRoot:IsA("BasePart") then localRoot.Position else nil
+	for _, screen in screens do
+		local state = stateOf(screen.Station)
+		local engaged = mine ~= nil and (mine - screen.Part.Position).Magnitude <= ENGAGE_DISTANCE
+		state.Weight += ((if engaged then 1 else 0) - state.Weight) * (1 - math.exp(-ENGAGE_RATE * dt))
+	end
+	for _, state in stations do
+		local cycle = ARROW_CYCLE + (ENGAGE_ARROWS - ARROW_CYCLE) * state.Weight
+		state.Phase += dt / cycle
+	end
+
 	for _, spin in spins do
 		if near(spin.Base.Position, eye) then
-			spin.Part.CFrame = spin.Base * CFrame.Angles(0, math.rad(spin.Speed * t), 0)
+			spin.Angle += spin.Speed * (1 + ENGAGE_SPEED * stateOf(spin.Station).Weight) * dt
+			spin.Part.CFrame = spin.Base * CFrame.Angles(0, math.rad(spin.Angle), 0)
 		end
 	end
 	for _, ring in rings do
 		if near(ring.Centre, eye) then
-			local frame = CFrame.new(ring.Centre) * CFrame.fromAxisAngle(ring.Axis, math.rad(ring.Speed * t))
+			ring.Angle += ring.Speed * (1 + ENGAGE_SPEED * stateOf(ring.Station).Weight) * dt
+			local frame = CFrame.new(ring.Centre) * CFrame.fromAxisAngle(ring.Axis, math.rad(ring.Angle))
 			for _, member in ring.Members do
 				member.Part.CFrame = frame * member.Offset
 			end
@@ -154,15 +227,31 @@ function StationFxController.Step(at: number)
 	end
 	for _, core in cores do
 		if near(core.Part.Position, eye) then
-			core.Part.Transparency = core.Base + CORE_PULSE * (0.5 + 0.5 * math.sin(t * 2 * math.pi / CORE_PULSE_SECONDS))
+			local weight = stateOf(core.Station).Weight
+			local pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi / CORE_PULSE_SECONDS)
+			core.Part.Transparency = core.Base + CORE_PULSE * (1 - 0.5 * weight) * pulse - ENGAGE_GLOW * weight
 		end
 	end
 	for _, pulse in pulses do
 		if near(pulse.Part.Position, eye) then
 			-- Onda subindo: a seta 1 acende, depois a 2, depois a 3.
-			local phase = (t - (pulse.Order - 1) * (ARROW_CYCLE / 3.5)) % ARROW_CYCLE
+			local phase = ((stateOf(pulse.Station).Phase - (pulse.Order - 1) / 3.5) % 1) * ARROW_CYCLE
 			local glow = math.max(0, 1 - phase / ARROW_GLOW)
 			pulse.Part.Transparency = 0.72 - 0.62 * glow
+		end
+	end
+	for _, screen in screens do
+		if near(screen.Part.Position, eye) then
+			local state = stateOf(screen.Station)
+			for index, bar in screen.Bars do
+				local base = numberAttribute(bar, "BaseHeight", 0.5)
+				local wave = 0.5 + 0.5 * math.sin((state.Phase - index * 0.18) * 2 * math.pi)
+				bar.Size = UDim2.fromScale(bar.Size.X.Scale, base * (0.7 + 0.3 * wave) * (1 + 0.15 * state.Weight))
+				bar.BackgroundTransparency = 0.3 - 0.25 * state.Weight
+			end
+			if screen.Arrow then
+				screen.Arrow.TextTransparency = 0.25 - 0.25 * state.Weight
+			end
 		end
 	end
 	for _, npc in npcs do
@@ -194,7 +283,13 @@ function StationFxController.Counts(): { [string]: number }
 		end
 		return n
 	end
-	return { Spin = count(spins), Ring = count(rings), Pulse = count(pulses), Core = count(cores), Npc = count(npcs) }
+	return { Spin = count(spins), Ring = count(rings), Pulse = count(pulses), Core = count(cores), Npc = count(npcs), Screen = count(screens) }
+end
+
+-- Para os testes: quanto a estação de `item` está acordada (0..1).
+function StationFxController.Engagement(item: Instance): number
+	local station = stationOf(item)
+	return if station and stations[station] then stations[station].Weight else 0
 end
 
 function StationFxController.Init()
