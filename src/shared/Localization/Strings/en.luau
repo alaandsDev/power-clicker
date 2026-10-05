@@ -486,7 +486,6 @@ return {
 	["cut.Cut7.name"] = "Cut 7",
 	["cut.Cut8.name"] = "Cut 8",
 	-- The tower (Fase B)
-	["wall.marker"] = "Stage {order} — {name}",
 	["wall.portalSoon"] = "🚪 New world — coming soon",
 	["wall.firstClear"] = "Stage {order} cleared! +{gems} gems",
 	["wall.Ruins.name"] = "Reinforced Stone",
@@ -572,7 +571,8 @@ return {
 	["rebirth.ready"] = "Ready to rebirth!",
 	-- HUD do corredor (Fase I)
 	["corridor.stage"] = "⚔ Stage {order} — {name}",
-	["corridor.status"] = "Row: {hp} / {max}   ·   your hit: {icon} {power}",
+	["corridor.hit"] = "Your hit: {icon} {power}",
+	["corridor.enter"] = "⚔ {order} · {name}",
 	["corridor.reward"] = "Reward: {icon} {wins}",
 	["wall.destroyed"] = "💥 BARRIER {order} DESTROYED!",
 	["wall.destroyedNext"] = "Pick ONE prize (back to the plaza) or walk on: Barrier {next} — {name} →",

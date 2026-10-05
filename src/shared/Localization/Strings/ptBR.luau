@@ -498,7 +498,6 @@ return {
 	["cut.Cut7.name"] = "Corte 7",
 	["cut.Cut8.name"] = "Corte 8",
 	-- Torre (Fase B)
-	["wall.marker"] = "Estágio {order} — {name}",
 	["wall.portalSoon"] = "🚪 Novo mundo — em breve",
 	["wall.firstClear"] = "Estágio {order} conquistado! +{gems} gemas",
 	["wall.Ruins.name"] = "Pedra Reforçada",
@@ -584,7 +583,8 @@ return {
 	["rebirth.ready"] = "Pronto para renascer!",
 	-- HUD do corredor (Fase I)
 	["corridor.stage"] = "⚔ Estágio {order} — {name}",
-	["corridor.status"] = "Fileira: {hp} / {max}   ·   seu golpe: {icon} {power}",
+	["corridor.hit"] = "Seu golpe: {icon} {power}",
+	["corridor.enter"] = "⚔ {order} · {name}",
 	["corridor.reward"] = "Prêmio: {icon} {wins}",
 	["wall.destroyed"] = "💥 BARREIRA {order} DESTRUÍDA!",
 	["wall.destroyedNext"] = "Escolha UM prêmio (volta para a praça) ou passe direto: Barreira {next} — {name} →",

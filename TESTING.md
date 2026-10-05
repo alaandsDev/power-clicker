@@ -327,3 +327,23 @@ RW.11. Dar a volta no troféu e passar entre ele e as estações, a pé e com pe
 
 Coberto fora do Studio: `lune run tools/lune/check_rewards_area.luau`.
 
+### Caminho do Poder — Fase 0: placa de HP, título e HUD (PH) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+Câmeras: aproxime ao máximo sem entrar em 1ª pessoa (próxima), a distância padrão ao nascer (padrão) e afaste bastante (distante). Telas: Test > Device (1920x1080, 1366x768, iPad, iPhone em paisagem).
+PH.1. Diante da Barreira 1, câmera padrão: a placa "1 · Madeira" + barra + "60 / 60" + pontos das fileiras aparece NA FRENTE da barreira, um pouco acima da cabeça; nada no topo da barreira.
+PH.2. Repetir na Barreira 5 e no Colosso (10): mesma altura na tela, apesar de o Colosso ser bem mais alto.
+PH.3. Câmeras próxima e distante nas três barreiras: a placa inteira na tela, sem cobrir o personagem e sem encostar nas moedas ou na faixa do corredor.
+PH.4. Andar de um lado ao outro da barreira: a placa acompanha o lado do jogador e nunca passa da borda da barreira.
+PH.5. Bater: a barra cai na hora; o pedaço perdido fica claro por um instante (~0,25 s) e some. Sem atraso visível.
+PH.6. Abaixo de 25% a barra muda de cor (laranja); abaixo de 10%, vermelha com pulso leve. Nada pisca a placa inteira.
+PH.7. Quebrar a fileira 1: a placa passa para a fileira 2, barra cheia, ponto da 1 apagado.
+PH.8. Quebrar a última fileira: a placa some na hora (nada de "0 / X" no corredor); os pads e o Voltar ficam sem disputa.
+PH.9. Uma placa por vez: diante da 1 não aparece a da 2; no lobby e no meio de uma área longe da barreira (> 70 studs) não aparece nenhuma; nenhuma placa através das paredes.
+PH.10. Morrer/resetar diante da barreira: a placa some e volta com o mesmo HP (o seu) ao chegar de novo.
+PH.11. Dois jogadores (Test > 2): A deixa a Barreira 1 em ~20%, B em ~80%. Cada um vê o PRÓPRIO valor; quando A quebra, a placa de B continua.
+PH.12. Título: ao cruzar o começo de cada área aparece "⚔ N · NOME" (ex.: "⚔ 7 · ROCHA VULCÂNICA") por ~1,5 s abaixo das moedas e some; andar para trás e para frente na fronteira não repete em seguida. A placa flutuante "Estágio N — Nome" não existe mais.
+PH.13. Faixa do corredor: uma linha só, "Seu golpe: X · ≈N golpes · Prêmio Y" (ou "⚠ Forte demais..."), sem nome e sem barra de HP; clicar continua abrindo o painel de Progresso.
+PH.14. Efeitos reduzidos: sem pulso nos <10%; placa, nome, HP e título continuam.
+PH.15. Celular: a placa não cobre o CLIQUE, o Auto, os recursos nem o personagem; o texto continua legível com a câmera distante.
+
+Coberto fora do Studio: `lune run tools/lune/check_power_hud.luau` (projeção da câmera, uma placa por vez, A 20% / B 80%, rastro, <25%/<10%, quebra, respawn, título, faixa).
+

@@ -1653,22 +1653,9 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 			end
 		end
 
-		-- Placa do estágio na entrada da área.
-		local marker = makePart(model, {
-			Name = "StageMarker_" .. stage.Id,
-			Size = Vector3.new(2, 2, 2),
-			CFrame = CFrame.new(origin + Vector3.new(areaStart + 10, layout.SideHeight - 6, 0)),
-			Color = stage.Accent,
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			Transparency = 1,
-		})
-		billboard(
-			marker,
-			Text.GetFor(nil, "wall.marker", { order = stage.Order, name = Text.GetFor(nil, "wall." .. stage.Id .. ".name") }),
-			stage.Accent,
-			4
-		)
+		-- (A placa flutuante permanente "Estágio N — Nome" saiu: o nome está na
+		-- placa de HP presa à barreira e o estágio se apresenta por ~1,5 s ao
+		-- entrar na área — CorridorHudController.)
 
 		--[[
 			A barreira fecha o fim da área: várias fileiras do mesmo material,

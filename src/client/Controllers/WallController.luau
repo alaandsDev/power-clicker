@@ -12,9 +12,16 @@
 	atravessa e os outros continuam batendo na fileira inteira. Se a peça sair
 	e voltar pelo streaming, o estado é aplicado de novo.
 
-	Também desenha a placa de cada estágio (número, material e barra de HP da
-	fileira da frente), o flash/rachadura dos golpes, os estilhaços e o aviso
+	Também desenha a PLACA DE HP da barreira à frente do jogador (nome, barra,
+	HP e fileiras), o flash dos golpes, os estilhaços e o aviso
 	"BARREIRA N DESTRUÍDA!".
+
+	Placa de HP (Fase 0 do Caminho do Poder): presa à FACE da barreira, não
+	ao topo — a 1,5 stud na frente dela e a 7,5 studs do chão, a mesma altura
+	da barreira 1 ao Colosso, seguindo o lado em que o jogador está.
+	(Ver PLATE_FLOOR_HEIGHT: 7,5 studs, medido contra a HUD real.) Assim a
+	câmera normal de 3ª pessoa sempre enxerga o HP. Só a barreira à frente
+	do jogador (até 70 studs) mostra a placa; as outras ficam desligadas.
 
 	Nada aqui decide nada: HP, abertura, janela e vitórias são do WallService,
 	que também confere a posição de quem tenta atravessar sem ter quebrado.
@@ -44,18 +51,45 @@ local DataController = require(script.Parent.DataController)
 
 type Sign = {
 	Gui: BillboardGui,
-	Title: TextLabel,
 	Name: TextLabel,
+	Bar: Frame,
 	BarFill: Frame,
+	Trail: Frame,
 	BarText: TextLabel,
+	Pips: { Frame },
+	-- Rastro do HP perdido: de onde a barra saiu e quando.
+	Shown: number,
+	TrailFrom: number,
+	TrailAt: number,
+	Row: BasePart?,
 }
 
--- Studs: the sign shrinks with distance like every other world sign.
-local SIGN_WIDTH = 30
-local SIGN_HEIGHT = 12
--- Clear of the block: the part's centre is half its height off the floor, so
--- anything less than that keeps the sign INSIDE the stone.
-local SIGN_OFFSET = WallConfig.Layout.WallHeight / 2 + SIGN_HEIGHT / 2 + 2
+-- Placa de HP: tamanho em studs (encolhe com a distância como as outras
+-- placas do mundo) + um mínimo em pixels para continuar legível no celular.
+local PLATE_WIDTH = 10
+local PLATE_HEIGHT = 3
+local PLATE_MIN_PIXELS = Vector2.new(60, 18)
+--[[
+	Onde ela fica: altura FIXA do chão (não depende da altura da barreira),
+	um pouco à frente da face, acompanhando o lado do jogador.
+	7,5 e não 9,5 (o valor da proposta): medido com a câmera de 3ª pessoa
+	(8 / 12,5 / 28 studs) em 1920x1080, 1366x768, tablet e celular, a 9,5 a
+	placa subia até a coluna do topo da HUD (moedas, faixa do corredor) nas
+	câmeras próxima e padrão; a 7,5 ela fica entre essa coluna e a cabeça do
+	personagem em todos os casos (check_power_hud).
+]]
+local PLATE_FLOOR_HEIGHT = 7.5
+local PLATE_FRONT = 1.5
+local PLATE_EDGE_MARGIN = 10
+local PLATE_MAX_DISTANCE = 70
+-- Feedback: rastro do HP perdido, HP baixo e crítico.
+local TRAIL_SECONDS = 0.25
+local LOW_FRACTION = 0.25
+local CRITICAL_FRACTION = 0.1
+local COLOR_OK = Color3.fromRGB(90, 210, 120)
+local COLOR_LOW = Color3.fromRGB(255, 176, 64)
+local COLOR_CRITICAL = Color3.fromRGB(240, 92, 72)
+local COLOR_TRAIL = Color3.fromRGB(255, 236, 200)
 local SCAN_RETRY_SECONDS = 1
 -- A superfície da fileira pisca quando toma dano (com teto de frequência). O
 -- resto do impacto, as rachaduras e a quebra são do CombatFxController, que
@@ -74,6 +108,13 @@ local WallController = {
 	-- (row, stageId) quando volta inteira (a barreira se refez).
 	RowRestored = Signal.new() :: Signal.Signal<BasePart, string>,
 }
+
+-- Para os testes e para o mock de câmera.
+WallController.PLATE_FLOOR_HEIGHT = PLATE_FLOOR_HEIGHT
+WallController.PLATE_FRONT = PLATE_FRONT
+WallController.PLATE_MAX_DISTANCE = PLATE_MAX_DISTANCE
+WallController.PLATE_SIZE = Vector2.new(PLATE_WIDTH, PLATE_HEIGHT)
+WallController.PLATE_MIN_PIXELS = PLATE_MIN_PIXELS
 
 export type StageView = { Hp: { number }, Open: boolean }
 
@@ -231,72 +272,201 @@ local function flashSurface(row: BasePart)
 	end)
 end
 
+--[[
+	Onde a placa de HP fica para quem está em `position`: 1,5 stud à frente
+	da face da fileira, a 7,5 studs do chão (o pé da fileira), e no Z do
+	jogador limitado à largura da barreira. Não depende da altura da barreira:
+	o Colosso (48 de altura) tem a placa na mesma altura de leitura da
+	barreira 1 (30).
+]]
+function WallController.PlateAnchor(row: BasePart, position: Vector3?): Vector3
+	local centre = row.CFrame.Position
+	local half = row.Size / 2
+	local reach = math.max(half.Z - PLATE_EDGE_MARGIN, 0)
+	local z = if position then math.clamp(position.Z, centre.Z - reach, centre.Z + reach) else centre.Z
+	return Vector3.new(centre.X - half.X - PLATE_FRONT, centre.Y - half.Y + PLATE_FLOOR_HEIGHT, z)
+end
+
 local function createSign(stageId: string, row: BasePart): Sign
+	local stage = stageOfId(stageId)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "WallSign"
-	gui.Size = UDim2.fromScale(SIGN_WIDTH, SIGN_HEIGHT)
-	gui.StudsOffset = Vector3.new(0, SIGN_OFFSET, 0)
-	gui.MaxDistance = 320
-	-- The rows behind it would swallow the sign otherwise.
+	gui.Size = UDim2.new(PLATE_WIDTH, PLATE_MIN_PIXELS.X, PLATE_HEIGHT, PLATE_MIN_PIXELS.Y)
+	gui.MaxDistance = PLATE_MAX_DISTANCE
+	-- Só a placa da barreira à frente fica ligada (refresh), então ela pode
+	-- ficar por cima de tudo sem aparecer através das outras barreiras.
 	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
 	gui.Adornee = row
+	gui.Enabled = false
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
-	local title = Instance.new("TextLabel")
-	title.BackgroundTransparency = 1
-	title.Font = Theme.FontDisplay
-	title.TextScaled = true
-	title.TextColor3 = Color3.new(1, 1, 1)
-	title.TextStrokeTransparency = 0.2
-	title.Size = UDim2.fromScale(1, 0.3)
-	title.Parent = gui
+	local back = Instance.new("Frame")
+	back.Name = "Back"
+	back.BackgroundColor3 = Color3.fromRGB(14, 16, 26)
+	back.BackgroundTransparency = 0.35
+	back.Size = UDim2.fromScale(1, 1)
+	back.Parent = gui
+	local backCorner = Instance.new("UICorner")
+	backCorner.CornerRadius = UDim.new(0.22, 0)
+	backCorner.Parent = back
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = if stage then stage.Accent else Color3.new(1, 1, 1)
+	stroke.Thickness = 1.5
+	stroke.Transparency = 0.2
+	stroke.Parent = back
 
 	local name = Instance.new("TextLabel")
+	name.Name = "StageName"
 	name.BackgroundTransparency = 1
 	name.Font = Theme.FontDisplay
 	name.TextScaled = true
 	name.TextColor3 = Color3.new(1, 1, 1)
-	name.TextStrokeTransparency = 0.2
-	name.Position = UDim2.fromScale(0, 0.32)
-	name.Size = UDim2.fromScale(1, 0.3)
-	name.Parent = gui
+	name.TextStrokeTransparency = 0.3
+	name.Position = UDim2.fromScale(0.05, 0.04)
+	name.Size = UDim2.fromScale(0.9, 0.34)
+	name.Parent = back
 
 	local bar = Instance.new("Frame")
+	bar.Name = "Bar"
 	bar.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
 	bar.BorderSizePixel = 0
-	bar.Position = UDim2.fromScale(0.1, 0.68)
-	bar.Size = UDim2.fromScale(0.8, 0.26)
-	bar.Parent = gui
+	bar.Position = UDim2.fromScale(0.05, 0.42)
+	bar.Size = UDim2.fromScale(0.9, 0.36)
+	bar.ClipsDescendants = true
+	bar.Parent = back
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.4, 0)
+	corner.CornerRadius = UDim.new(0.45, 0)
 	corner.Parent = bar
 
+	-- Rastro: o pedaço de HP que acabou de sair fica claro por ~0,25 s.
+	local trail = Instance.new("Frame")
+	trail.Name = "Trail"
+	trail.BackgroundColor3 = COLOR_TRAIL
+	trail.BorderSizePixel = 0
+	trail.Size = UDim2.fromScale(1, 1)
+	trail.Parent = bar
+
 	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = Theme.Colors.Good
+	fill.Name = "Fill"
+	fill.BackgroundColor3 = COLOR_OK
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.fromScale(1, 1)
+	fill.ZIndex = 2
 	fill.Parent = bar
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0.4, 0)
-	fillCorner.Parent = fill
 
 	local barText = Instance.new("TextLabel")
+	barText.Name = "Hp"
 	barText.BackgroundTransparency = 1
 	barText.Font = Theme.FontDisplay
 	barText.TextScaled = true
 	barText.TextColor3 = Color3.new(1, 1, 1)
 	barText.TextStrokeTransparency = 0.3
 	barText.Size = UDim2.fromScale(1, 1)
-	barText.ZIndex = 2
+	barText.ZIndex = 3
 	barText.Parent = bar
 
-	return { Gui = gui, Title = title, Name = name, BarFill = fill, BarText = barText }
+	-- Fileiras: um ponto por fileira (as quebradas apagam).
+	local pips = {}
+	local count = if stage then stage.Rows else 1
+	if count > 1 then
+		local pipWidth = math.min(0.08, 0.6 / count)
+		local gap = pipWidth * 0.5
+		local total = count * pipWidth + (count - 1) * gap
+		for index = 1, count do
+			local pip = Instance.new("Frame")
+			pip.Name = "Row" .. index
+			pip.BackgroundColor3 = Color3.new(1, 1, 1)
+			pip.BorderSizePixel = 0
+			pip.Position = UDim2.fromScale(0.5 - total / 2 + (index - 1) * (pipWidth + gap), 0.83)
+			pip.Size = UDim2.fromScale(pipWidth, 0.1)
+			pip.Parent = back
+			local pipCorner = Instance.new("UICorner")
+			pipCorner.CornerRadius = UDim.new(0.5, 0)
+			pipCorner.Parent = pip
+			table.insert(pips, pip)
+		end
+	end
+
+	return {
+		Gui = gui,
+		Name = name,
+		Bar = bar,
+		BarFill = fill,
+		Trail = trail,
+		BarText = barText,
+		Pips = pips,
+		Shown = 1,
+		TrailFrom = 1,
+		TrailAt = -math.huge,
+		Row = nil,
+	}
+end
+
+local function reducedEffects(): boolean
+	local settings = DataController.Get("Settings")
+	return type(settings) == "table" and settings.ReducedEffects == true
+end
+
+-- Desenha a placa com o HP da fileira da frente DESTE jogador.
+local function drawSign(sign: Sign, stageId: string, front: BasePart, index: number, now: number)
+	sign.Name.Text = string.format("%d · %s", stageOrder(stageId), stageName(stageId))
+	local hp, maxHp = WallController.RowState(front)
+	local fraction = if maxHp > 0 then math.clamp(hp / maxHp, 0, 1) else 1
+	-- Fileira nova (a anterior caiu, ou a barreira se refez): sem rastro.
+	if sign.Row ~= front then
+		sign.Row = front
+		sign.Shown = fraction
+		sign.TrailFrom = fraction
+		sign.TrailAt = -math.huge
+	elseif fraction < sign.Shown then
+		-- Golpe: a barra cai NA HORA; o rastro sai do valor anterior.
+		sign.TrailFrom = math.max(sign.TrailFrom, sign.Shown)
+		sign.TrailAt = now
+		sign.Shown = fraction
+	else
+		sign.Shown = fraction
+	end
+	local progress = math.clamp((now - sign.TrailAt) / TRAIL_SECONDS, 0, 1)
+	local trail = sign.TrailFrom + (fraction - sign.TrailFrom) * progress
+	if progress >= 1 then
+		sign.TrailFrom = fraction
+	end
+	sign.BarFill.Size = UDim2.fromScale(fraction, 1)
+	sign.Trail.Size = UDim2.fromScale(math.max(trail, fraction), 1)
+	local color = COLOR_OK
+	if fraction <= CRITICAL_FRACTION then
+		color = COLOR_CRITICAL
+	elseif fraction <= LOW_FRACTION then
+		color = COLOR_LOW
+	end
+	sign.BarFill.BackgroundColor3 = color
+	-- Crítico: pulso leve no preenchimento (sem piscar a placa inteira).
+	sign.BarFill.BackgroundTransparency = if fraction <= CRITICAL_FRACTION and not reducedEffects() then 0.18 * (1 + math.sin(now * 2 * math.pi * 1.6)) / 2 else 0
+	sign.BarText.Text = NumberFormat.Short(math.max(hp, 0)) .. " / " .. NumberFormat.Short(maxHp)
+	for pipIndex, pip in sign.Pips do
+		pip.BackgroundTransparency = if pipIndex < index then 0.8 elseif pipIndex == index then 0 else 0.35
+	end
+	sign.Gui.Enabled = true
+end
+
+local function playerPosition(): Vector3?
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	return if root and root:IsA("BasePart") then root.CFrame.Position else nil
 end
 
 local function refresh()
+	local position = playerPosition()
+	local now = os.clock()
+	-- A barreira À FRENTE do jogador mais próxima: só ela mostra a placa.
+	local chosen: string? = nil
+	local chosenFront: BasePart? = nil
+	local chosenIndex, chosenDistance = 0, PLATE_MAX_DISTANCE
 	for stageId, rows in rowsByStage do
 		-- Colisão/aparência locais de cada fileira, conforme o estado DESTE jogador.
 		local front: BasePart? = nil
+		local frontIndex = 0
 		local stage = stageOfId(stageId)
 		local count = if stage then stage.Rows else #rows
 		for index = 1, count do
@@ -305,31 +475,40 @@ local function refresh()
 				local _, _, broken = WallController.RowState(row)
 				applyRow(row, broken)
 				if not broken and front == nil then
-					front = row
+					front, frontIndex = row, index
 				end
 			end
 		end
-		local sign = signs[stageId]
-		if not sign then
-			continue
-		end
-		if not front then
-			sign.Gui.Enabled = false
-			continue
-		end
-		sign.Gui.Enabled = true
-		sign.Gui.Adornee = front
-
-		sign.Title.Text = Text.Get("wall.stage", { order = stageOrder(stageId) })
-		sign.Name.Text = stageName(stageId)
-		local hp, maxHp = WallController.RowState(front :: BasePart)
-		if maxHp > 0 then
-			local fraction = math.clamp(hp / maxHp, 0, 1)
-			sign.BarFill.Size = UDim2.fromScale(fraction, 1)
-			sign.BarFill.BackgroundColor3 = Theme.Colors.Good
-			sign.BarText.Text = NumberFormat.Short(hp) .. " / " .. NumberFormat.Short(maxHp)
+		if front and position then
+			local face = front.CFrame.Position.X - front.Size.X / 2
+			local ahead = face - position.X
+			if ahead > -2 and ahead <= chosenDistance then
+				chosen, chosenFront, chosenIndex, chosenDistance = stageId, front, frontIndex, ahead
+			end
 		end
 	end
+	for stageId, sign in signs do
+		if stageId ~= chosen or not chosenFront then
+			if sign.Gui.Enabled then
+				sign.Gui.Enabled = false
+			end
+			sign.Row = nil
+			continue
+		end
+		local front = chosenFront :: BasePart
+		sign.Gui.Adornee = front
+		sign.Gui.StudsOffsetWorldSpace = WallController.PlateAnchor(front, position) - front.CFrame.Position
+		drawSign(sign, stageId, front, chosenIndex, now)
+	end
+end
+
+-- Para os testes: a placa de cada estágio (BillboardGui) e qual está ligada.
+function WallController.Signs(): { [string]: Sign }
+	return signs
+end
+
+function WallController.Refresh()
+	refresh()
 end
 
 --[[

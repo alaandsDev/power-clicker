@@ -4,13 +4,14 @@
 	A faixa de informação do corredor: aparece quando o jogador está perto de
 	uma barreira e some no lobby.
 
-	Mostra o que o pedido lista para a hora do combate:
-		estágio atual · nome da barreira · força necessária · sua força
-		progresso de dano · próxima recompensa
+	Fase 0 do Caminho do Poder: o NOME e o HP da barreira ficam na placa
+	presa à própria barreira (WallController). Esta faixa mostra só o que
+	COMPLETA a placa, numa linha:
+		seu golpe · ≈golpes que faltam · prêmio   (ou o aviso "forte demais")
 
-	Fica no ALTO da tela, estreita e sem fundo opaco: o pedido é explícito em
-	não tapar a barreira com painel grande. A barra de vida da fileira continua
-	flutuando sobre a própria barreira (WallController) — aqui é o resumo.
+	Também apresenta o estágio ao ENTRAR na área dele: "⚔ 7 · ROCHA
+	VULCÂNICA" por ~1,5 s e some (no lugar da placa flutuante permanente
+	"Estágio N — Nome" que havia no corredor).
 
 	O HP é o das barreiras DESTE jogador (cada um tem o próprio caminho), lido
 	do WallController, que recebe o estado do servidor; este controller não
@@ -23,10 +24,13 @@ local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
 local WallConfig = require(Shared:WaitForChild("Config"):WaitForChild("WallConfig"))
+local CorridorLayout = require(Shared:WaitForChild("Formulas"):WaitForChild("CorridorLayout"))
 local Text = require(Shared:WaitForChild("Localization"))
+local TextCase = require(Shared:WaitForChild("Utils"):WaitForChild("TextCase"))
 
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Build = require(script.Parent.Parent.UI.Build)
+local Anim = require(script.Parent.Parent.UI.Anim)
 local UIController = require(script.Parent.UIController)
 local GameStateController = require(script.Parent.GameStateController)
 local HudController = require(script.Parent.HudController)
@@ -37,19 +41,28 @@ local WallController = require(script.Parent.WallController)
 local SHOW_RANGE = WallConfig.HitRange * 3
 -- Compacta: uma linha de texto e uma barra fina. Clicar abre o painel
 -- completo de Progresso, que é onde o detalhe pertence.
-local PANEL_WIDTH = 380
+local PANEL_WIDTH = 360
 -- Acima disto (golpes para o estágio inteiro, ~1 min segurando o clique) a
 -- faixa avisa que o jogador ainda está fraco para esta barreira.
 local WEAK_HITS = 600
-local PANEL_HEIGHT = 48
+local PANEL_HEIGHT = 30
+-- Título de entrada do estágio: quanto fica na tela e o intervalo mínimo para
+-- repetir o mesmo estágio (ir e voltar na fronteira não fica piscando).
+local TITLE_SECONDS = 1.5
+local TITLE_REPEAT_SECONDS = 8
 
 local CorridorHudController = {}
 
 local panel: TextButton
-local titleLabel: TextLabel
 local statusLabel: TextLabel
 local rewardLabel: TextLabel
-local setBar: (number) -> ()
+local stageTitle: TextLabel
+local titleStamp = 0
+local lastArea: string? = nil
+local titleShownAt: { [string]: number } = {}
+-- X da origem do corredor no mundo, achado pela primeira fileira (o cliente
+-- não sabe a origem do mundo; as fileiras sim).
+local originX: number? = nil
 
 local function stageOf(stageId: string): WallConfig.WallStage?
 	for _, stage in WallConfig.Stages do
@@ -79,6 +92,54 @@ local function nearestRow(position: Vector3): (BasePart?, number)
 	return best, bestDistance
 end
 
+local function corridorOrigin(): number?
+	if originX then
+		return originX
+	end
+	local first = WallConfig.Stages[1]
+	local rows = first and WallController.Rows()[first.Id]
+	local row = rows and rows[1]
+	local segment = CorridorLayout.Segments()[1]
+	if row and row.Parent and segment then
+		originX = row.CFrame.Position.X - row.Size.X / 2 - segment.Barrier
+	end
+	return originX
+end
+
+-- "⚔ 7 · ROCHA VULCÂNICA" por ~1,5 s ao entrar na área de um estágio.
+function CorridorHudController.ShowStageTitle(stageId: string)
+	local stage = stageOf(stageId)
+	if not stage then
+		return
+	end
+	titleShownAt[stageId] = os.clock()
+	stageTitle.Text = Text.Get("corridor.enter", {
+		order = stage.Order,
+		name = TextCase.Upper(Text.Get("wall." .. stage.Id .. ".name")),
+	})
+	stageTitle.Visible = true
+	Anim.PopIn(stageTitle, 0.5, 0.25)
+	titleStamp += 1
+	local stamp = titleStamp
+	task.delay(TITLE_SECONDS, function()
+		if titleStamp == stamp then
+			stageTitle.Visible = false
+		end
+	end)
+end
+
+local function checkArea(position: Vector3)
+	local origin = corridorOrigin()
+	local segment = if origin then CorridorLayout.AreaAt(position.X - origin) else nil
+	local id = if segment then segment.Id else nil
+	if id ~= lastArea then
+		lastArea = id
+		if id and os.clock() - (titleShownAt[id] or -math.huge) >= TITLE_REPEAT_SECONDS then
+			CorridorHudController.ShowStageTitle(id)
+		end
+	end
+end
+
 local function refresh()
 	local character = Players.LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
@@ -86,6 +147,7 @@ local function refresh()
 		panel.Visible = false
 		return
 	end
+	checkArea(root.CFrame.Position)
 	local row = nearestRow(root.Position)
 	if not row then
 		panel.Visible = false
@@ -99,17 +161,9 @@ local function refresh()
 	end
 	panel.Visible = true
 
-	local hp, maxHp = WallController.RowState(row)
-	local fraction = if maxHp > 0 then hp / maxHp else 1
+	-- Nome e HP estão na placa da barreira; aqui, só o que a completa.
 	local perClick = GameStateController.GetPowerInfo().PerClick
-
-	titleLabel.Text = Text.Get("corridor.stage", {
-		order = stage.Order,
-		name = Text.Get("wall." .. stage.Id .. ".name"),
-	})
-	statusLabel.Text = Text.Get("corridor.status", {
-		hp = NumberFormat.Short(math.max(hp, 0)),
-		max = NumberFormat.Short(maxHp),
+	statusLabel.Text = Text.Get("corridor.hit", {
 		icon = Theme.Icons.Power,
 		power = NumberFormat.Short(perClick),
 	})
@@ -125,7 +179,6 @@ local function refresh()
 		remaining += math.max(otherHp, 0)
 	end
 	local hits = if perClick > 0 then math.ceil(remaining / perClick) else math.huge
-	setBar(math.clamp(fraction, 0, 1))
 	if hits > WEAK_HITS then
 		rewardLabel.Text = Text.Get("corridor.weak")
 		Build.paint(rewardLabel, "TextColor3", Theme.Colors.Bad)
@@ -169,13 +222,12 @@ function CorridorHudController.Init()
 		UIController.TogglePanel("Tower")
 	end)
 
-	titleLabel = Build.label({
-		Name = "Stage",
-		Font = Theme.FontDisplay,
-		TextSize = 19,
-		Position = UDim2.fromOffset(12, 4),
-		-- Metade esquerda: a direita é de golpes/prêmio (não se sobrepõem).
-		Size = UDim2.new(0.5, -12, 0, 22),
+	-- Uma linha: "seu golpe" à esquerda, golpes/prêmio (ou o aviso) à direita.
+	statusLabel = Build.label({
+		Name = "Status",
+		TextSize = 15,
+		Position = UDim2.fromOffset(12, 5),
+		Size = UDim2.new(0.42, -12, 0, 20),
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = panel,
@@ -185,28 +237,28 @@ function CorridorHudController.Init()
 		TextSize = 15,
 		TextColor3 = Theme.Colors.Power,
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -12, 0, 6),
-		Size = UDim2.new(0.5, -12, 0, 20),
+		Position = UDim2.new(1, -12, 0, 5),
+		Size = UDim2.new(0.58, -12, 0, 20),
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = panel,
 	})
-	local bar, set = Build.progressBar({
-		Name = "Damage",
-		Position = UDim2.fromOffset(12, 28),
-		Size = UDim2.new(1, -24, 0, 12),
-		Parent = panel,
-	}, Theme.Colors.Good)
-	setBar = set
-	-- O HP exato fica DENTRO da barra: uma linha a menos na tela.
-	statusLabel = Build.label({
-		Name = "Status",
-		TextSize = 12,
-		Position = UDim2.fromScale(0, 0),
-		Size = UDim2.fromScale(1, 1),
-		ZIndex = 3,
-		Parent = bar,
+
+	-- Título de entrada do estágio: na coluna central, logo abaixo das moedas
+	-- (antes da faixa), sem fundo; some sozinho.
+	stageTitle = Build.label({
+		Name = "StageTitle",
+		Text = "",
+		Font = Theme.FontDisplay,
+		TextSize = 30,
+		TextColor3 = Theme.Colors.Power,
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(PANEL_WIDTH + 80, 38),
+		Visible = false,
+		LayoutOrder = 4,
+		Parent = HudController.GetTopStack(),
 	})
+	Build.textStroke(stageTitle, 3)
 end
 
 function CorridorHudController.Start()
