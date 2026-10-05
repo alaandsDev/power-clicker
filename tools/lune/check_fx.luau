@@ -137,9 +137,19 @@ for _, name in { "WallController", "CombatFxController" } do
 	}
 end
 E.patches[client .. "Controllers.SwordSwingController"] = { { ".Position", ".CFrame.Position", "all" } }
-local renderStep, heartbeat
+local renderStep, heartbeat, preSim, postSim
 E.stubs.RunService.RenderStepped = { Connect = function(_, fn)
 	renderStep = fn
+	return { Disconnect = function() end }
+end }
+-- O corpo com espada roda depois do Animator (PreSimulation) e verifica depois
+-- da física (PostSimulation).
+E.stubs.RunService.PreSimulation = { Connect = function(_, fn)
+	preSim = fn
+	return { Disconnect = function() end }
+end }
+E.stubs.RunService.PostSimulation = { Connect = function(_, fn)
+	postSim = fn
 	return { Disconnect = function() end }
 end }
 E.stubs.RunService.Heartbeat = { Connect = function(_, fn)
@@ -167,6 +177,7 @@ local function motor(parent, name, part0, part1, c0)
 	m.Part0 = part0
 	m.Part1 = part1
 	m.C0 = c0
+	m.Transform = CF.identity
 	m.Parent = parent
 end
 local function giveSword(model)
@@ -313,7 +324,18 @@ Combat.Init()
 Wall.Start()
 Swing.Start()
 Combat.Start()
-check(heartbeat and renderStep and cameraStep, "laços por quadro registrados uma vez (paredes, golpe, câmera)")
+check(heartbeat and preSim and postSim and cameraStep, "laços por quadro registrados uma vez (paredes, golpe, câmera)")
+
+-- Um quadro do corpo: "Animator" reescreve o Transform, a pose entra depois.
+local function bodyStep()
+	for _, d in E.Workspace:GetDescendants() do
+		if d:IsA("Motor6D") then
+			d.Transform = CF.identity
+		end
+	end
+	preSim()
+	postSim()
+end
 
 -- ── "Servidor" mínimo deste jogador ─────────────────────────────────────────
 local hp = {}
@@ -354,7 +376,7 @@ local function frames(seconds)
 	local steps = math.max(math.floor(seconds * 60 + 0.5), 1)
 	for _ = 1, steps do
 		now += 1 / 60
-		renderStep()
+		bodyStep()
 		cameraStep()
 		heartbeat()
 		runDelayed()
@@ -623,7 +645,7 @@ local function spam(stageId, cutId, seconds)
 			nextHit += 1 / 9
 		end
 		now += 1 / 60
-		renderStep()
+		bodyStep()
 		cameraStep()
 		heartbeat()
 		runDelayed()

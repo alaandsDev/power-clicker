@@ -25,9 +25,10 @@
 	- aqui não existe track nenhum: cada quadro só calcula uma pose, e um golpe
 	  novo no meio do anterior continua da pose atual (sem tranco).
 
-	Como mexe no corpo: soma uma rotação ao C0 das articulações (a pose do
-	Animator vai no Transform, que continua intacto). Grip, Tool e skin não
-	são tocados — toda espada usa o mesmo golpe; só o COMPRIMENTO da lâmina
+	Como mexe no corpo: veja "Rig" abaixo — a pose é SOMADA por cima do que o
+	Animator escreveu no quadro (camada "Transform", depois do Animator), na
+	articulação que o Roblox realmente usa (AnimationConstraint do Avatar
+	Joint Upgrade, ou Motor6D). Grip, Tool e skin não são tocados — toda espada usa o mesmo golpe; só o COMPRIMENTO da lâmina
 	ergue um pouco a ponta das espadas grandes (para não tocar o chão). Sem
 	espada, o C0 volta EXATAMENTE ao original. Pernas não entram.
 
@@ -44,14 +45,19 @@ export type Pose = {
 	LShoulder: Vector3,
 	LElbow: Vector3,
 }
-export type Variant = "A" | "B" | "C"
+export type Variant = "A" | "B" | "C" | "T" -- T = teste mínimo (SwordDebug)
 
 local SwordSwing = {}
 
 -- Duração do golpe: curto quando o jogador está batendo rápido, um pouco mais
 -- cheio quando é um golpe isolado.
 SwordSwing.FAST_SECONDS = 0.12
-SwordSwing.SLOW_SECONDS = 0.16
+-- Golpe isolado: tempo para ler o movimento (A, B e C precisam ser
+-- reconhecíveis). No spam, o golpe seguinte interrompe este no meio.
+SwordSwing.SLOW_SECONDS = 0.24
+-- Teste mínimo (SwordDebug): o braço sobe isto e volta, neste tempo.
+SwordSwing.MINIMAL_SECONDS = 0.2
+SwordSwing.MINIMAL_DEGREES = 110
 SwordSwing.FAST_INTERVAL = 0.2 -- golpes a menos que isso um do outro = "rápido"
 -- Fração do golpe em que a lâmina passa pelo meio do corte (o impacto): é
 -- aqui que o corte (CutFx) e o arco aparecem.
@@ -273,7 +279,6 @@ end
 	anterior) e voltando para `rest` (a postura do momento). t >= 1 = rest.
 ]]
 function SwordSwing.Pose(variant: Variant, t: number, from: Pose?, rest: Pose?): Pose
-	local shape = SHAPES[variant]
 	local home = rest or NEUTRAL
 	local start = from or home
 	if t <= 0 then
@@ -281,6 +286,13 @@ function SwordSwing.Pose(variant: Variant, t: number, from: Pose?, rest: Pose?):
 	elseif t >= 1 then
 		return home
 	end
+	if variant == "T" then
+		-- Teste mínimo: só o ombro, sobe e volta (seno), nada mais.
+		local out = table.clone(home) :: any
+		out.Shoulder = home.Shoulder + Vector3.new(SwordSwing.MINIMAL_DEGREES * math.sin(math.pi * t), 0, 0)
+		return out
+	end
+	local shape = SHAPES[variant]
 	local windup = fill(shape.Windup, home)
 	if t < WINDUP_END then
 		return lerpPose(start, windup, easeOut(t / WINDUP_END))
@@ -294,24 +306,60 @@ end
 
 -- ── Rig: aplica a pose no personagem ────────────────────────────────────────
 --[[
-	Funciona com os três formatos de personagem que o Roblox entrega:
-	- R15 clássico: Motor6D (ombros, cotovelos, punho, cintura, pescoço) — mexe
-	  no C0;
-	- R15 com o "Avatar Joint Upgrade": as articulações viram AnimationConstraint
-	  — mexe na Attachment0 dela (o equivalente do C0);
-	- R6: "Right Shoulder"/"Left Shoulder" (no Torso), com orientação própria;
-	  sem cotovelo/punho, a postura fecha a conta no ombro.
-	A rotação é aplicada no espaço do TRONCO (posição * rotação * orientação
-	original), então os mesmos ângulos servem para os três. O pescoço só é
-	usado junto com a cintura (é ele que mantém a cabeça olhando para frente
-	quando o tronco gira).
+	QUAL articulação: a que o Roblox realmente usa para mover a parte.
+	- Avatar Joint Upgrade (R15): AnimationConstraint ("RightShoulder"...);
+	  o Motor6D antigo, se ainda existir, não move nada — por isso uma
+	  AnimationConstraint ATIVA tem prioridade sobre um Motor6D;
+	- R15 clássico: Motor6D (RightShoulder, RightElbow, RightWrist, Waist...);
+	- R6: "Right Shoulder"/"Left Shoulder" no Torso (sem cotovelo/punho; a
+	  postura fecha a conta no ombro; o pescoço fica com o Roblox).
+	O personagem muda DEPOIS de nascer (aparência carregando troca partes e
+	articulações, a conversão do Joint Upgrade, escala): o controller remonta
+	o rig quando uma articulação some/é trocada (Valid / Rebind).
+
+	COMO aplica (Backend):
+	- "Transform" (padrão): todo quadro, DEPOIS do Animator (PreSimulation),
+	  multiplica a rotação da pose no Transform que o Animator acabou de
+	  escrever — o mesmo canal da animação, então nada "briga" com ele. Se o
+	  Animator não reescrever o Transform num quadro, a base guardada é usada
+	  (a rotação nunca acumula). Sem pose, o Transform volta ao do Animator.
+	- "Offset": rotação no C0 (Motor6D) ou na Attachment0 (AnimationConstraint),
+	  com a base lida AO VIVO (se o Roblox mexer nela, ex. escala, vira a base
+	  nova). Fica como alternativa: o controller mede se a pose chegou às
+	  partes (Measure) e troca de camada se não chegou.
+	As duas dão a MESMA pose: rotação no espaço do tronco, em volta da junta.
+
+	BRAÇO DA ESPADA É DONO DA POSE: com a espada na mão (peso rig.Own, que
+	sobe/desce suave ao equipar/guardar), ombro, cotovelo e punho direitos
+	ficam numa pose ABSOLUTA em relação ao tronco — a "pegada" HOLD (braço à
+	frente, como o "toolnone" do Roblox) + os ângulos da postura/golpe — em
+	vez de somar por cima do que o Animator tocou. Assim a postura e a
+	direção de A/B/C não dependem de qual animação está tocando (toolnone,
+	idle, andar, ou nenhuma). Tronco, braço esquerdo e pescoço continuam
+	SOMANDO por cima do Animator (respirar, andar e pular seguem dele).
 ]]
 
-type Joint = { Target: Instance, Property: string, Base: CFrame }
+type Joint = {
+	Key: string,
+	Target: Instance, -- Motor6D ou AnimationConstraint
+	Kind: string, -- "Motor6D" | "AnimationConstraint"
+	Name: string,
+	-- camada Transform
+	LastBase: CFrame?,
+	LastWritten: CFrame?,
+	-- camada Offset
+	OffsetBase: CFrame?,
+	OffsetWritten: CFrame?,
+	-- verificação: Part0→Part1 esperado com e sem a pose, no último quadro
+	PosedRel: CFrame?,
+	PlainRel: CFrame?,
+}
 export type Rig = {
 	Character: Model,
 	Joints: { [string]: Joint },
-	Kind: string, -- "Motor6D" | "AnimationConstraint" (diagnóstico)
+	Kind: string, -- "Motor6D" | "AnimationConstraint" (a do ombro)
+	Backend: string, -- "Transform" | "Offset"
+	Minimal: boolean, -- teste mínimo (SwordDebug)
 	HasElbow: boolean,
 	HasWrist: boolean,
 	-- Golpe
@@ -327,7 +375,8 @@ export type Rig = {
 	Rest: Pose, -- para onde o corpo volta (postura/carregar/neutra, já suavizada)
 	Armed: number, -- 0 sem espada .. 1 com espada (anda em ARMED_SECONDS)
 	Idle: number, -- 0 andando .. 1 parado (suavizado)
-	Applied: boolean, -- alguma articulação fora do original
+	Applied: boolean, -- alguma articulação com pose
+	Own: number, -- 0..1: quanto o braço da espada é dono da pose (equipar suave)
 	Phase: number, -- defasagem da respiração (personagens não respiram juntos)
 	Speed: number, -- velocidade do personagem (suavizada)
 	Blade: Instance?, -- a lâmina na mão (trocou = combo recomeça)
@@ -344,6 +393,7 @@ local JOINTS: { [string]: { string } } = {
 	LShoulder = { "LeftShoulder", "Left Shoulder" },
 	LElbow = { "LeftElbow" },
 }
+SwordSwing.JOINT_NAMES = JOINTS
 
 -- Entrar/sair da postura (equipar, guardar, respawn): em tanto tempo, com
 -- início e fim suaves.
@@ -360,45 +410,68 @@ local function rotation(degrees: Vector3): CFrame
 	return CFrame.Angles(math.rad(degrees.X), math.rad(degrees.Y), math.rad(degrees.Z))
 end
 
-local function findJoint(character: Model, names: { string }): Joint?
-	local constraint: Joint? = nil
+-- Ângulo (graus) entre duas orientações; pela corda, estável em float32.
+function SwordSwing.Angle(a: CFrame, b: CFrame): number
+	local function between(u: Vector3, v: Vector3): number
+		return math.deg(2 * math.asin(math.clamp((u - v).Magnitude / 2, 0, 1)))
+	end
+	return math.max(between(a.RightVector, b.RightVector), between(a.UpVector, b.UpVector), between(a.LookVector, b.LookVector))
+end
+
+local function same(a: CFrame, b: CFrame): boolean
+	return (a.Position - b.Position).Magnitude < 1e-4 and SwordSwing.Angle(a, b) < 0.01
+end
+
+local function enabled(item: Instance): boolean
+	return (item :: any).Enabled ~= false
+end
+
+local function findJoint(character: Model, key: string, names: { string }): Joint?
+	local motor: Joint? = nil
 	for _, name in names do
 		for _, item in character:GetDescendants() do
-			if item.Name == name then
-				if item:IsA("Motor6D") and (item :: any).Enabled ~= false then
-					return { Target = item, Property = "C0", Base = (item :: Motor6D).C0 }
-				elseif item.ClassName == "AnimationConstraint" and not constraint then
-					local attachment = (item :: any).Attachment0
-					if attachment and attachment:IsA("Attachment") then
-						constraint = { Target = attachment, Property = "CFrame", Base = attachment.CFrame }
+			if item.Name == name and enabled(item) then
+				if item.ClassName == "AnimationConstraint" then
+					local a0, a1 = (item :: any).Attachment0, (item :: any).Attachment1
+					if a0 and a1 and a0:IsA("Attachment") and a1:IsA("Attachment") then
+						return { Key = key, Target = item, Kind = "AnimationConstraint", Name = item.Name }
 					end
+				elseif item:IsA("Motor6D") and not motor then
+					motor = { Key = key, Target = item, Kind = "Motor6D", Name = item.Name }
 				end
 			end
 		end
 	end
-	return constraint
+	return motor
 end
 
--- Monta o rig (nil se o personagem não tiver ombro direito reconhecível).
-function SwordSwing.NewRig(character: Model): Rig?
+local function findJoints(character: Model): { [string]: Joint }
 	local joints: { [string]: Joint } = {}
 	for key, names in JOINTS do
-		local joint = findJoint(character, names)
+		local joint = findJoint(character, key, names)
 		if joint then
 			joints[key] = joint
 		end
 	end
+	if not joints.Waist then
+		joints.Neck = nil -- R6: o pescoço fica com o Roblox
+	end
+	return joints
+end
+
+-- Monta o rig (nil se o personagem não tiver ombro direito reconhecível).
+function SwordSwing.NewRig(character: Model): Rig?
+	local joints = findJoints(character)
 	local shoulder = joints.Shoulder
 	if not shoulder then
 		return nil
 	end
-	if not joints.Waist then
-		joints.Neck = nil -- R6: o pescoço fica com o Roblox
-	end
 	return {
 		Character = character,
 		Joints = joints,
-		Kind = if shoulder.Property == "C0" then "Motor6D" else "AnimationConstraint",
+		Kind = shoulder.Kind,
+		Backend = "Transform",
+		Minimal = false,
 		HasElbow = joints.Elbow ~= nil,
 		HasWrist = joints.Wrist ~= nil,
 		Variant = "A",
@@ -413,6 +486,7 @@ function SwordSwing.NewRig(character: Model): Rig?
 		Armed = 0,
 		Idle = 1,
 		Applied = false,
+		Own = 0,
 		Phase = (#character.Name * 0.77) % BREATH_SECONDS,
 		Speed = 0,
 		Blade = nil,
@@ -429,19 +503,239 @@ function SwordSwing.Posed(base: CFrame, degrees: Vector3): CFrame
 	return CFrame.new(base.Position) * rotation(degrees) * (base - base.Position)
 end
 
+-- Onde a junta fica em Part0 (C0 / Attachment0) e em Part1 (C1 / Attachment1).
+local function frames(joint: Joint): (CFrame, CFrame)
+	local target = joint.Target :: any
+	if joint.Kind == "Motor6D" then
+		return target.C0, target.C1
+	end
+	return target.Attachment0.CFrame, target.Attachment1.CFrame
+end
+
+local function parts(joint: Joint): (BasePart?, BasePart?)
+	local target = joint.Target :: any
+	if joint.Kind == "Motor6D" then
+		return target.Part0, target.Part1
+	end
+	local a0, a1 = target.Attachment0, target.Attachment1
+	return if a0 then a0.Parent else nil, if a1 then a1.Parent else nil
+end
+
+-- Onde a camada Offset escreve.
+local function offsetSlot(joint: Joint): (Instance, string)
+	local target = joint.Target :: any
+	if joint.Kind == "Motor6D" then
+		return target, "C0"
+	end
+	return target.Attachment0, "CFrame"
+end
+
+-- Articulações do braço da espada (donas da pose com a espada na mão) e a
+-- "pegada" base delas, no espaço do tronco: braço à frente, reto.
+local HOLD: { [string]: CFrame } = {
+	Shoulder = CFrame.Angles(math.rad(90), 0, 0),
+	Elbow = CFrame.identity,
+	Wrist = CFrame.identity,
+}
+SwordSwing.HOLD = HOLD
+
+--[[
+	Onde a junta deve ficar (Part0 → junta, já com a pose), dado onde ela fica
+	em Part0 (f0) e o Transform do Animator (anim). Somada: rotação no espaço
+	do tronco por cima da animação. Dona (peso own): pegada + pose, sem a
+	animação.
+]]
+local function target(joint: Joint, f0: CFrame, anim: CFrame, degrees: Vector3, own: number): CFrame
+	local frame = f0 - f0.Position
+	local turn = rotation(degrees)
+	local added = CFrame.new(f0.Position) * turn * frame * anim
+	local hold = HOLD[joint.Key]
+	if not hold or own <= 0 then
+		return added
+	end
+	local owned = CFrame.new(f0.Position) * turn * hold * frame
+	return if own >= 1 then owned else added:Lerp(owned, own)
+end
+
+-- Para os testes: onde a junta `key` deve ficar.
+function SwordSwing.Target(key: string, f0: CFrame, anim: CFrame, degrees: Vector3, own: number): CFrame
+	return target({ Key = key } :: any, f0, anim, degrees, own)
+end
+
+local function posing(joint: Joint, degrees: Vector3, own: number): boolean
+	return degrees ~= ZERO or (own > 0 and HOLD[joint.Key] ~= nil)
+end
+
+local function applyTransform(joint: Joint, degrees: Vector3, own: number)
+	local target_ = joint.Target :: any
+	local current: CFrame = target_.Transform
+	-- O Animator não reescreveu desde o último quadro: a base é a guardada.
+	local written = joint.LastWritten
+	local base = if written and joint.LastBase and same(current, written) then joint.LastBase :: CFrame else current
+	if not posing(joint, degrees, own) then
+		if written then
+			target_.Transform = base
+		end
+		joint.LastWritten, joint.LastBase, joint.PosedRel, joint.PlainRel = nil, nil, nil, nil
+		return
+	end
+	local f0, f1 = frames(joint)
+	local wanted = target(joint, f0, base, degrees, own)
+	local posed = f0:Inverse() * wanted
+	target_.Transform = posed
+	joint.LastWritten, joint.LastBase = posed, base
+	joint.PosedRel = wanted * f1:Inverse()
+	joint.PlainRel = f0 * base * f1:Inverse()
+end
+
+local function applyOffset(joint: Joint, degrees: Vector3, own: number)
+	local slot, property = offsetSlot(joint)
+	local current: CFrame = (slot :: any)[property]
+	-- Base ao vivo: se alguém mudou (escala, aparência), essa é a nova base.
+	local written = joint.OffsetWritten
+	local base = if written and joint.OffsetBase and same(current, written) then joint.OffsetBase :: CFrame else current
+	if not posing(joint, degrees, own) then
+		if written then
+			(slot :: any)[property] = base
+		end
+		joint.OffsetWritten, joint.OffsetBase, joint.PosedRel, joint.PlainRel = nil, nil, nil, nil
+		return
+	end
+	local _, f1 = frames(joint)
+	local ok, transform = pcall(function()
+		return (joint.Target :: any).Transform
+	end)
+	local anim = if ok and typeof(transform) == "CFrame" then transform else CFrame.identity
+	local wanted = target(joint, base, anim, degrees, own)
+	-- O Transform do Animator vem depois deste: desconta para cair em `wanted`.
+	local posed = wanted * anim:Inverse();
+	(slot :: any)[property] = posed
+	joint.OffsetWritten, joint.OffsetBase = posed, base
+	joint.PosedRel = wanted * f1:Inverse()
+	joint.PlainRel = base * anim * f1:Inverse()
+end
+
+local function alive(rig: Rig, joint: Joint): boolean
+	local target = joint.Target
+	if not target.Parent or not target:IsDescendantOf(rig.Character) or not enabled(target) then
+		return false
+	end
+	local p0, p1 = parts(joint)
+	return p0 ~= nil and p1 ~= nil and p0.Parent ~= nil and p1.Parent ~= nil
+end
+
 local function apply(rig: Rig, pose: Pose)
 	rig.Current = pose
 	local applied = false
+	local own = rig.Own
 	for key, joint in rig.Joints do
 		local degrees = (pose :: any)[key] :: Vector3
-		if degrees ~= ZERO then
+		if posing(joint, degrees, own) then
 			applied = true
 		end
-		if joint.Target.Parent then
-			(joint.Target :: any)[joint.Property] = SwordSwing.Posed(joint.Base, degrees)
+		if alive(rig, joint) then
+			if rig.Backend == "Offset" then
+				applyOffset(joint, degrees, own)
+			else
+				applyTransform(joint, degrees, own)
+			end
 		end
 	end
 	rig.Applied = applied
+end
+
+-- Todas as articulações do rig ainda são as que o Roblox usa?
+function SwordSwing.Valid(rig: Rig): boolean
+	for _, joint in rig.Joints do
+		if not alive(rig, joint) then
+			return false
+		end
+	end
+	return true
+end
+
+--[[
+	Remonta as articulações do mesmo personagem (aparência carregada,
+	Joint Upgrade convertendo, partes trocadas), mantendo golpe/postura/combo.
+	Devolve se algo mudou.
+]]
+function SwordSwing.Rebind(rig: Rig): boolean
+	local fresh = findJoints(rig.Character)
+	local changed = false
+	for key, joint in rig.Joints do
+		if not fresh[key] or fresh[key].Target ~= joint.Target then
+			changed = true
+		end
+	end
+	for key in fresh do
+		if not rig.Joints[key] then
+			changed = true
+		end
+	end
+	if not changed then
+		return false
+	end
+	local current, own = rig.Current, rig.Own
+	rig.Own = 0
+	apply(rig, NEUTRAL) -- devolve o que dá nas antigas
+	rig.Own = own
+	rig.Joints = fresh
+	if fresh.Shoulder then
+		rig.Kind = fresh.Shoulder.Kind
+	end
+	rig.HasElbow = fresh.Elbow ~= nil
+	rig.HasWrist = fresh.Wrist ~= nil
+	rig.Current = current
+	return true
+end
+
+-- Troca a camada que aplica a pose (devolve tudo pela camada antiga antes).
+function SwordSwing.SetBackend(rig: Rig, backend: string)
+	if rig.Backend == backend then
+		return
+	end
+	local current, own = rig.Current, rig.Own
+	rig.Own = 0
+	apply(rig, NEUTRAL)
+	rig.Own = own
+	rig.Backend = backend
+	rig.Current = current
+end
+
+--[[
+	A pose CHEGOU às partes? Mede o braço de verdade (Part1 em relação a
+	Part0, depois da física) e compara com o esperado com e sem a pose do
+	último quadro. Devolve (tamanho da pose em graus, distância até o
+	esperado COM a pose, distância até o esperado SEM a pose), ou nil sem
+	pose no ombro.
+]]
+function SwordSwing.Measure(rig: Rig): (number?, number?, number?)
+	local joint = rig.Joints.Shoulder
+	if not joint or not joint.PosedRel or not joint.PlainRel then
+		return nil, nil, nil
+	end
+	local p0, p1 = parts(joint)
+	if not p0 or not p1 then
+		return nil, nil, nil
+	end
+	local actual = p0.CFrame:ToObjectSpace(p1.CFrame)
+	local posed, plain = joint.PosedRel :: CFrame, joint.PlainRel :: CFrame
+	return SwordSwing.Angle(posed, plain), SwordSwing.Angle(actual, posed), SwordSwing.Angle(actual, plain)
+end
+
+-- Texto curto das articulações (para o log de diagnóstico).
+function SwordSwing.Describe(rig: Rig): { string }
+	local lines = {}
+	for _, key in KEYS do
+		local joint = rig.Joints[key]
+		if joint then
+			local p0, p1 = parts(joint)
+			table.insert(lines, string.format("%s = %s (%s, %s -> %s)", key, joint.Name, joint.Kind, if p0 then p0.Name else "?", if p1 then p1.Name else "?"))
+		else
+			table.insert(lines, key .. " = (não encontrada)")
+		end
+	end
+	return lines
 end
 
 local function approach(current: number, target: number, rate: number, dt: number): number
@@ -484,18 +778,21 @@ function SwordSwing.Settle(rig: Rig, time: number, dt: number, armed: boolean, m
 	rig.Idle = approach(rig.Idle, if moving then 0 else 1, IDLE_RATE, dt)
 	if rig.Armed <= 0 then
 		rig.Rest = NEUTRAL
+		rig.Own = 0
 		return
 	end
 	local length = rig.BladeLength
 	local stance = SwordSwing.Breathe(SwordSwing.Stance(length, rig.HasElbow, rig.HasWrist), time + rig.Phase, rig.Idle)
 	local carry = SwordSwing.Carry(length, rig.HasElbow, rig.HasWrist)
 	local weight = rig.Armed * rig.Armed * (3 - 2 * rig.Armed)
+	rig.Own = weight
 	rig.Rest = lerpPose(NEUTRAL, lerpPose(carry, stance, rig.Idle), weight)
 end
 
 --[[
 	Começa um golpe agora. Devolve (variação, segundos até o impacto). Um golpe
 	no meio do anterior parte da pose atual: nunca há dois golpes ao mesmo tempo.
+	No teste mínimo (rig.Minimal) é sempre o "T": o braço sobe e volta.
 ]]
 function SwordSwing.Start(rig: Rig, now: number): (Variant, number)
 	if now - rig.LastAt > SwordSwing.COMBO_RESET then
@@ -505,6 +802,10 @@ function SwordSwing.Start(rig: Rig, now: number): (Variant, number)
 	local duration = SwordSwing.DurationFor(now - rig.LastAt)
 	rig.LastAt = now
 	rig.Variant = SwordSwing.VariantFor(rig.Count)
+	if rig.Minimal then
+		rig.Variant = "T"
+		duration = SwordSwing.MINIMAL_SECONDS
+	end
 	rig.From = rig.Current
 	rig.Started = now
 	rig.Duration = duration
@@ -513,9 +814,9 @@ function SwordSwing.Start(rig: Rig, now: number): (Variant, number)
 end
 
 --[[
-	Um quadro: o golpe (se houver) tem prioridade; fora dele, a postura. Devolve
-	se o golpe ainda está em movimento. Sem espada e já na pose original, não
-	escreve nada (custo zero).
+	Um quadro (DEPOIS do Animator): o golpe (se houver) tem prioridade; fora
+	dele, a postura. Devolve se o golpe ainda está em movimento. Sem espada e
+	já sem pose, não escreve nada (custo zero).
 ]]
 function SwordSwing.Step(rig: Rig, now: number): boolean
 	if rig.Active then
@@ -543,6 +844,7 @@ end
 function SwordSwing.Reset(rig: Rig)
 	rig.Active = false
 	rig.Armed = 0
+	rig.Own = 0
 	rig.Rest = NEUTRAL
 	apply(rig, NEUTRAL)
 end

@@ -118,6 +118,7 @@ local function motor(parent, name, part0, part1, c0)
 	m.Part0 = part0
 	m.Part1 = part1
 	m.C0 = c0
+	m.Transform = CF.identity
 	m.Parent = parent
 	return m
 end
@@ -165,6 +166,9 @@ local function newCharacter(name)
 	grip.C0 = CF.new(0, -1, 0) * CF.Angles(math.rad(-90), 0, 0)
 	grip.C1 = CF.new(0, 0.2, 0)
 	grip.Parent = hand
+	local humanoid = Instance.new("Humanoid")
+	humanoid.RigType = roblox.Enum.HumanoidRigType.R15
+	humanoid.Parent = model
 	model.Parent = E.Workspace
 	return model
 end
@@ -184,6 +188,9 @@ local localPlayer = {
 	end,
 	GetAttributeChangedSignal = function()
 		return Sig
+	end,
+	FindFirstChildOfClass = function()
+		return nil
 	end,
 }
 local otherSwing = Signal.new()
@@ -207,11 +214,97 @@ E.stubs.Players = {
 	PlayerAdded = Signal.new(),
 	PlayerRemoving = Signal.new(),
 }
-local renderStep
-E.stubs.RunService.RenderStepped = { Connect = function(_, fn)
-	renderStep = fn
+-- Quadro do Roblox simulado: Animator → PreSimulation (pose) → juntas
+-- resolvem as partes → PostSimulation (verificação).
+local preSim, postSim
+E.stubs.RunService.PreSimulation = { Connect = function(_, fn)
+	preSim = fn
 	return { Disconnect = function() end }
 end }
+E.stubs.RunService.PostSimulation = { Connect = function(_, fn)
+	postSim = fn
+	return { Disconnect = function() end }
+end }
+-- "Animator": reescreve o Transform de toda articulação a cada quadro (como
+-- o do Roblox). Desligado = articulação sem animação (ninguém reescreve).
+local animatorOn = true
+local function isJoint(d)
+	return d:IsA("Motor6D") or d.ClassName == "AnimationConstraint"
+end
+-- Com uma Tool na mão o Animate do Roblox toca o "toolnone": braço direito
+-- esticado à frente (90° no ombro). toolnone = false: braço solto (caso de
+-- o toolnone não tocar) — a pose do braço da espada tem de sair IGUAL.
+local toolnone = true
+-- Como no Roblox, o toolnone entra/sai com fade (0,2 s), não num quadro.
+local toolnoneWeight = {}
+local TOOLNONE_FADE = 0.2
+local function animValue(d)
+	if d.Name == "RightShoulder" or d.Name == "Right Shoulder" then
+		local weight = toolnoneWeight[d:GetFullName()] or 0
+		if weight > 0 then
+			local f0 = if d:IsA("Motor6D") then d.C0 else d.Attachment0.CFrame
+			local frame = f0 - f0.Position
+			return CF.identity:Lerp(frame:Inverse() * CF.Angles(math.rad(90), 0, 0) * frame, weight)
+		end
+	end
+	return CF.identity
+end
+local function animate()
+	if not animatorOn then
+		return
+	end
+	for _, d in E.Workspace:GetDescendants() do
+		if isJoint(d) then
+			if d.Name == "RightShoulder" or d.Name == "Right Shoulder" then
+				local model = d:FindFirstAncestorOfClass("Model")
+				local on = toolnone and model ~= nil and model:FindFirstChild("CutBlade") ~= nil
+				local key = d:GetFullName()
+				local weight = toolnoneWeight[key] or 0
+				toolnoneWeight[key] = math.clamp(weight + (if on then 1 else -1) / 60 / TOOLNONE_FADE, 0, 1)
+			end
+			d.Transform = animValue(d)
+		end
+	end
+end
+-- Simula "algo reescreve o Transform DEPOIS da nossa camada" (o que faria a
+-- pose não aparecer): a verificação tem de perceber e trocar de camada.
+local overrideAfter = false
+-- Resolve as partes pelas articulações (o que a física/render faria).
+local function solve()
+	for _ = 1, 6 do
+		for _, d in E.Workspace:GetDescendants() do
+			if isJoint(d) and d.Enabled then
+				local t = d.Transform
+				if d:IsA("Motor6D") and d.Part0 and d.Part1 then
+					d.Part1.CFrame = d.Part0.CFrame * d.C0 * t * d.C1:Inverse()
+				elseif d.ClassName == "AnimationConstraint" and d.Attachment0 and d.Attachment1 then
+					local a0, a1 = d.Attachment0, d.Attachment1
+					a1.Parent.CFrame = a0.Parent.CFrame * a0.CFrame * t * a1.CFrame:Inverse()
+				end
+			end
+		end
+	end
+end
+local function renderStep()
+	animate()
+	preSim()
+	if overrideAfter then
+		for _, d in E.Workspace:GetDescendants() do
+			if isJoint(d) then
+				d.Transform = animValue(d)
+			end
+		end
+	end
+	solve()
+	postSim()
+end
+-- Orientação efetiva da articulação (onde a parte 1 fica em relação à 0).
+local function fr(j)
+	if j:IsA("Motor6D") then
+		return j.C0 * j.Transform
+	end
+	return j.Attachment0.CFrame * j.Transform
+end
 
 local CutFx = E.require(E.Client.Effects.CutFx)
 local cutPlays = {}
@@ -222,6 +315,21 @@ CutFx.Play = function(rig, recipe, origin, scale, roll, sweep)
 end
 roblox.implementMethod("ParticleEmitter", "Emit", function() end)
 
+-- Diagnóstico ligado (como no Studio), com o Output capturado.
+local SwordDebug = E.require(E.Client.Effects.SwordDebug)
+SwordDebug.SetEnabled(true)
+local logs = {}
+SwordDebug.Log = function(message)
+	table.insert(logs, message)
+end
+local function logged(pattern: string, from: number?): boolean
+	for index = from or 1, #logs do
+		if string.find(logs[index], pattern, 1, true) then
+			return true
+		end
+	end
+	return false
+end
 local SwordSwing = E.require(E.Client.Effects.SwordSwing)
 local Swing = E.require(E.Client.Controllers.SwordSwingController)
 local Slash = E.require(E.Client.Controllers.SlashController)
@@ -230,7 +338,7 @@ localPlayer.Character = newCharacter("Local")
 Swing.Init()
 Slash.Init()
 Swing.Start()
-check(renderStep ~= nil, "uma conexão por quadro para todos os golpes (RenderStepped)")
+check(preSim ~= nil and postSim ~= nil, "uma conexão por quadro para todos (PreSimulation = depois do Animator; PostSimulation = verificação)")
 
 local function joints(character)
 	return {
@@ -255,7 +363,7 @@ local function baseOf(character)
 end
 local function atBase(character, base): boolean
 	for key, m in joints(character) do
-		if not same(m.C0, base[key]) then
+		if not same(fr(m), base[key] * animValue(m)) then
 			return false
 		end
 	end
@@ -266,9 +374,9 @@ local function close(a, b): boolean
 	-- C0 é float32: 1e-4 de folga depois de compor rotações.
 	return (a.Position - b.Position).Magnitude < 1e-4 and (a.LookVector - b.LookVector).Magnitude < 1e-4 and (a.UpVector - b.UpVector).Magnitude < 1e-4
 end
-local function atPose(character, base, pose): boolean
+local function atPose(character, base, pose, own): boolean
 	for key, m in joints(character) do
-		if not close(m.C0, SwordSwing.Posed(base[key], pose[key])) then
+		if not close(fr(m), SwordSwing.Target(key, base[key], animValue(m), pose[key], own or 0)) then
 			return false
 		end
 	end
@@ -276,7 +384,7 @@ local function atPose(character, base, pose): boolean
 end
 -- Na postura atual do rig (golpe terminado, corpo de volta à postura).
 local function atRest(character, base, rig): boolean
-	return rig ~= nil and not rig.Active and atPose(character, base, rig.Rest)
+	return rig ~= nil and not rig.Active and atPose(character, base, rig.Rest, rig.Own)
 end
 -- Ângulo (graus) entre duas orientações.
 local function angle(a, b): number
@@ -316,14 +424,14 @@ check(Swing.LocalRig() ~= nil, "rig do personagem R15 montado (ombro, cotovelo, 
 Slash.Play()
 check(Swing.LocalRig().Active, "1. um hit dispara o golpe")
 frames(0.03)
-check(not same(joints(character).Shoulder.C0, base.Shoulder) and not same(joints(character).Elbow.C0, base.Elbow), "1. braço e espada saem da pose de segurar (ombro e cotovelo se movem)")
+check(not same(fr(joints(character).Shoulder), base.Shoulder) and not same(fr(joints(character).Elbow), base.Elbow), "1. braço e espada saem da pose de segurar (ombro e cotovelo se movem)")
 
 -- 7. Corte no impacto, na diagonal do golpe.
-frames(0.2)
+frames(0.25)
 local rig = Swing.LocalRig()
 local impact = rig.Duration * SwordSwing.IMPACT
 check(#cutPlays == 1, "7. o corte (CutFx) foi desenhado uma vez para o hit")
-check(rig.Duration >= 0.10 and rig.Duration <= 0.16, string.format("golpe curto (%.2f s, entre 0,10 e 0,16)", rig.Duration))
+check(rig.Duration >= 0.20 and rig.Duration <= 0.26, string.format("golpe isolado legível (%.2f s, entre 0,20 e 0,26; no spam vira 0,12)", rig.Duration))
 check(math.abs((cutPlays[1].At - 1000) - impact) <= 1 / 60 + 1e-6, string.format("7. o corte aparece no IMPACTO do golpe (%.3f s depois do clique; impacto em %.3f s)", cutPlays[1].At - 1000, impact))
 check(cutPlays[1].CutId == "Cut4", "7. o corte desenhado é o do melhor Corte (CutVisuals), não o da espada")
 -- Roll do CutFx = inclinação do golpe - 45 (o risco único do Corte já nasce a 45°).
@@ -406,7 +514,7 @@ local freshBase = baseOf(fresh)
 check(Swing.LocalRig() ~= nil and Swing.LocalRig().Character == fresh, "9. o personagem novo ganha o próprio rig")
 Slash.Play()
 frames(0.04)
-check(not same(joints(fresh).Shoulder.C0, freshBase.Shoulder), "9. golpe funciona no personagem novo")
+check(not same(fr(joints(fresh).Shoulder), freshBase.Shoulder), "9. golpe funciona no personagem novo")
 frames(0.3)
 check(atRest(fresh, freshBase, Swing.LocalRig()), "9. e volta para a postura dele")
 
@@ -437,9 +545,9 @@ do
 	check(Swing.LocalRig() ~= nil and Swing.LocalRig().Kind == "Motor6D", "9b. personagem R6: rig montado no \"Right Shoulder\"")
 	Slash.Play()
 	frames(0.04)
-	check(not same(shoulder.C0, base) and (shoulder.C0.Position - base.Position).Magnitude < 1e-6, "9b. R6: o braço golpeia (gira no ombro, sem sair do lugar)")
+	check(not same(fr(shoulder), base) and (fr(shoulder).Position - base.Position).Magnitude < 1e-6, "9b. R6: o braço golpeia (gira no ombro, sem sair do lugar)")
 	frames(0.3)
-	check(same(shoulder.C0, base), "9b. R6: volta exatamente à pose original")
+	check(same(fr(shoulder), base), "9b. R6: volta exatamente à pose original")
 	local cycle = { Swing.LocalRig().Variant }
 	for _ = 1, 3 do
 		Slash.Play()
@@ -471,9 +579,9 @@ do
 	check(Swing.LocalRig() ~= nil and Swing.LocalRig().Kind == "AnimationConstraint", "9b. R15 com Avatar Joint Upgrade: rig montado na AnimationConstraint")
 	Slash.Play()
 	frames(0.04)
-	check(not same(rigAttachment.CFrame, base), "9b. Joint Upgrade: o braço golpeia (pela Attachment0 da articulação)")
+	check(not same(fr(constraint), base), "9b. Joint Upgrade: o braço golpeia (pela Attachment0 da articulação)")
 	frames(0.3)
-	check(same(rigAttachment.CFrame, base), "9b. Joint Upgrade: volta exatamente à pose original")
+	check(same(fr(constraint), base), "9b. Joint Upgrade: volta exatamente à pose original")
 	local cycle = { Swing.LocalRig().Variant }
 	for _ = 1, 3 do
 		Slash.Play()
@@ -494,7 +602,7 @@ other.Character.HumanoidRootPart.CFrame = CF.new(10, 0, 0)
 local otherBase = baseOf(other.Character)
 otherSwing:Fire()
 frames(0.05)
-check(not same(joints(other.Character).Shoulder.C0, otherBase.Shoulder), "10. o sinal do servidor faz o outro jogador golpear no meu cliente")
+check(not same(fr(joints(other.Character).Shoulder), otherBase.Shoulder), "10. o sinal do servidor faz o outro jogador golpear no meu cliente")
 frames(0.6)
 check(atRest(other.Character, otherBase, Swing.RemoteRig(other)) and not atBase(other.Character, otherBase), "10. a sequência dele é curta e volta para a postura de combate dele")
 other.Character.HumanoidRootPart.CFrame = CF.new(500, 0, 0)
@@ -504,7 +612,7 @@ frames(0.05)
 check(Swing.RemoteRig(other) == nil and atBase(other.Character, otherBase), "10. jogador longe: rig descartado, C0 EXATO e nada é animado")
 other.Character.HumanoidRootPart.CFrame = CF.new(10, 0, 0)
 frames(0.6)
-check(Swing.RemoteRig(other) ~= nil and atPose(other.Character, otherBase, Swing.RemoteRig(other).Rest) and not atBase(other.Character, otherBase), "P. outro jogador perto, parado com espada: postura de combate também no meu cliente")
+check(Swing.RemoteRig(other) ~= nil and atPose(other.Character, otherBase, Swing.RemoteRig(other).Rest, Swing.RemoteRig(other).Own) and not atBase(other.Character, otherBase), "P. outro jogador perto, parado com espada: postura de combate também no meu cliente")
 
 -- ── P. POSTURA DE COMBATE ──────────────────────────────────────────────────
 do
@@ -514,21 +622,21 @@ do
 	-- O C0 original é o que o rig guardou ao montar (a postura já está aplicada).
 	local meBase = {}
 	for key, joint in rigP.Joints do
-		meBase[key] = joint.Base
+		meBase[key] = baseOf(me)[key]
 	end
 	frames(1.5)
 	local rest = rigP.Rest
 	local stance = SwordSwing.Stance(4.2, true, true)
 	local pitch = SwordSwing.SwordPitch(stance)
 	check(rigP.Idle > 0.95 and rigP.Armed > 0.95, "P1. parado com espada: postura de combate ativa")
-	check(atPose(me, meBase, rest) and not atBase(me, meBase), "P1. o corpo está na postura (C0 = original + postura)")
+	check(atPose(me, meBase, rest, rigP.Own) and not atBase(me, meBase), "P1. o corpo está na postura (C0 = original + postura)")
 	check(pitch >= 70 and pitch <= 100, string.format("P1. espada baixa, perto da horizontal (inclinação %.0f°; 90 = horizontal, 180 = em pé)", pitch))
 	check(stance.Shoulder.Y <= 0 and stance.Shoulder.Z > 0, "P1. braço da espada aberto para fora: a espada não cruza o corpo")
 	check(stance.LShoulder.Z < 0 and stance.LShoulder ~= V3.zero, "P1. braço esquerdo levemente afastado")
 	check(stance.Waist.Y ~= 0 and math.abs(stance.Neck.Y + stance.Waist.Y) < 1e-6, "P1. tronco assimétrico, cabeça compensada (olhando para frente)")
 	-- Respiração: sutil e contínua.
 	local minW, maxW, maxShoulder, maxStep = math.huge, -math.huge, 0, 0
-	local last = me.UpperTorso.Waist.C0
+	local last = fr(me.UpperTorso.Waist)
 	local s0 = rigP.Rest.Shoulder
 	for _ = 1, 60 * 8 do
 		now += 1 / 60
@@ -537,8 +645,8 @@ do
 		minW = math.min(minW, waist)
 		maxW = math.max(maxW, waist)
 		maxShoulder = math.max(maxShoulder, (rigP.Rest.Shoulder - s0).Magnitude)
-		maxStep = math.max(maxStep, angle(last, me.UpperTorso.Waist.C0))
-		last = me.UpperTorso.Waist.C0
+		maxStep = math.max(maxStep, angle(last, fr(me.UpperTorso.Waist)))
+		last = fr(me.UpperTorso.Waist)
 	end
 	check(maxW - minW > 1 and maxW - minW < 4, string.format("P1. respiração: tronco oscila %.1f° (sutil, entre 1 e 4)", maxW - minW))
 	check(maxShoulder < 4 and maxStep < 0.3, string.format("P1. sem balançar demais (ombro ±%.1f°, no máximo %.2f° por quadro)", maxShoulder, maxStep))
@@ -548,22 +656,22 @@ do
 		local worst = 0
 		local previous = {}
 		for key, m in joints(me) do
-			previous[key] = m.C0
+			previous[key] = fr(m)
 		end
 		for _ = 1, math.floor(seconds * 60 + 0.5) do
 			now += 1 / 60
 			root.CFrame = root.CFrame + velocity / 60
 			renderStep()
 			for key, m in joints(me) do
-				worst = math.max(worst, angle(previous[key], m.C0))
-				previous[key] = m.C0
+				worst = math.max(worst, angle(previous[key], fr(m)))
+				previous[key] = fr(m)
 			end
 		end
 		return worst
 	end
 	local carry = SwordSwing.Carry(4.2, true, true)
 	local jump = moveFor(1, V3.new(16, 0, 0))
-	check(rigP.Idle < 0.05 and atPose(me, meBase, rigP.Rest), "P2. andando (16 studs/s): o corpo vai para \"carregar\"")
+	check(rigP.Idle < 0.05 and atPose(me, meBase, rigP.Rest, rigP.Own), "P2. andando (16 studs/s): o corpo vai para \"carregar\"")
 	check((rigP.Rest.Shoulder - carry.Shoulder).Magnitude < 1 and rigP.Rest.Waist.Magnitude < 0.5 and rigP.Rest.LShoulder.Magnitude < 0.5, "P2. andando: só o braço da espada; tronco e braço esquerdo ficam com a locomoção")
 	check(SwordSwing.SwordPitch(carry) > pitch and carry.Shoulder.Z > 0, string.format("P2. andando: espada mais alta (%.0f°) e afastada das pernas", SwordSwing.SwordPitch(carry)))
 	check(jump < 5, string.format("P5. parado → andando sem tranco (maior passo %.2f° por quadro)", jump))
@@ -602,7 +710,7 @@ do
 	-- Golpe tem prioridade: durante o golpe a pose é a do golpe, não a postura.
 	Slash.Play()
 	frames(0.03)
-	check(rigP.Active and not atPose(me, meBase, rigP.Rest), "P6. o golpe tem prioridade sobre a postura")
+	check(rigP.Active and not atPose(me, meBase, rigP.Rest, rigP.Own), "P6. o golpe tem prioridade sobre a postura")
 	frames(0.3)
 
 	-- Trocar de espada (lâmina maior): a ponta sobe, sem tranco.
@@ -613,16 +721,21 @@ do
 	check(SwordSwing.SwordPitch(big) > pitch and (rigP.Rest.Wrist - big.Wrist).Magnitude < 1 and swap < 5, string.format("P8. trocar para lâmina grande: ponta mais alta (%.0f° → %.0f°), sem tranco", pitch, SwordSwing.SwordPitch(big)))
 
 	-- Sem espada: tudo volta EXATAMENTE ao original e para de escrever.
+	-- (toolnone desligado aqui: o fade dele é do Roblox; mede-se só a nossa camada.)
+	toolnone = false
+	frames(0.3)
 	me.CutBlade:Destroy()
 	local unequip = moveFor(1.5, V3.zero)
 	check(rigP.Armed == 0 and atBase(me, meBase) and not rigP.Applied and unequip < 5, "P9. guardar a espada: volta suave e EXATA ao C0 original")
 	local shoulder = me.RightUpperArm.RightShoulder
-	local c0 = shoulder.C0
+	local c0 = fr(shoulder)
 	frames(0.2)
-	check(same(shoulder.C0, c0), "P9. sem espada e parado: nada é escrito por quadro")
+	check(same(fr(shoulder), c0), "P9. sem espada e parado: nada é escrito por quadro")
 	newTool(4.2).Parent = me
 	local equip = moveFor(1.5, V3.zero)
 	check(rigP.Armed > 0.95 and equip < 5, "P9. equipar de novo: entra na postura sem tranco")
+	toolnone = true
+	frames(0.3)
 
 	-- Lâminas: nenhuma skin toca o chão (modelo no plano do corpo: ombro a 4,5
 	-- studs, braço+antebraço 2,2 (R15) ou braço 2 (R6), cabo 0,6; margem de
@@ -684,11 +797,11 @@ do
 	respawnAs(r6)
 	frames(1.5)
 	local r6rig = Swing.LocalRig()
-	check(r6rig and not r6rig.HasWrist and not same(rs.C0, rsBase) and not same(ls.C0, lsBase) and same(neck.C0, neckBase), "P11. R6: postura nos dois ombros (sem cotovelo/punho; pescoço fica com o Roblox)")
-	check(r6rig and SwordSwing.SwordPitch(r6rig.Rest) >= 80 and SwordSwing.SwordPitch(r6rig.Rest) <= 110 and (rs.C0.Position - rsBase.Position).Magnitude < 1e-6, string.format("P11. R6: espada baixa só pelo ombro (%.0f°), sem sair do lugar", if r6rig then SwordSwing.SwordPitch(r6rig.Rest) else 0))
+	check(r6rig and not r6rig.HasWrist and not same(fr(rs), rsBase) and not same(fr(ls), lsBase) and same(fr(neck), neckBase), "P11. R6: postura nos dois ombros (sem cotovelo/punho; pescoço fica com o Roblox)")
+	check(r6rig and SwordSwing.SwordPitch(r6rig.Rest) >= 80 and SwordSwing.SwordPitch(r6rig.Rest) <= 110 and (fr(rs).Position - rsBase.Position).Magnitude < 1e-6, string.format("P11. R6: espada baixa só pelo ombro (%.0f°), sem sair do lugar", if r6rig then SwordSwing.SwordPitch(r6rig.Rest) else 0))
 	Slash.Play()
 	frames(0.3)
-	check(r6rig and not r6rig.Active and close(rs.C0, SwordSwing.Posed(rsBase, r6rig.Rest.Shoulder)), "P11. R6: golpe → volta para a postura")
+	check(r6rig and not r6rig.Active and close(fr(rs), SwordSwing.Target("Shoulder", rsBase, animValue(rs), r6rig.Rest.Shoulder, r6rig.Own)), "P11. R6: golpe → volta para a postura")
 
 	local upgraded = Instance.new("Model")
 	upgraded.Name = "LocalUpgradedStance"
@@ -701,19 +814,25 @@ do
 		a0.Parent = upper
 		local c = Instance.new("AnimationConstraint")
 		c.Name = name
+		local a1 = Instance.new("Attachment")
+		a1.Name = name .. "RigAttachment"
+		a1.Parent = part(upgraded, name .. "Arm")
 		c.Attachment0 = a0
+		c.Attachment1 = a1
+		c.Transform = CF.identity
 		c.Parent = upper
-		return a0
+		return a0, c
 	end
-	local ra, la = constraint("RightShoulder", 1), constraint("LeftShoulder", -1)
+	local ra, rc = constraint("RightShoulder", 1)
+	local la, lc = constraint("LeftShoulder", -1)
 	local raBase, laBase = ra.CFrame, la.CFrame
 	newTool(4.2).Parent = upgraded
 	respawnAs(upgraded)
 	frames(1.5)
-	check(Swing.LocalRig() and Swing.LocalRig().Kind == "AnimationConstraint" and not same(ra.CFrame, raBase) and not same(la.CFrame, laBase), "P12. Joint Upgrade: postura pelas Attachment0 (ombro direito e esquerdo)")
+	check(Swing.LocalRig() and Swing.LocalRig().Kind == "AnimationConstraint" and not same(fr(rc), raBase) and not same(fr(lc), laBase), "P12. Joint Upgrade: postura pelas Attachment0 (ombro direito e esquerdo)")
 	upgraded.CutBlade:Destroy()
 	frames(1.5)
-	check(same(ra.CFrame, raBase) and same(la.CFrame, laBase), "P12. Joint Upgrade: sem espada, volta EXATA ao original")
+	check(same(fr(rc), raBase) and same(fr(lc), laBase), "P12. Joint Upgrade: sem espada, volta EXATA ao original")
 
 	-- Respawn: o corpo novo começa limpo e entra na postura suave.
 	local fresh = newCharacter("Local")
@@ -725,11 +844,11 @@ do
 	renderStep()
 	local firstStep = 0
 	for key, m in joints(fresh) do
-		firstStep = math.max(firstStep, angle(freshBaseP[key], m.C0))
+		firstStep = math.max(firstStep, angle(freshBaseP[key] * animValue(m), fr(m)))
 	end
 	check(firstStep < 8, string.format("P10. respawn: entra na postura sem estalo (primeiro quadro %.1f°)", firstStep))
 	frames(1.5)
-	check(atPose(fresh, freshBaseP, freshRig.Rest) and freshRig.Armed > 0.95, "P10. e chega à postura")
+	check(atPose(fresh, freshBaseP, freshRig.Rest, freshRig.Own) and freshRig.Armed > 0.95, "P10. e chega à postura")
 	check(countKind("Animation") == 0 and countKind("AnimationTrack") == 0, "P7. nenhuma Animation/AnimationTrack em nenhuma etapa")
 end
 
@@ -946,6 +1065,158 @@ do
 
 	Swing.Swing = originalSwing
 	Combat.OnSwingImpact = originalImpactK
+end
+
+-- ── R. RUNTIME: a pose CHEGA às partes do personagem? ─────────────────────
+-- Contra falso positivo: aqui não basta "combo = B"; mede-se onde o BRAÇO e
+-- a MÃO ficaram depois do quadro (Animator → pose → juntas resolvidas).
+do
+	local Animate = Swing
+	local me = localPlayer.Character
+	local function rel(partName)
+		return me.UpperTorso.CFrame:ToObjectSpace(me[partName].CFrame)
+	end
+	local shoulderMotor = me.RightUpperArm.RightShoulder
+	-- Onde o braço/mão ficam SÓ com o Animator (toolnone; sem a nossa camada).
+	local function plainArm()
+		return shoulderMotor.C0 * animValue(shoulderMotor) * shoulderMotor.C1:Inverse()
+	end
+	local function plainHand()
+		local elbow, wrist = me.RightLowerArm.RightElbow, me.RightHand.RightWrist
+		return plainArm() * elbow.C0 * elbow.C1:Inverse() * wrist.C0 * wrist.C1:Inverse()
+	end
+	frames(1.5)
+	local rigR = Swing.LocalRig()
+	check(rigR.Backend == "Transform", "R0. camada padrão: Transform, depois do Animator")
+	check(logged("SwordController iniciado") and logged("Character detectado") and logged("RigType = R15") and logged("joint encontrado: Shoulder = RightShoulder") and logged("backend = Transform"), "R0. logs [SwordRuntime] de início: controller, Character, RigType, joints, backend")
+	check(logged("STANCE ACTIVE"), "R0. log STANCE ACTIVE")
+	local idleArm = rel("RightUpperArm")
+	local stanceDelta = SwordSwing.Angle(idleArm, plainArm())
+	local handDelta = SwordSwing.Angle(rel("RightHand"), plainHand())
+	check(stanceDelta >= 45 and handDelta >= 45, string.format("R1. PARADO: braço e mão REAIS na postura, longe do \"toolnone\" padrão do Roblox (braço %.0f°, mão/espada %.0f°: visível, não 2°)", stanceDelta, handDelta))
+	-- O braço da espada é dono da pose: sem toolnone (braço solto), a mesma.
+	local withToolnone = rel("RightHand")
+	toolnone = false
+	frames(0.3)
+	local withoutToolnone = rel("RightHand")
+	toolnone = true
+	frames(0.3)
+	check(SwordSwing.Angle(withToolnone, withoutToolnone) < 0.5, "R1. a postura sai IGUAL com ou sem o \"toolnone\" tocando (não depende da animação de base)")
+	check(logged("POSE CONFIRMADA no personagem (backend Transform"), "R1. a verificação no PostSimulation confirmou que a pose chegou às partes")
+
+	-- A, B e C: a mão de verdade no meio do corte, em lugares diferentes.
+	local logMark = #logs
+	local strike = {}
+	local idleHand = rel("RightHand")
+	frames(1.5)
+	for _, expected in { "A", "B", "C" } do
+		Slash.Play()
+		local variant = rigR.Variant
+		local windupAt = rigR.Duration * 0.25
+		local strikeAt = rigR.Duration * 0.55
+		frames(windupAt)
+		local windup = rel("RightHand")
+		local widest = SwordSwing.Angle(windup, idleHand)
+		local steps = math.floor((strikeAt - windupAt) * 60 + 0.5)
+		for _ = 1, steps do
+			frames(1 / 60)
+			widest = math.max(widest, SwordSwing.Angle(rel("RightHand"), idleHand))
+		end
+		strike[variant] = { Hand = rel("RightHand"), Windup = windup, Expected = expected, Widest = widest }
+		frames(0.4)
+	end
+	check(logged("HIT VISUAL RECEBIDO", logMark + 1) and logged("COMBO = A", logMark + 1) and logged("COMBO = B", logMark + 1) and logged("COMBO = C", logMark + 1), "R0. logs HIT VISUAL RECEBIDO e COMBO = A / B / C")
+	local a, b, c = strike.A, strike.B, strike.C
+	local ab = SwordSwing.Angle(a.Hand, b.Hand)
+	local ac = SwordSwing.Angle(a.Hand, c.Hand)
+	local bc = SwordSwing.Angle(b.Hand, c.Hand)
+	check(ab >= 25 and ac >= 25 and bc >= 25, string.format("R2. A, B e C deixam a mão REAL em orientações bem diferentes (A-B %.0f°, A-C %.0f°, B-C %.0f°)", ab, ac, bc))
+	check(a.Widest >= 60 and b.Widest >= 60 and c.Widest >= 60, string.format("R2. todo golpe é um movimento GRANDE da mão/espada saindo da postura (A %.0f°, B %.0f°, C %.0f°)", a.Widest, b.Widest, c.Widest))
+	-- Direção: A vem da direita e termina à esquerda; B o contrário; C no meio.
+	check(a.Windup.Position.X > a.Hand.Position.X and b.Windup.Position.X < b.Hand.Position.X, string.format("R2. A: mão vai da direita para a esquerda (%.1f → %.1f); B: da esquerda para a direita (%.1f → %.1f)", a.Windup.Position.X, a.Hand.Position.X, b.Windup.Position.X, b.Hand.Position.X))
+	check(c.Windup.Position.Y > c.Hand.Position.Y and math.abs(c.Hand.Position.X - c.Windup.Position.X) < math.abs(a.Hand.Position.X - a.Windup.Position.X), "R2. C: de cima para baixo, quase sem ir para o lado")
+
+	-- Articulação sem animação (ninguém reescreve o Transform): sem acumular.
+	animatorOn = false
+	frames(5)
+	check(atRest(me, baseOf(me), rigR), "R4. sem Animator reescrevendo: 5 s de postura sem acumular rotação")
+	animatorOn = true
+	frames(0.2)
+
+	-- O Roblox troca a articulação depois do spawn (Joint Upgrade convertendo /
+	-- aparência carregando): o rig remonta sozinho e a pose vai para a nova.
+	local logMark2 = #logs
+	local a0 = Instance.new("Attachment")
+	a0.Name = "RightShoulderRigAttachment"
+	a0.CFrame = shoulderMotor.C0
+	a0.Parent = me.UpperTorso
+	local a1 = Instance.new("Attachment")
+	a1.Name = "RightShoulderRigAttachment"
+	a1.Parent = me.RightUpperArm
+	local ac = Instance.new("AnimationConstraint")
+	ac.Name = "RightShoulder"
+	ac.Attachment0 = a0
+	ac.Attachment1 = a1
+	ac.Transform = CF.identity
+	ac.Parent = me.RightUpperArm
+	shoulderMotor.Enabled = false
+	frames(1.2)
+	check(rigR.Joints.Shoulder.Kind == "AnimationConstraint" and logged("remontado", logMark2 + 1), "R5. Motor6D trocado por AnimationConstraint depois do spawn: rig remontado (log \"remontado\")")
+	local plainAc = a0.CFrame * animValue(ac) * a1.CFrame:Inverse()
+	check(SwordSwing.Angle(rel("RightUpperArm"), plainAc) >= 30, "R5. e a postura chega ao braço pela AnimationConstraint nova")
+	do
+		local both = newCharacter("Both")
+		local m = both.RightUpperArm.RightShoulder
+		local b0 = Instance.new("Attachment")
+		b0.Parent = both.UpperTorso
+		local b1 = Instance.new("Attachment")
+		b1.Parent = both.RightUpperArm
+		local bc2 = Instance.new("AnimationConstraint")
+		bc2.Name = "RightShoulder"
+		bc2.Attachment0 = b0
+		bc2.Attachment1 = b1
+		bc2.Parent = both.RightUpperArm
+		local bothRig = SwordSwing.NewRig(both)
+		check(m.Enabled and bothRig and bothRig.Joints.Shoulder.Kind == "AnimationConstraint", "R5. AnimationConstraint ativa tem prioridade sobre Motor6D de mesmo nome (Joint Upgrade)")
+		both:Destroy()
+	end
+
+	-- A camada não chega ao render (algo por cima dela): a verificação percebe
+	-- e troca para a outra camada, que chega.
+	local logMark3 = #logs
+	overrideAfter = true
+	frames(1.5)
+	check(logged("POSE NÃO CHEGOU AO PERSONAGEM (backend Transform", logMark3 + 1) and logged("trocando backend: Transform → Offset", logMark3 + 1) and rigR.Backend == "Offset", "R3. pose que não chega ao personagem é DETECTADA (log) e a camada troca para Offset")
+	frames(1.5)
+	check(logged("POSE CONFIRMADA no personagem (backend Offset", logMark3 + 1) and SwordSwing.Angle(rel("RightUpperArm"), plainAc) >= 30, "R3. com a camada Offset o braço REAL volta a ficar na postura (confirmado)")
+	overrideAfter = false
+	me.CutBlade:Destroy()
+	frames(1.5)
+	check(SwordSwing.Angle(rel("RightUpperArm"), a0.CFrame * animValue(ac) * a1.CFrame:Inverse()) < 0.5 and SwordSwing.Angle(a0.CFrame, shoulderMotor.C0) < 0.01, "R3. Offset sem espada: o braço volta exatamente ao do Animator")
+	newTool(4.2).Parent = me
+	frames(1)
+
+	-- SwordBackend forçado pela barra de comando (só Studio).
+	E.Workspace:SetAttribute("SwordBackend", "Transform")
+	frames(0.1)
+	check(rigR.Backend == "Transform" and logged("backend forçado pelo atributo SwordBackend = Transform"), "R7. workspace.SwordBackend força a camada (diagnóstico no Studio)")
+	E.Workspace:SetAttribute("SwordBackend", nil)
+
+	-- Teste mínimo: clique → braço sobe bem alto e volta; nada mais.
+	local cutsBefore = #cutPlays
+	E.Workspace:SetAttribute("SwordMinimalTest", true)
+	frames(1)
+	check(rigR.Armed == 0 and SwordSwing.Angle(rel("RightUpperArm"), plainAc) < 0.5 and logged("TESTE MÍNIMO ligado"), "R6. teste mínimo: sem postura (braço só com o Animator)")
+	Slash.Play()
+	frames(SwordSwing.MINIMAL_SECONDS / 2)
+	local lifted = SwordSwing.Angle(rel("RightUpperArm"), plainAc)
+	check(rigR.Variant == "T" and lifted >= 90, string.format("R6. teste mínimo: clique → o braço REAL sobe %.0f° (grande e visível)", lifted))
+	frames(0.3)
+	check(SwordSwing.Angle(rel("RightUpperArm"), plainAc) < 0.5 and #cutPlays == cutsBefore, "R6. teste mínimo: o braço volta e nenhum corte/partícula é desenhado")
+	E.Workspace:SetAttribute("SwordMinimalTest", nil)
+	frames(1)
+	check(rigR.Armed > 0.99, "R6. desligando o teste mínimo a postura volta")
+	local _ = Animate
 end
 
 -- 6. O golpe não lê dano nem economia.

@@ -40,6 +40,7 @@ local CutVisuals = require(Shared:WaitForChild("Formulas"):WaitForChild("CutVisu
 local EconomyConfig = require(Shared:WaitForChild("Config"):WaitForChild("EconomyConfig"))
 
 local CutFx = require(script.Parent.Parent.Effects.CutFx)
+local SwordDebug = require(script.Parent.Parent.Effects.SwordDebug)
 
 local DataController = require(script.Parent.DataController)
 local SwordSwingController = require(script.Parent.SwordSwingController)
@@ -172,6 +173,9 @@ function SlashController.Play(auto: boolean?)
 		lastManualAt = now
 	end
 	local impact, variant = SwordSwingController.Swing()
+	if SwordDebug.Minimal() then
+		return -- teste mínimo (Studio): só o braço, sem corte nem partículas
+	end
 	local settings = DataController.Get("Settings")
 	if settings and settings.ReducedEffects == true then
 		if impact > 0 then

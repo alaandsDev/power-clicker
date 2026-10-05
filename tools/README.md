@@ -100,6 +100,16 @@ python tools/render_map3d.py            # build/map_parts.json -> build/render/m
   no respawn e na troca de espada; R6/R15/Joint Upgrade; reduzidos mantêm o
   movimento; ponto do impacto deslocado (A esq., B dir., C centro) na mesma
   face; nada do combo conhece dano/Power e o ritmo do servidor não muda.
+  RUNTIME (bloco R), contra falso positivo: o harness simula o quadro do
+  Roblox — "Animator" reescrevendo o `Transform` todo quadro (com o
+  "toolnone" do Roblox entrando com fade), a pose no `PreSimulation`, as
+  juntas resolvendo as PARTES e a verificação no `PostSimulation` — e mede
+  onde o braço e a mão de verdade ficaram: postura longe do toolnone e igual
+  com/sem ele; A/B/C com a mão em lugares diferentes e na direção certa;
+  sem acumular quando nada reescreve o `Transform`; Motor6D trocado por
+  AnimationConstraint depois do spawn (rig remonta); algo reescrevendo o
+  `Transform` depois da camada (detectado, troca para Offset); logs
+  `[SwordRuntime]`; teste mínimo (`workspace.SwordMinimalTest`).
 - **check_fx** — os controllers reais do combate (`WallController`,
   `SwordSwingController`, `SlashController`, `CombatFxController`) sobre o
   mapa, com um "servidor" mínimo mandando o `WallState` do jogador e relógio
