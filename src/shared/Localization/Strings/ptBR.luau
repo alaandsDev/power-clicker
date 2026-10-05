@@ -39,6 +39,7 @@ return {
 	["station.upgrades.subtitle"] = "AUMENTE SEU PODER",
 	["station.cuts.name"] = "Cortes",
 	["station.cuts.subtitle"] = "DOMINE SEU CORTE",
+	["station.pets.subtitle"] = "SEUS COMPANHEIROS",
 	["menu.rebirth"] = "Renascer",
 
 	-- Painel de melhorias

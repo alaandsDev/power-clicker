@@ -19,6 +19,8 @@
 	  ficam na cor do Corte do jogador local (atributo "BestCut" +
 	  CutVisuals, a mesma receita do golpe) e mudam quando ele troca;
 	- StationFlash: um clarão curto de tempos em tempos (mini-impacto);
+	- StationHolo: hologramas de pet (só imagem) flutuam e respiram de leve,
+	  mais nítidos com o jogador no terminal — mexe só no StudsOffset;
 	- "Efeitos reduzidos" desliga as partículas das estações (StationParticles).
 
 	Peças achadas pelas tags (CollectionService) que o servidor põe; funciona
@@ -54,6 +56,8 @@ local FLASH_EVERY = 4.5 -- segundos entre clarões (mini-impacto)
 local FLASH_SECONDS = 0.18
 local FLASH_TRANSPARENCY = 0.3
 local SETTINGS_EVERY = 1 -- "Efeitos reduzidos" conferido a cada tanto
+local HOLO_BOB = 0.18
+local HOLO_SECONDS = 2.6
 
 local TAGS = {
 	Spin = "StationSpin",
@@ -65,6 +69,7 @@ local TAGS = {
 	Particles = "StationParticles",
 	CutTint = "StationCutTint",
 	Flash = "StationFlash",
+	Holo = "StationHolo",
 }
 
 -- Estado de cada estação (o Model "..._Machine", pela chave = caminho dele):
@@ -78,6 +83,7 @@ type Core = { Part: BasePart, Base: number, Station: string? }
 type Npc = { Model: Model, Root: CFrame, Members: { { Part: BasePart, Offset: CFrame } }, Yaw: number }
 type Screen = { Part: BasePart, Bars: { Frame }, Arrow: TextLabel?, Station: string? }
 type Flash = { Part: BasePart, Base: number, Offset: number }
+type Holo = { Part: BasePart, Gui: BillboardGui, Art: ImageLabel?, Phase: number, Station: string? }
 
 local StationFxController = {}
 
@@ -90,6 +96,7 @@ local screens: { [Instance]: Screen } = {}
 local tints: { [Instance]: Instance } = {}
 local flashes: { [Instance]: Flash } = {}
 local emitters: { [Instance]: ParticleEmitter } = {}
+local holos: { [Instance]: Holo } = {}
 local reducedNow = false
 local nextSettings = 0
 local stations: { [string]: Station } = {}
@@ -170,6 +177,12 @@ local function register(tag: string, item: Instance)
 	elseif tag == TAGS.Particles and item:IsA("ParticleEmitter") then
 		emitters[item] = item
 		item.Enabled = not reducedNow
+	elseif tag == TAGS.Holo and item:IsA("BasePart") then
+		local gui = item:FindFirstChildOfClass("BillboardGui")
+		if gui then
+			local art = gui:FindFirstChildOfClass("ImageLabel")
+			holos[item] = { Part = item, Gui = gui, Art = art, Phase = (#item:GetFullName() * 0.53) % HOLO_SECONDS, Station = stationOf(item) }
+		end
 	elseif tag == TAGS.Flash and item:IsA("BasePart") then
 		flashes[item] = { Part = item, Base = item.Transparency, Offset = (#item:GetFullName() * 0.37) % FLASH_EVERY }
 	elseif tag == TAGS.Spin and item:IsA("BasePart") then
@@ -220,6 +233,7 @@ local function forget(item: Instance)
 	screens[item] = nil
 	tints[item] = nil
 	flashes[item] = nil
+	holos[item] = nil
 	emitters[item] = nil
 end
 
@@ -270,6 +284,16 @@ function StationFxController.Step(at: number)
 	local eye = camera.CFrame.Position
 	local t = at - started
 	applySettings(at)
+	for _, holo in holos do
+		if near(holo.Part.Position, eye) then
+			local weight = stateOf(holo.Station).Weight
+			local wave = math.sin((t + holo.Phase) * 2 * math.pi / HOLO_SECONDS)
+			holo.Gui.StudsOffset = Vector3.new(0, HOLO_BOB * wave, 0)
+			if holo.Art then
+				holo.Art.ImageTransparency = 0.2 - 0.12 * weight + 0.05 * wave
+			end
+		end
+	end
 	for _, flash in flashes do
 		if near(flash.Part.Position, eye) then
 			local phase = (t + flash.Offset) % FLASH_EVERY
@@ -374,6 +398,7 @@ function StationFxController.Counts(): { [string]: number }
 		Tint = count(tints),
 		Flash = count(flashes),
 		Particles = count(emitters),
+		Holo = count(holos),
 	}
 end
 

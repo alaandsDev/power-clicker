@@ -54,6 +54,7 @@ StationMachines.TAG_SCREEN = "StationScreen" -- tela do console (barras sobem; r
 StationMachines.TAG_PARTICLES = "StationParticles" -- emissor desligado com "Efeitos reduzidos"
 StationMachines.TAG_CUT_TINT = "StationCutTint" -- peça/emissor na cor do Corte do jogador local
 StationMachines.TAG_FLASH = "StationFlash" -- de tempos em tempos um clarão curto (mini-impacto)
+StationMachines.TAG_HOLO = "StationHolo" -- holograma (BillboardGui) que flutua e respira
 
 export type Theme = {
 	Stone: Color3,
@@ -77,6 +78,17 @@ StationMachines.Themes = {
 		Energy = Color3.fromRGB(86, 196, 236),
 		Crystal = Color3.fromRGB(120, 200, 232),
 		Core = Color3.fromRGB(130, 228, 255),
+	} :: Theme,
+	-- Pets: laboratório de companheiros, roxo com ciano.
+	Pets = {
+		Stone = Color3.fromRGB(108, 106, 122),
+		StoneDark = Color3.fromRGB(74, 72, 90),
+		Metal = Color3.fromRGB(48, 46, 60),
+		Plate = Color3.fromRGB(64, 62, 78),
+		Gold = Color3.fromRGB(188, 152, 86),
+		Energy = Color3.fromRGB(170, 116, 255),
+		Crystal = Color3.fromRGB(176, 150, 255),
+		Core = Color3.fromRGB(126, 226, 255),
 	} :: Theme,
 	-- Cortes: forja de energia vermelho/laranja (o slash pega a cor do Corte
 	-- do jogador no cliente).
@@ -705,6 +717,168 @@ function StationMachines.BuildCutForge(parent: Instance, base: CFrame, options: 
 	model:SetAttribute("Prototype", "StationMachine")
 	model.Parent = parent
 	return model
+end
+
+-- ── Estação de Companheiros (Pets) ──────────────────────────────────────────
+
+-- Cilindro de pé (eixo em Y) com centro em `at`.
+local function upright(kit: Kit, name: string, at: Vector3, height: number, diameter: number, color: Color3, material: Enum.Material, collide: boolean?, transparency: number?, parent: Instance?): Part
+	return piece(kit, name, Vector3.new(height, diameter, diameter), CFrame.new(at) * UPRIGHT, color, material, collide, transparency, Enum.PartType.Cylinder, parent)
+end
+
+-- Disco de frente (eixo em Z) com centro em `at`.
+local function facingDisc(kit: Kit, name: string, at: Vector3, thickness: number, diameter: number, color: Color3, material: Enum.Material, transparency: number?): Part
+	return piece(kit, name, Vector3.new(thickness, diameter, diameter), CFrame.new(at) * FACING, color, material, false, transparency, Enum.PartType.Cylinder)
+end
+
+-- Pegada (🐾) em discos: almofada + 4 dedos. `frame` = centro, plano XY local.
+local function pawPrint(kit: Kit, name: string, frame: CFrame, size: number, color: Color3, material: Enum.Material, flat: boolean)
+	local function toe(offset: Vector3, diameter: number)
+		local at = frame * CFrame.new(offset * size)
+		if flat then
+			piece(kit, name, Vector3.new(0.06, diameter * size, diameter * size), at * UPRIGHT, color, material, false, nil, Enum.PartType.Cylinder)
+		else
+			piece(kit, name, Vector3.new(0.2, diameter * size, diameter * size), at * FACING, color, material, false, nil, Enum.PartType.Cylinder)
+		end
+	end
+	local function v(x: number, y: number): Vector3
+		-- No chão os dedos apontam para +Z (para a estação).
+		return if flat then Vector3.new(x, 0, y) else Vector3.new(x, y, 0)
+	end
+	toe(v(0, -0.22), 1.0)
+	toe(v(-0.62, 0.42), 0.42)
+	toe(v(-0.22, 0.7), 0.42)
+	toe(v(0.22, 0.7), 0.42)
+	toe(v(0.62, 0.42), 0.42)
+end
+
+-- Holograma de um pet (a arte enviada, num BillboardGui pequeno dentro da
+-- cápsula). Só imagem: não é pet de verdade, não salva, não equipa.
+local function hologram(kit: Kit, at: Vector3, image: string?, size: number, tint: Color3)
+	local anchor = piece(kit, "PetHologram", Vector3.new(0.2, 0.2, 0.2), CFrame.new(at), tint, Enum.Material.SmoothPlastic, false, 1)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "Hologram"
+	gui.Size = UDim2.fromScale(size, size)
+	gui.MaxDistance = 70
+	gui.LightInfluence = 0
+	gui.AlwaysOnTop = false
+	if image and image ~= "" then
+		local picture = Instance.new("ImageLabel")
+		picture.Name = "Art"
+		picture.Size = UDim2.fromScale(1, 1)
+		picture.BackgroundTransparency = 1
+		picture.Image = image
+		picture.ImageColor3 = Color3.new(1, 1, 1):Lerp(tint, 0.15)
+		picture.ImageTransparency = 0.15
+		picture.Parent = gui
+	end
+	gui.Parent = anchor
+	anchor:AddTag(StationMachines.TAG_HOLO)
+end
+
+export type PetLabOptions = {
+	Title: string,
+	Subtitle: string,
+	Previews: { string }, -- imagens dos 3 previews (rbxassetid), esquerda → direita
+}
+
+--[[
+	ESTAÇÃO DE COMPANHEIROS. Silhueta HORIZONTAL, aberta e amigável (nada de
+	colunas com núcleo): três cápsulas de vidro sobre pedestais — a do meio
+	um pouco maior — com hologramas de pets flutuando dentro, uma parede de
+	laboratório baixa atrás com um tubo ligando as cápsulas e dois tanques
+	nas pontas, a placa e um emblema de PATA (🐾) em peças acima dela, um
+	terminal redondo e baixo na frente (o prompt de Pets de sempre) e uma
+	pegada no chão marcando onde ficar. Sem NPC.
+	Referência local: -Z = frente.
+]]
+function StationMachines.BuildPetLab(parent: Instance, base: CFrame, panel: string, options: PetLabOptions): (Model, BasePart)
+	local model = Instance.new("Model")
+	model.Name = "Station_" .. panel .. "_Machine"
+	local theme = StationMachines.Themes.Pets
+	local kit: Kit = { Parent = model, Base = base, Theme = theme, Count = 0 }
+	local Slate, Metal, Neon, Glass = Enum.Material.Slate, Enum.Material.Metal, Enum.Material.Neon, Enum.Material.Glass
+	local floorTop = 0.6
+
+	-- Base larga e baixa com bisel na frente.
+	piece(kit, "LabBase", Vector3.new(21, 0.6, 10), CFrame.new(0, floorTop + 0.3, 0.5), theme.StoneDark, Slate, true)
+	wedge(kit, "LabBevel", Vector3.new(21, 0.6, 1.2), CFrame.new(0, floorTop + 0.3, -5.1), theme.StoneDark, Slate)
+	piece(kit, "LabTrim", Vector3.new(21.2, 0.14, 0.2), CFrame.new(0, floorTop + 0.62, -4.5), theme.Gold, Metal, false)
+	local top = floorTop + 0.6
+
+	-- Parede de laboratório baixa, tubo de cima, tanques nas pontas.
+	piece(kit, "LabWall", Vector3.new(19, 5, 0.8), CFrame.new(0, top + 2.5, 3.6), theme.Plate, Enum.Material.DiamondPlate, true)
+	piece(kit, "LabWallTrim", Vector3.new(19.2, 0.3, 0.3), CFrame.new(0, top + 0.8, 3.15), theme.Gold, Metal, false)
+	piece(kit, "LabPipe", Vector3.new(19.4, 0.8, 0.8), CFrame.new(0, top + 5.3, 3.3), theme.Metal, Metal, false, nil, Enum.PartType.Cylinder)
+	for _, side in { -1, 1 } do
+		upright(kit, "LabTank", Vector3.new(side * 10.2, top + 2.7, 2.6), 5.4, 2.6, theme.Metal, Metal, true)
+		piece(kit, "TankWindow", Vector3.new(0.9, 3.4, 0.12), CFrame.new(side * 10.2, top + 2.7, 1.28), theme.Energy, Neon, false, 0.55)
+		upright(kit, "TankCap", Vector3.new(side * 10.2, top + 5.6, 2.6), 0.4, 2.9, theme.Gold, Metal, false)
+	end
+
+	-- Cápsulas: pedestal, aro dourado, disco de energia, tubo de vidro, tampa
+	-- com aro de energia, cano até o tubo de cima e o holograma do pet.
+	local slots = { -6.4, 0, 6.4 }
+	for index, x in slots do
+		local scale = if index == 2 then 1.15 else 1
+		local z = 0.4
+		upright(kit, "CapsulePedestal", Vector3.new(x, top + 0.5 * scale, z), 1.0 * scale, 3.6 * scale, theme.Metal, Metal, true)
+		upright(kit, "CapsuleRing", Vector3.new(x, top + 1.05 * scale, z), 0.24, 3.9 * scale, theme.Gold, Metal, false)
+		upright(kit, "CapsuleFloor", Vector3.new(x, top + 1.08 * scale, z), 0.08, 2.4 * scale, theme.Core, Neon, false, 0.35)
+		local glassBottom = top + 1.1 * scale
+		local glassHeight = 4.2 * scale
+		upright(kit, "CapsuleGlass", Vector3.new(x, glassBottom + glassHeight / 2, z), glassHeight, 3.0 * scale, theme.Crystal, Glass, false, 0.72)
+		local capY = glassBottom + glassHeight + 0.3
+		upright(kit, "CapsuleCap", Vector3.new(x, capY, z), 0.6, 3.6 * scale, theme.Metal, Metal, false)
+		upright(kit, "CapsuleGlow", Vector3.new(x, capY - 0.34, z), 0.08, 2.7 * scale, theme.Energy, Neon, false, 0.65)
+		tube(kit, "CapsuleFeed", Vector3.new(x, capY + 0.3, z + 0.6), Vector3.new(x, top + 5.3, 3.0), 0.36, theme.Metal)
+		hologram(kit, Vector3.new(x, glassBottom + glassHeight * 0.5, z), options.Previews[index], 2.3 * scale, theme.Core)
+	end
+	local middle = model:FindFirstChild("CapsuleFloor") :: BasePart
+	emitter(middle, "LabBubbles", theme.Crystal, 3, NumberRange.new(0.5, 0.9), NumberRange.new(2.0, 2.8), 0.14, 10, Vector3.new(0, 0.3, 0))
+
+	-- Placa e emblema de pata acima da parede.
+	piece(kit, "LabHeader", Vector3.new(11, 1.9, 1.2), CFrame.new(0, top + 5.95, 3.6), theme.Stone, Slate, true)
+	nameplate(kit, CFrame.new(0, top + 6.2, 2.9), options.Title, options.Subtitle, 8)
+	facingDisc(kit, "PawCrest", Vector3.new(0, top + 9.2, 3.7), 0.4, 3.6, theme.StoneDark, Slate)
+	facingDisc(kit, "PawCrestRim", Vector3.new(0, top + 9.2, 3.95), 0.2, 4.0, theme.Gold, Metal)
+	pawPrint(kit, "PawEmblem", CFrame.new(0, top + 9.05, 3.4), 2.0, theme.Energy, Neon, false)
+
+	-- Terminal redondo e baixo, inclinado para quem chega (prompt de Pets).
+	local termZ = -2.8
+	upright(kit, "TerminalBase", Vector3.new(0, top + 0.12, termZ), 0.24, 2.4, theme.Gold, Metal, false)
+	upright(kit, "TerminalStem", Vector3.new(0, top + 1.2, termZ), 2.2, 1.0, theme.Metal, Metal, true)
+	local tilt = CFrame.new(0, top + 2.45, termZ) * CFrame.Angles(math.rad(-30), 0, 0)
+	local head = piece(kit, "Station_" .. panel, Vector3.new(3.0, 0.45, 2.1), tilt, theme.Plate, Metal, true)
+	local screen = piece(kit, "TerminalScreen", Vector3.new(2.4, 0.05, 1.5), tilt * CFrame.new(0, 0.25, 0.05), Color3.fromRGB(20, 18, 34), Enum.Material.SmoothPlastic, false)
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Screen"
+	gui.Face = Enum.NormalId.Top
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 60
+	gui.LightInfluence = 0
+	gui.MaxDistance = 60
+	local paw = Instance.new("TextLabel")
+	paw.Name = "Arrow"
+	paw.BackgroundTransparency = 1
+	paw.Size = UDim2.fromScale(1, 0.9)
+	paw.Position = UDim2.fromScale(0, 0.05)
+	paw.Font = Enum.Font.GothamBlack
+	paw.TextScaled = true
+	paw.TextColor3 = theme.Core
+	paw.Text = "🐾"
+	paw.Parent = gui
+	gui.Parent = screen
+	screen:AddTag(StationMachines.TAG_SCREEN)
+
+	-- Onde ficar: uma pegada gravada no piso, na frente do terminal.
+	upright(kit, "PawPad", Vector3.new(0, floorTop + 0.04, -7.6), 0.08, 4.4, theme.Plate, Metal, true)
+	pawPrint(kit, "PawFloor", CFrame.new(0, floorTop + 0.1, -7.4), 1.7, shade(theme.Gold, 0.8), Metal, true)
+
+	model:SetAttribute("PartCount", kit.Count)
+	model:SetAttribute("Prototype", "StationMachine")
+	model.Parent = parent
+	return model, head
 end
 
 return StationMachines

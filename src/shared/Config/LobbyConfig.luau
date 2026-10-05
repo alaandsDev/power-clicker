@@ -56,6 +56,7 @@ export type Station = {
 	]]
 	Style: string?,
 	Npc: boolean?, -- técnico ao lado da máquina (só com Style = "Machine")
+	Previews: { string }?, -- PetLab: pets mostrados em holograma nas cápsulas (só imagem)
 }
 
 local Areas: { [string]: Area } = {
@@ -152,7 +153,8 @@ local Stations: { Station } = {
 	-- 4 studs para dentro da área para a plataforma de interação ficar no piso).
 	{ Panel = "Upgrades", TextKey = "world.prompt.upgrades", NameKey = "menu.upgrades", Icon = "⬆️", Area = "Shop", Local = Vector3.new(-14, 0, -8), Color = Color3.fromRGB(70, 210, 110), Style = "Machine", Npc = true },
 	{ Panel = "Shop", TextKey = "world.prompt.shop", NameKey = "menu.shop", Icon = "🛒", Area = "Shop", Local = Vector3.new(18, 0, 8), Color = Color3.fromRGB(255, 196, 45) },
-	{ Panel = "Pets", TextKey = "world.prompt.pets", NameKey = "menu.pets", Icon = "🐾", Area = "Pets", Local = Vector3.new(0, 0, 0), Color = Color3.fromRGB(80, 220, 255) },
+	-- Pets: estação de companheiros (antes: quiosque). Sem Style = quiosque antigo.
+	{ Panel = "Pets", TextKey = "world.prompt.pets", NameKey = "menu.pets", Icon = "🐾", Area = "Pets", Local = Vector3.new(0, 0, 0), Color = Color3.fromRGB(80, 220, 255), Style = "PetLab", Previews = { "Cat", "Fox", "Dog" } },
 	{ Panel = "Quests", TextKey = "world.prompt.quests", NameKey = "menu.quests", Icon = "📜", Area = "Spawn", Local = Vector3.new(-34, 0, 10), Color = Color3.fromRGB(140, 90, 255) },
 	{ Panel = "Rewards", TextKey = "world.prompt.rewards", NameKey = "menu.rewards", Icon = "🎁", Area = "Spawn", Local = Vector3.new(34, 0, 10), Color = Color3.fromRGB(255, 150, 80) },
 }

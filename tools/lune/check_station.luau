@@ -353,6 +353,7 @@ E.patches["StarterPlayer.Client.Controllers.StationFxController"] = {
 	{ "localRoot.Position", "localRoot.CFrame.Position", "all" },
 	{ "screen.Part.Position", "screen.Part.CFrame.Position", "all" },
 	{ "flash.Part.Position", "flash.Part.CFrame.Position", "all" },
+	{ "holo.Part.Position", "holo.Part.CFrame.Position", "all" },
 }
 local Fx = E.require(E.Client.Controllers.StationFxController)
 Fx.Init()
@@ -363,7 +364,8 @@ end
 local registeredAll = counts.Spin == tagCount("StationSpin") and counts.Ring == tagCount("StationRing") and counts.Core == tagCount("StationCore")
 	and counts.Pulse == tagCount("StationPulse") and counts.Npc == tagCount("StationNpc") and counts.Screen == tagCount("StationScreen")
 	and counts.Tint == tagCount("StationCutTint") and counts.Flash == tagCount("StationFlash") and counts.Particles == tagCount("StationParticles")
-check(registeredAll and counts.Npc == (if npc then 1 else 0) and counts.Screen == 1, string.format("8. um controlador para todas as estações: tudo registrado (giro %d, anéis %d, núcleo %d, pulsos %d, técnico %d, tela %d, tint %d, clarão %d, partículas %d)", counts.Spin, counts.Ring, counts.Core, counts.Pulse, counts.Npc, counts.Screen, counts.Tint, counts.Flash, counts.Particles))
+	and counts.Holo == tagCount("StationHolo")
+check(registeredAll and counts.Npc == (if npc then 1 else 0) and counts.Screen >= 1, string.format("8. um controlador para todas as estações: tudo registrado (giro %d, anéis %d, núcleo %d, pulsos %d, técnico %d, telas %d, tint %d, clarão %d, partículas %d, hologramas %d)", counts.Spin, counts.Ring, counts.Core, counts.Pulse, counts.Npc, counts.Screen, counts.Tint, counts.Flash, counts.Particles, counts.Holo))
 
 local core = machine:FindFirstChild("PowerCore", true)
 local ringModel = machine:FindFirstChild("CoreRingGold", true)
@@ -488,6 +490,118 @@ for _ = 1, 30 do
 	Fx.Step(t)
 end
 check(core.CFrame == frozen, "8. câmera longe (>140 studs): nada é animado")
+
+-- ── B. ESTAÇÃO DE COMPANHEIROS (PETS) ──────────────────────────────────────
+do
+	local lab = world:FindFirstChild("Station_Pets_Machine", true)
+	check(lab ~= nil, "B. estação de Pets construída")
+	if lab then
+		local petPrompts = {}
+		for _, d in world:GetDescendants() do
+			if d:IsA("ProximityPrompt") and d:GetAttribute("OpenPanel") == "Pets" then
+				table.insert(petPrompts, d)
+			end
+		end
+		local terminal = petPrompts[1] and petPrompts[1].Parent
+		check(#petPrompts == 1 and terminal and terminal.Name == "Station_Pets" and terminal:IsDescendantOf(lab), "B. um só prompt de Pets, no terminal da estação")
+		check(petPrompts[1] and petPrompts[1]:GetAttribute("TextKey") == "world.prompt.pets", "B. é o prompt de sempre (abre o painel Pets atual)")
+		local parts, lights, holograms, fakePets = 0, 0, 0, 0
+		local minX, maxX, minZ, maxZ, top = math.huge, -math.huge, math.huge, -math.huge, 0
+		for _, d in lab:GetDescendants() do
+			if d:IsA("BasePart") then
+				parts += 1
+				for _, c in corners(d) do
+					minX, maxX = math.min(minX, c.X), math.max(maxX, c.X)
+					minZ, maxZ = math.min(minZ, c.Z), math.max(maxZ, c.Z)
+					top = math.max(top, c.Y)
+				end
+			elseif d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
+				lights += 1
+			end
+			if d.Name == "PetHologram" then
+				holograms += 1
+			end
+			if d:GetAttribute("PetId") or d:GetAttribute("EquippedPets") or d:IsA("Humanoid") then
+				fakePets += 1
+			end
+		end
+		check(parts >= 45 and parts <= 100, string.format("B. orçamento: %d peças (%d instâncias)", parts, #lab:GetDescendants()))
+		check(lights == 0, "B. sem luz")
+		check(holograms == 3 and fakePets == 0, "B. 3 previews são só imagem (sem PetId, sem Humanoid, nada salvável)")
+		local fsB = require("@lune/fs")
+		local machinesSource = fsB.readFile(E.Root .. "/src/server/World/StationMachines.luau")
+		local cleanPets = true
+		for _, word in { "PetService", "EquippedPets", "PetConfig", "PetLogic", "FireServer" } do
+			if string.find(machinesSource, word, 1, true) then
+				cleanPets = false
+				print("      StationMachines usa " .. word)
+			end
+		end
+		check(cleanPets, "B. a estação não conhece o sistema de pets (inventário, equipar, multiplicador)")
+		local deck = LobbyConfig.Areas.Pets
+		local floorMin = deck.Offset - V3.new(deck.FloorSize.X / 2, 0, deck.FloorSize.Y / 2)
+		local floorMax = deck.Offset + V3.new(deck.FloorSize.X / 2, 0, deck.FloorSize.Y / 2)
+		check(minX >= floorMin.X and maxX <= floorMax.X and minZ >= floorMin.Z and maxZ <= floorMax.Z, string.format("B. tudo dentro do deck da área (x %.0f a %.0f, z %.0f a %.0f)", minX, maxX, minZ, maxZ))
+		check(top <= 14 and (maxX - minX) > top * 1.4, string.format("B. silhueta horizontal (%.0f de largura, %.0f de altura)", maxX - minX, top))
+		local worstWalkB = math.huge
+		for _, d in lab:GetDescendants() do
+			if d:IsA("BasePart") then
+				for _, c in corners(d) do
+					local flat = V3.new(c.X, 0, c.Z)
+					for _, a in LobbyConfig.Areas do
+						if a.Id ~= "Tower" and a.Id ~= "Pets" then
+							worstWalkB = math.min(worstWalkB, segmentDistance(flat, V3.zero, V3.new(a.Offset.X, 0, a.Offset.Z)))
+						end
+					end
+				end
+			end
+		end
+		check(worstWalkB >= 5, string.format("B. fora das calçadas das outras áreas (%.1f studs)", worstWalkB))
+		local pawPad = lab:FindFirstChild("PawPad")
+		local toOrigin = (V3.zero - V3.new(deck.Offset.X, 0, deck.Offset.Z)).Unit
+		check(pawPad and (pawPad.CFrame.Position - terminal.CFrame.Position):Dot(toOrigin) > 3 and (pawPad.CFrame.Position - terminal.CFrame.Position).Magnitude <= petPrompts[1].MaxActivationDistance - 3, "B. pegada no chão na frente do terminal, ao alcance do prompt")
+		-- Reverter.
+		local petStation = nil
+		for _, st in LobbyConfig.Stations do
+			if st.Panel == "Pets" then
+				petStation = st
+			end
+		end
+		local styleB = petStation.Style
+		petStation.Style = nil
+		local oldB = build()
+		local oldPrompt = nil
+		for _, d in oldB:GetDescendants() do
+			if d:IsA("ProximityPrompt") and d:GetAttribute("OpenPanel") == "Pets" then
+				oldPrompt = d
+			end
+		end
+		check(oldB:FindFirstChild("Station_Pets_Machine", true) == nil and oldPrompt and oldPrompt.Parent.Name == "Station_Pets", "B. sem Style no LobbyConfig volta o quiosque antigo, com o mesmo prompt")
+		petStation.Style = styleB
+		-- Cliente: hologramas flutuam (sem mover peças), nítidos perto do terminal.
+		local holo = lab:FindFirstChild("PetHologram")
+		local gui = holo:FindFirstChildOfClass("BillboardGui")
+		camera.CFrame = CF.new(holo.CFrame.Position + toOrigin * 15 + V3.new(0, 4, 0))
+		playerRoot.CFrame = CF.new(holo.CFrame.Position + toOrigin * 40)
+		local anchorBefore = holo.CFrame
+		local lowest, highest = math.huge, -math.huge
+		for _ = 1, 60 * 3 do
+			t += 1 / 60
+			Fx.Step(t)
+			lowest = math.min(lowest, gui.StudsOffset.Y)
+			highest = math.max(highest, gui.StudsOffset.Y)
+		end
+		check(highest - lowest > 0.2 and highest - lowest < 0.5 and holo.CFrame == anchorBefore, string.format("B. hologramas flutuam de leve (%.2f studs) sem mover peça", highest - lowest))
+		local art = gui:FindFirstChildOfClass("ImageLabel")
+		local farArt = art and art.ImageTransparency
+		playerRoot.CFrame = CF.new(pawPad.CFrame.Position + V3.new(0, 3, 0))
+		for _ = 1, 90 do
+			t += 1 / 60
+			Fx.Step(t)
+		end
+		check(art and Fx.Engagement(terminal:FindFirstChild("TerminalScreen") or lab:FindFirstChild("TerminalScreen")) > 0.8 and art.ImageTransparency < farArt, "B. jogador na pegada: a estação acorda (hologramas mais nítidos)")
+	end
+end
 
 -- ── C. FORJA DE CORTES ─────────────────────────────────────────────────────
 do

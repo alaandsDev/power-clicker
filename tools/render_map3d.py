@@ -222,4 +222,7 @@ if __name__ == "__main__":
         render(parts, Cam(target + f * dist + np.array([0, -1.5, 0]), target, fov=68), out_prefix + f"_{key}_near.png", f"{label} - {key} (perto)")
         render(parts, Cam(target + f * dist * 0.75 + side * dist * 0.75 + np.array([0, -1, 0]), target - side * 1.0, fov=68), out_prefix + f"_{key}_side.png", f"{label} - {key} (3/4)")
     station_views("cuts", "ForgeBack", (0, 1), 7, 24)
+    pets = next((p for p in parts if p["n"] == "Station_Pets"), None)
+    if pets:
+        station_views("pets", "LabWall", (-pets["p"][0], -pets["p"][2]), 5, 22)
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")

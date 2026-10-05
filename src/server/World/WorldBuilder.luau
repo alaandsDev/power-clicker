@@ -597,6 +597,19 @@ local function buildStations(model: Model, origin: Vector3, palette: Palette)
 			})
 			prompt(console, station.Panel, station.TextKey, station.NameKey)
 			continue
+		elseif station.Style == "PetLab" then
+			-- Estação de companheiros: o prompt de Pets de sempre, no terminal.
+			local previews = {}
+			for _, petId in station.Previews or {} do
+				table.insert(previews, AssetIds["pet_" .. petId] or "")
+			end
+			local _, terminal = StationMachines.BuildPetLab(model, CFrame.new(base) * yaw, station.Panel, {
+				Title = string.format("%s %s", station.Icon, string.upper(Text.GetFor(nil, station.NameKey))),
+				Subtitle = Text.GetFor(nil, "station.pets.subtitle"),
+				Previews = previews,
+			})
+			prompt(terminal, station.Panel, station.TextKey, station.NameKey)
+			continue
 		end
 		local market = station.Area == "Shop"
 		local counter = block(model, CFrame.new(base + Vector3.new(0, 2.5, 0)) * yaw, Vector3.new(12, 5, 5), palette.Rim, Enum.Material.WoodPlanks)
