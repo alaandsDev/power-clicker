@@ -37,9 +37,11 @@ local CutLogic = require(Shared.Formulas.CutLogic)
 local ZoneRules = require(Shared.Formulas.ZoneRules)
 local WorldRules = require(Shared.Formulas.WorldRules)
 local WinPadRules = require(Shared.Formulas.WinPadRules)
+local CorridorLayout = require(Shared.Formulas.CorridorLayout)
 local NumberFormat = require(Shared.Utils.NumberFormat)
 local Text = require(Shared.Localization)
 local StationMachines = require(script.Parent.StationMachines)
+local PowerPath = require(script.Parent.PowerPath)
 
 type WorldData = Types.WorldData
 type ZoneData = Types.ZoneData
@@ -200,10 +202,29 @@ local function nearWalkway(x: number, z: number, margin: number): boolean
 	return false
 end
 
+--[[
+	O Caminho do Poder como zona proibida para decoração (relativo à origem):
+	do portão ao fim da praça do portal, na largura do trecho mais largo mais
+	as paredes. Toda decoração procedural (árvores, pedras, ilhas do céu)
+	passa por aqui — foi uma ilha do céu sorteada sem exclusão que ficou
+	pairando sobre a Barreira 1.
+]]
+local function inCorridorBand(x: number, z: number, margin: number): boolean
+	local segments = CorridorLayout.Segments()
+	local widest = 0
+	for _, segment in segments do
+		widest = math.max(widest, segment.Width)
+	end
+	local fromX = WallConfig.Layout.StartX - 30
+	local toX = CorridorLayout.FinalStart() + CorridorLayout.FINAL_PLAZA + 40
+	local halfZ = widest / 2 + WallConfig.Layout.SideThickness + 20
+	return x > fromX - margin and x < toX + margin and math.abs(z) < halfZ + margin
+end
+
 -- True when (x, z) is outside every lobby area, the main path, the walkways
 -- and the pond, with `margin` studs to spare.
 local function clearOfLayout(x: number, z: number, margin: number): boolean
-	if nearWalkway(x, z, margin) then
+	if nearWalkway(x, z, margin) or inCorridorBand(x, z, margin) then
 		return false
 	end
 	for _, area in LobbyConfig.Areas do
@@ -1574,88 +1595,34 @@ end
 		WinPad = true, StageId, Wins = <quantidade>   (pad que paga vitórias)
 		WinPad = true, StageId, Return = true         (pad que volta pra praça)
 ]]
-local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
+local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 	local layout = WallConfig.Layout
 	local stages = WallConfig.Stages
-	local cursor = layout.StartX
+	--[[
+		Fase A (fundação): tudo do corredor fica num Model "PowerPath"; piso,
+		paredes, silhueta, transições e zona de decisão vêm do PowerPath
+		(CorridorThemes + CorridorLayout). Aqui ficam só o que tem função:
+		fileiras, arcos (checkpoint), pads e o fim com o portal. WallService e
+		WallController acham fileiras e pads por atributo, onde estiverem.
+	]]
+	local model = Instance.new("Model")
+	model.Name = "PowerPath"
+	model.Parent = world
+	local _ = palette
 
-	for index, stage in stages do
-		local isFinal = index == #stages
-		local nextStage = stages[math.min(index + 1, #stages)]
-		local scale = if isFinal then layout.FinalScale else 1
-		local width = layout.Width * scale
-		local length = layout.RoomLength * scale
+	for index, segment in CorridorLayout.Segments() do
+		local stage = stages[index]
+		local isFinal = segment.Final
+		local width = segment.Width
 		local half = width / 2
-		local height = layout.WallHeight * scale
+		local height = segment.Height
+		local areaEnd = segment.Barrier
+		local blockDepth = segment.Depth
 
-		local areaStart = cursor
-		local areaEnd = areaStart + length
-		--[[
-			O trecho do estágio não é só a área temática: ele vai até depois da
-			barreira, porque os pads de vitória e o pad de voltar ficam do outro
-			lado dela. O piso TEM de cobrir isso tudo — senão o jogador quebra a
-			parede, dá dois passos e cai no vazio (foi exatamente o que
-			aconteceu na primeira versão).
-		]]
-		local blockDepth = stage.Rows * layout.RowThickness + (stage.Rows - 1) * layout.RowGap
-		-- 72 e não 48: o pad de voltar fica a 48 do fim da barreira, e meio pad
-		-- pendurado na borda do piso é o mesmo que buraco.
-		local tailLength = blockDepth + 72
-		local segmentLength = length + tailLength
-
-		--[[
-			Piso em faixas: cada faixa é um passo da transição entre o tema
-			desta área e o da próxima. É o que dá a sensação de ir "entrando"
-			no ambiente seguinte em vez de atravessar uma porta de cor.
-		]]
-		local strips = math.max(math.floor(segmentLength / TILE_STUDS), 2)
-		local stripLength = segmentLength / strips
-		for strip = 0, strips - 1 do
-			local blend = strip / (strips - 1)
-			local centreX = areaStart + (strip + 0.5) * stripLength
-			local floorColor = shade(stage.Accent, 0.7):Lerp(shade(nextStage.Accent, 0.7), blend * 0.6)
-			block(
-				model,
-				CFrame.new(origin + Vector3.new(centreX, -layout.FloorThickness / 2, 0)),
-				-- +0.2 de sobreposição: faixas exatamente encostadas deixam
-				-- fresta por arredondamento, e fresta no chão é queda.
-				Vector3.new(stripLength + 0.2, layout.FloorThickness, width),
-				floorColor,
-				Enum.Material.Slate
-			)
-			-- Paredes laterais, com a mesma mistura.
-			local wallColor = shade(stage.Color, 0.55):Lerp(shade(nextStage.Color, 0.55), blend * 0.6)
-			for _, side in { -1, 1 } do
-				block(
-					model,
-					CFrame.new(origin + Vector3.new(
-						centreX,
-						layout.SideHeight / 2,
-						side * (half + layout.SideThickness / 2)
-					)),
-					Vector3.new(stripLength + 0.2, layout.SideHeight, layout.SideThickness),
-					wallColor,
-					stage.Material
-				)
-			end
-		end
-
-		-- Postes na cor do próximo tema: a pista visual de que há algo adiante.
-		local lamps = math.max(math.floor(length / layout.LampSpacing), 1)
-		for lamp = 1, lamps do
-			local lampX = areaStart + lamp * (length / (lamps + 1))
-			for _, side in { -1, 1 } do
-				local base = origin + Vector3.new(lampX, 0, side * (half - 4))
-				block(model, CFrame.new(base + Vector3.new(0, layout.LampHeight / 2, 0)), Vector3.new(1.2, layout.LampHeight, 1.2), palette.Rim, Enum.Material.Metal, false)
-				local bulb = ball(model, base + Vector3.new(0, layout.LampHeight + 1, 0), 3, nextStage.Accent, Enum.Material.Neon, false)
-				bulb.Name = "CorridorLamp"
-				light(bulb, nextStage.Accent, 26, 1.6)
-			end
-		end
-
-		-- (A placa flutuante permanente "Estágio N — Nome" saiu: o nome está na
-		-- placa de HP presa à barreira e o estágio se apresenta por ~1,5 s ao
-		-- entrar na área — CorridorHudController.)
+		-- Piso, paredes, silhueta e transição deste trecho (PowerPath). Os
+		-- postes com PointLight e as faixas de cor saíram: o ritmo agora é
+		-- dado por paredes em alturas diferentes, pilares e a faixa central.
+		PowerPath.BuildStage(model, origin, segment)
 
 		--[[
 			A barreira fecha o fim da área: várias fileiras do mesmo material,
@@ -1678,9 +1645,8 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 			part:SetAttribute("MaxHp", stage.Hp)
 			part:SetAttribute("Hp", stage.Hp)
 			part:SetAttribute("Rows", stage.Rows)
-			if stage.Neon then
-				light(part, stage.Accent, 24, 1.2)
-			end
+			-- (Sem PointLight por fileira: o material Neon dos estágios de
+			-- energia já brilha; eram 29 luzes só nas barreiras.)
 			barrierDetails(part, stage, layout.RowThickness)
 		end
 
@@ -1708,7 +1674,7 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 		light(lintel, stage.Accent, 30, 1.4)
 
 		-- Pads de vitória logo depois da barreira, já na entrada da próxima área.
-		local padX = areaEnd + blockDepth + 24
+		local padX = segment.PadsX
 		local count = #stage.Pads
 		for padIndex, amount in stage.Pads do
 			local offsetZ = (padIndex - (count + 1) / 2) * layout.PadSpacing
@@ -1733,7 +1699,7 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 		local returnPad = makePart(model, {
 			Name = "ReturnPad_" .. stage.Id,
 			Size = Vector3.new(layout.PadSize, 1, layout.PadSize),
-			CFrame = CFrame.new(origin + Vector3.new(padX + layout.ReturnPadInset, 0.5, half - layout.PadSize)),
+			CFrame = CFrame.new(origin + Vector3.new(segment.ReturnX, 0.5, half - layout.PadSize)),
 			Color = Color3.fromRGB(235, 80, 80),
 			Material = Enum.Material.Neon,
 			CanCollide = false,
@@ -1743,7 +1709,7 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 		returnPad:SetAttribute("Return", true)
 		billboard(returnPad, Text.Get("wall.padReturn"), Color3.fromRGB(235, 80, 80), 6)
 
-		cursor = areaStart + segmentLength
+		local cursor = segment.End
 
 		--[[
 			Fim da primeira jornada: depois da décima barreira, uma área aberta
@@ -1751,30 +1717,10 @@ local function buildCorridor(model: Model, origin: Vector3, palette: Palette)
 			teleporte vazio que engole o jogador seria pior que portal nenhum.
 		]]
 		if isFinal then
-			local plazaLength = 120
-			for strip = 0, 5 do
-				block(
-					model,
-					CFrame.new(origin + Vector3.new(cursor + (strip + 0.5) * (plazaLength / 6), -layout.FloorThickness / 2, 0)),
-					Vector3.new(plazaLength / 6 + 0.2, layout.FloorThickness, width),
-					shade(stage.Accent, 0.6),
-					Enum.Material.Marble
-				)
-			end
-			-- Paredes da praça final, para ela não ser uma varanda sem beirada.
-			for _, side in { -1, 1 } do
-				block(
-					model,
-					CFrame.new(origin + Vector3.new(
-						cursor + plazaLength / 2,
-						layout.SideHeight / 2,
-						side * (half + layout.SideThickness / 2)
-					)),
-					Vector3.new(plazaLength, layout.SideHeight, layout.SideThickness),
-					shade(stage.Color, 0.5),
-					stage.Material
-				)
-			end
+			local plazaLength = CorridorLayout.FINAL_PLAZA
+			-- Piso e paredes da praça final: mesma fundação, faixa central até
+			-- o portal (PowerPath.BuildFinal).
+			PowerPath.BuildFinal(model, origin)
 			--[[
 				CONTENÇÃO DO FIM. Antes a praça final terminava no vazio: dava
 				para andar além do portal e cair. Agora o fundo é um MACIÇO do
@@ -2119,15 +2065,26 @@ local DECORATORS: { [string]: (Model, Vector3, Random) -> () } = {
 	CastShadow = false — it is scenery, and scenery must not cost physics or
 	shadows on a phone.
 ]]
-local function decorateSky(model: Model, origin: Vector3, palette: Palette, rng: Random)
+local function decorateSky(model: Model, origin: Vector3, palette: Palette, rng: Random, hasCorridor: boolean)
 	local decoration = LobbyConfig.Decoration
 
 	for index = 1, decoration.FloatingIslands do
 		local angle = (index - 1) / decoration.FloatingIslands * math.pi * 2 + rng:NextNumber(-0.3, 0.3)
 		local radius = rng:NextNumber(decoration.IslandMinRadius, decoration.IslandMaxRadius)
 		local height = decoration.IslandHeight + rng:NextNumber(-30, 50)
-		local centre = origin + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
 		local size = rng:NextNumber(18, 34)
+		-- Fora do Caminho do Poder (com a copa da árvore): gira a ilha em volta
+		-- do centro até sair da faixa. Sem sorteio extra — o resto do céu e da
+		-- decoração continua igual.
+		if hasCorridor then
+			for _ = 1, 12 do
+				if not inCorridorBand(math.cos(angle) * radius, math.sin(angle) * radius, size + 12) then
+					break
+				end
+				angle += 0.3
+			end
+		end
+		local centre = origin + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
 		disc(model, centre, size, 5, palette.Ground, palette.GroundMaterial, false)
 		disc(model, centre - Vector3.new(0, 4, 0), size * 0.7, 9, palette.Rim, palette.RimMaterial, false)
 		if rng:NextNumber() < 0.7 then
@@ -2207,7 +2164,7 @@ function WorldBuilder.Build(world: WorldData, origin: Vector3, worldsFolder: Fol
 		buildTrainingMachines(model, origin, palette)
 		buildCorridor(model, origin, palette)
 	end
-	decorateSky(model, origin, palette, rng)
+	decorateSky(model, origin, palette, rng, hasCorridor)
 	local decorate = DECORATORS[world.Id]
 	if decorate then
 		decorate(model, origin, rng)

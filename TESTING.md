@@ -347,3 +347,17 @@ PH.15. Celular: a placa não cobre o CLIQUE, o Auto, os recursos nem o personage
 
 Coberto fora do Studio: `lune run tools/lune/check_power_hud.luau` (projeção da câmera, uma placa por vez, A 20% / B 80%, rastro, <25%/<10%, quebra, respawn, título, faixa).
 
+### Caminho do Poder — Fase A: fundação (PA) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+PA.1. Do lobby, passar pelo portão: a faixa central de placas (o "Caminho") começa colada no portão, com uma soleira; nada de "caixa genérica" logo na entrada.
+PA.2. Andar da Barreira 1 até o portal em 3ª pessoa: as paredes sobem e descem por terço (não é mais uma linha reta), um pilar por terço de cada lado, capitéis no topo; a avenida continua larga (~80 studs entre pilares).
+PA.3. No último terço de cada área, a faixa e o piso já começam a mostrar o próximo estágio (ex.: fim da 2 com placas de gelo; fim da 8 com metal); depois da barreira, a zona de decisão já está no material do próximo — sem troca seca numa linha.
+PA.4. Zona de decisão: moldura rente ao chão em volta dos pads; +1, x2 e Voltar nos mesmos lugares de sempre; pisar em cada um faz o mesmo de antes (prêmio → praça; Voltar → praça sem prêmio; passar reto continua).
+PA.5. Nada no meio do caminho: correr colado na parede e no centro, com 1, 3 e o máximo de pets equipados — ninguém prende em pilar, borda ou moldura (as bordas da faixa e as molduras não têm colisão).
+PA.6. Barreira 1: nenhuma ilha flutuante sobre ela nem sobre o resto do corredor (olhar para cima em cada área).
+PA.7. Luz: o corredor ficou com 11 PointLights (arcos + portal). Conferir se alguma área ficou escura demais em 3ª pessoa; Neon dos estágios de energia (4, 6, 8, 9, 10) continua brilhando sem a luz por fileira.
+PA.8. Colosso (10): área maior e paredes mais altas; o portal continua inerte ("em breve"), sem teleporte.
+PA.9. Dois jogadores: A abre a Barreira 5, B não; A atravessa, B continua batendo na fileira inteira; pads de A funcionam, B não consegue passar sem quebrar.
+PA.10. Desempenho no celular: andar do portão ao portal sem queda perceptível de FPS (menos luzes que antes).
+
+Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` (10 trechos, piso plano e sem furo, safe lane, rota de avatar + pets, limites, transições, silhueta, barreiras/pads/portal intocados, decoração global fora, orçamento) e `python tools/render_power_path.py` (renders nas mesmas câmeras).
+

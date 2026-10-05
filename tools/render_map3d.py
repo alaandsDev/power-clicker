@@ -73,6 +73,46 @@ class Cam:
         x = d @ self.r; y = d @ self.u; z = d @ self.f
         return x, y, z
 
+def _split_near(parts, cam):
+    """
+    Blocos grandes que CRUZAM o plano da câmera saíam distorcidos ou sumiam
+    (a projeção corta pelo triângulo inteiro). Corta esses blocos em pedaços
+    menores ao longo dos eixos locais, e só os pedaços na frente são
+    desenhados. Só afeta o render; o mapa não muda.
+    """
+    out = []
+    for part in parts:
+        if part["s"] != "Block" or part.get("b"):
+            out.append(part)
+            continue
+        size = np.array(part["z"], float)
+        if size.max() < 8:
+            out.append(part)
+            continue
+        Rm = np.array(part["r"]).reshape(3, 3)
+        pos = np.array(part["p"], float)
+        corners = np.array([[sx, sy, sz] for sx in (-.5, .5) for sy in (-.5, .5) for sz in (-.5, .5)]) * size @ Rm + pos
+        depth = (corners - cam.eye) @ cam.f
+        if depth.min() >= 0.5 or depth.max() < 0.5:
+            out.append(part)
+            continue
+        counts = np.maximum(np.ceil(size / 4.0), 1).astype(int)
+        counts[1] = min(counts[1], 4)
+        piece = size / counts
+        for i in range(counts[0]):
+            for j in range(counts[1]):
+                for k in range(counts[2]):
+                    local = (np.array([i, j, k]) + 0.5) * piece - size / 2
+                    centre = local @ Rm + pos
+                    if (centre - cam.eye) @ cam.f < 0.5 - np.linalg.norm(piece):
+                        continue
+                    sub = dict(part)
+                    sub["p"] = centre.tolist()
+                    sub["z"] = piece.tolist()
+                    out.append(sub)
+    return out
+
+
 def render(parts, cam: Cam, out, title=None, show_text=True, ortho=None):
     img = np.zeros((H, W, 3))
     # sky gradient
@@ -82,6 +122,8 @@ def render(parts, cam: Cam, out, title=None, show_text=True, ortho=None):
     zbuf = np.full((H, W), np.inf)
     sun = np.array([0.4, 0.85, 0.3]); sun /= np.linalg.norm(sun)
     labels = []
+    if ortho is None:
+        parts = _split_near(parts, cam)
     for part in parts:
         if part.get("b") and show_text:
             labels.append(part)

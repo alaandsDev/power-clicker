@@ -8,8 +8,8 @@
 		[AreaStart ........ Barrier][fileiras][pads ... End]
 
 	Puro (sem Instance). O cliente usa para saber em que área o jogador
-	entrou (título temporário do estágio); o check_power_hud confere que
-	bate com as fileiras construídas.
+	entrou (título temporário do estágio); o WorldBuilder/PowerPath constrói
+	o corredor a partir daqui; check_power_hud e check_power_path conferem.
 ]]
 
 local Shared = script.Parent.Parent
@@ -18,11 +18,16 @@ local WallConfig = require(Shared.Config.WallConfig)
 export type Segment = {
 	Id: string,
 	Order: number,
+	Index: number,
 	AreaStart: number, -- começo da área temática
 	Barrier: number, -- face da primeira fileira
+	Depth: number, -- fileiras + vãos (a barreira ocupa [Barrier, Barrier + Depth])
+	PadsX: number, -- centro dos pads de vitória (zona de decisão)
+	ReturnX: number, -- centro do pad de voltar
 	End: number, -- fim do trecho (depois dos pads)
 	Height: number,
 	Width: number,
+	Final: boolean,
 }
 
 local CorridorLayout = {}
@@ -40,19 +45,33 @@ function CorridorLayout.Segments(): { Segment }
 		local scale = if index == #WallConfig.Stages then layout.FinalScale else 1
 		local length = layout.RoomLength * scale
 		local depth = stage.Rows * layout.RowThickness + (stage.Rows - 1) * layout.RowGap
+		local barrier = cursor + length
 		table.insert(list, {
 			Id = stage.Id,
 			Order = stage.Order,
+			Index = index,
 			AreaStart = cursor,
-			Barrier = cursor + length,
-			End = cursor + length + depth + 72,
+			Barrier = barrier,
+			Depth = depth,
+			PadsX = barrier + depth + 24,
+			ReturnX = barrier + depth + 24 + layout.ReturnPadInset,
+			End = barrier + depth + 72,
 			Height = layout.WallHeight * scale,
 			Width = layout.Width * scale,
+			Final = index == #WallConfig.Stages,
 		})
 		cursor += length + depth + 72
 	end
 	cache = list
 	return list
+end
+
+-- Praça final (depois do Colosso) até o portal: [FinalStart, FinalStart + FINAL_PLAZA].
+CorridorLayout.FINAL_PLAZA = 120
+
+function CorridorLayout.FinalStart(): number
+	local list = CorridorLayout.Segments()
+	return list[#list].End
 end
 
 -- O estágio cuja ÁREA (antes da barreira) contém `x` (relativo à origem).
