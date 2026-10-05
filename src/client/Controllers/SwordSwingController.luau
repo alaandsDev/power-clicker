@@ -25,10 +25,14 @@
 	camada (Transform → Offset) e avisa no Output. SwordDebug (só Studio)
 	mostra tudo no Output com [SwordRuntime] e num painel.
 
-	- Jogador local: golpe completo a cada hit (até ~9/s; um golpe novo
-	  continua da pose atual), no combo visual A→B→C (SwordSwing). Trocar de
-	  espada recomeça o combo no A. "Efeitos reduzidos" NÃO tira o golpe: é a
-	  informação básica de que você está atacando.
+	- Jogador local: HIT do jogo ≠ GOLPE visual. Cada hit chama Swing(); o
+	  golpe só começa se não há outro em curso (ou ele já está recuperando)
+	  — senão o hit fica como UMA intenção que encadeia o próximo golpe
+	  (SwordSwing.Request/Step). Segurando (9 hits/s) a espada faz ~3,8
+	  golpes legíveis por segundo no combo A→B→C; os hits, o dano, o Corte e
+	  o impacto continuam a cada hit, sem esperar a espada. Clique isolado:
+	  golpe na hora. Trocar de espada recomeça o combo no A. "Efeitos
+	  reduzidos" NÃO tira o golpe: é a informação básica de que você ataca.
 	- Outros jogadores perto (até REMOTE_DISTANCE): o servidor marca o atributo
 	  "SwingSeq" no jogador no máximo ~4 vezes por segundo enquanto ele clica
 	  (ClickService); aqui isso vira uma sequência curta de golpes no
@@ -270,13 +274,15 @@ local function panel(rig: SwordSwing.Rig?, at: number)
 		state = if rig.Active then "ATTACK" elseif rig.Armed >= 0.99 and rig.Idle > 0.5 then "STANCE" elseif rig.Armed > 0 then "CARRY" else "SEM ESPADA"
 	end
 	local text = string.format(
-		"RIG: %s\nJOINT: %s\nBACKEND: %s%s\nSTATE: %s\nCOMBO: %s\n%s",
+		"RIG: %s\nJOINT: %s\nBACKEND: %s%s\nSTATE: %s\nCOMBO: %s\nHITS %d / SWINGS %d\n%s",
 		if rig then rigTypeOf(rig.Character) else "-",
 		if rig then rig.Kind else "-",
 		if rig then rig.Backend else "-",
 		if rig and verify.Confirmed[rig.Backend] then " (CONFIRMADO)" elseif rig and verify.Failed[rig.Backend] then " (FALHOU)" else "",
 		state .. (if rig and rig.Minimal then " [TESTE MÍNIMO]" else ""),
 		if rig then rig.Variant else "-",
+		if rig then rig.Hits else 0,
+		if rig then rig.Swings else 0,
 		verify.Last
 	)
 	SwordDebug.Panel(Players.LocalPlayer:FindFirstChildOfClass("PlayerGui"), text)
@@ -366,10 +372,19 @@ local function refreshLocal(rig: SwordSwing.Rig): SwordSwing.Rig?
 	return rig
 end
 
+local function swingStarted(rig: SwordSwing.Rig, swordId: any, chained: boolean)
+	SwordDebug.Log(string.format("COMBO = %s%s | GameplayHits %d | VisualSwings %d%s", rig.Variant, if chained then " (encadeado)" else "", rig.Hits, rig.Swings, if rig.Minimal then " (teste mínimo: braço sobe e volta)" else ""))
+	setTrail(rig.Character, swordId, true)
+	SwordTrail.Emphasis(rig.Character, SwordSwing.IsFinisher(rig.Variant))
+end
+
 --[[
-	Golpe do jogador local AGORA. Devolve (segundos até o impacto, variação);
-	sem rig (personagem montando) devolve (0, nil). O chamador desenha o
-	corte nesse momento, inclinado como o golpe.
+	Um HIT do jogador local. Devolve (segundos até o impacto, variação): se
+	um golpe começou agora, o impacto é o dele; se o hit chegou no meio de
+	um golpe (vira a intenção do próximo), (mesmo atraso, golpe atual) — o
+	chamador desenha o corte/impacto do hit com o atraso de sempre, na
+	direção do golpe em curso.
+	Sem rig (personagem montando) devolve (0, nil). O hit nunca espera.
 ]]
 function SwordSwingController.Swing(): (number, SwordSwing.Variant?)
 	local rig = localRig
@@ -378,12 +393,26 @@ function SwordSwingController.Swing(): (number, SwordSwing.Variant?)
 		return 0, nil
 	end
 	rig.Minimal = SwordDebug.Minimal()
-	local variant, impact = SwordSwing.Start(rig, now())
-	SwordDebug.Log("HIT VISUAL RECEBIDO")
-	SwordDebug.Log("COMBO = " .. variant .. (if rig.Minimal then " (teste mínimo: braço sobe e volta)" else ""))
-	setTrail(rig.Character, Players.LocalPlayer:GetAttribute("EquippedSword"), true)
-	SwordTrail.Emphasis(rig.Character, SwordSwing.IsFinisher(variant))
+	local started, variant, impact = SwordSwing.Request(rig, now())
+	-- Log por GOLPE (não por hit): segurando, ~4 linhas/s no Output do
+	-- Studio em vez de 9; fora do Studio o SwordDebug não escreve nada.
+	if started then
+		SwordDebug.Log("HIT VISUAL RECEBIDO")
+		swingStarted(rig, Players.LocalPlayer:GetAttribute("EquippedSword"), false)
+	end
 	return impact, variant
+end
+
+-- Para o debug e os testes: hits do jogo x golpes visuais do rig local.
+function SwordSwingController.Stats(): { GameplayHits: number, VisualSwings: number, CurrentCombo: string, Backend: string, RigType: string }
+	local rig = localRig
+	return {
+		GameplayHits = if rig then rig.Hits else 0,
+		VisualSwings = if rig then rig.Swings else 0,
+		CurrentCombo = if rig then rig.Variant else "-",
+		Backend = if rig then rig.Backend else "-",
+		RigType = if rig then rigTypeOf(rig.Character) else "-",
+	}
 end
 
 --[[
@@ -510,7 +539,14 @@ local function stepRig(rig: SwordSwing.Rig, at: number, dt: number, swordId: any
 	-- Teste mínimo: sem postura (só o golpe "sobe e volta").
 	SwordSwing.Settle(rig, at, dt, armed and not minimal, moving, bladeLength(blade))
 	local wasActive = rig.Active
-	local swinging = SwordSwing.Step(rig, at)
+	local swinging, chained = SwordSwing.Step(rig, at)
+	if chained then
+		if rig == localRig then
+			swingStarted(rig, swordId, true)
+		else
+			SwordTrail.Emphasis(character, SwordSwing.IsFinisher(rig.Variant))
+		end
+	end
 	if swinging or wasActive then
 		setTrail(character, swordId, swinging)
 	end
@@ -567,8 +603,11 @@ function SwordSwingController.Step(at: number)
 		if remoteRig then
 			if at < remote.BurstUntil and at >= remote.NextAt then
 				remote.NextAt = at + REMOTE_SWING_SPACING
-				local variant = SwordSwing.Start(remoteRig, at)
-				SwordTrail.Emphasis(remoteRig.Character, SwordSwing.IsFinisher(variant))
+				-- Mesmo limitador do jogador local: nada de golpe a cada sinal.
+				local started, variant = SwordSwing.Request(remoteRig, at)
+				if started then
+					SwordTrail.Emphasis(remoteRig.Character, SwordSwing.IsFinisher(variant))
+				end
 			end
 			stepRig(remoteRig, at, dt, player:GetAttribute("EquippedSword"), false)
 		end

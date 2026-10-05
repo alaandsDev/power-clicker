@@ -309,6 +309,7 @@ CameraFx.Shake = function(level)
 end
 
 local Wall = E.require(E.Client.Controllers.WallController)
+local SwordSwing = E.require(E.Client.Effects.SwordSwing)
 local Swing = E.require(E.Client.Controllers.SwordSwingController)
 local Slash = E.require(E.Client.Controllers.SlashController)
 local Combat = E.require(E.Client.Controllers.CombatFxController)
@@ -410,7 +411,7 @@ serverHit(perClick)
 frames(0.12)
 check(#cutPlays >= 1 and #impacts == 1, "1. CORTE e IMPACTO aparecem para o hit")
 check(math.abs(cutPlays[#cutPlays].At - impacts[1].At) < 1e-9, "1. corte e impacto no MESMO instante")
-local impactDelay = rig.Duration * 0.4
+local impactDelay = rig.Duration * SwordSwing.IMPACT
 check(math.abs((impacts[1].At - clickAt) - impactDelay) <= 1 / 60 + 1e-6, string.format("1. no impacto do golpe (%.3f s depois do clique)", impacts[1].At - clickAt))
 local woodRow = rows.Wood[1]
 local face = woodRow.CFrame.Position.X - woodRow.Size.X / 2
@@ -567,7 +568,7 @@ settings.ShowFloatingNumbers = false
 frames(1)
 Slash.Play()
 serverHit(3)
-frames(0.1)
+frames(0.15) -- passa do impacto do golpe (0,11 s): o número apareceria aqui
 check(DamageNumbers.Visible(numbers) == 0, "7. com \"Mostrar números\" desligado, nenhum número")
 settings.ShowFloatingNumbers = true
 

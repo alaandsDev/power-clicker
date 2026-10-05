@@ -23,10 +23,16 @@
 	Corte = poder, skin = aparência. Dano: nenhum número passa por aqui.
 
 	Auto Click: enquanto o servidor diz que está ligado (atributo
-	"AutoClickOn"), o personagem golpeia no MESMO ritmo dos ticks do
-	servidor (EconomyConfig.AutoClick.TicksPerSecond), seguindo o mesmo
-	combo. Só visual: os ticks de verdade continuam no servidor. Se o
-	jogador está clicando, os golpes manuais já mostram o ataque.
+	"AutoClickOn"), um hit visual por tick do servidor
+	(EconomyConfig.AutoClick.TicksPerSecond), seguindo o mesmo combo. Só
+	visual: os ticks de verdade continuam no servidor. Se o jogador está
+	clicando, os hits manuais já mostram o ataque.
+
+	Hit x golpe: cada hit (clique, segurar, Auto) chama Swing(), mas a
+	ESPADA tem ritmo visual próprio (SwordSwing: ~3,8 golpes/s no máximo,
+	uma intenção guardada, nunca fila). Arco/Corte/impacto continuam por
+	hit (com os próprios limites abaixo), no impacto do golpe que começa ou
+	na hora, na direção do golpe em curso.
 ]]
 
 local Players = game:GetService("Players")

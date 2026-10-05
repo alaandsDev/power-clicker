@@ -29,6 +29,12 @@
 	     desequipar, trocar de espada); lâminas grandes não tocam o chão
 	     (modelo no plano do corpo, toda skin do SwordConfig); R6 e Joint
 	     Upgrade também; respawn começa limpo; outros jogadores perto também.
+	  H. HIT DO JOGO x GOLPE VISUAL: o ritmo real (segurar 9/s, Auto 4/s)
+	     não muda; segurando 10 s = mesmos hits, 30–40 golpes visuais;
+	     nenhuma fila (no máximo 1 intenção); clique único imediato; spam
+	     irregular sem cortar golpe no meio; Auto Click com o mesmo
+	     limitador; o CORPO participa (tronco, braço esquerdo, cabeça
+	     medidos nas partes); pernas nunca; golpe andando.
 	  K. COMBO VISUAL de 3 golpes: A, B, C e volta ao A; spam a 9/s e Auto
 	     Click (no ritmo do servidor) seguem o ciclo; o Corte segue a
 	     direção (A "/", B "\\", C vertical) e o sentido de varrer; o C não
@@ -285,6 +291,8 @@ local function solve()
 		end
 	end
 end
+-- Ganchos chamados a cada quadro (o rastreador de golpes VISUAIS, abaixo).
+local hooks = {}
 local function renderStep()
 	animate()
 	preSim()
@@ -297,6 +305,9 @@ local function renderStep()
 	end
 	solve()
 	postSim()
+	if hooks.after then
+		hooks.after()
+	end
 end
 -- Orientação efetiva da articulação (onde a parte 1 fica em relação à 0).
 local function fr(j)
@@ -427,11 +438,11 @@ frames(0.03)
 check(not same(fr(joints(character).Shoulder), base.Shoulder) and not same(fr(joints(character).Elbow), base.Elbow), "1. braço e espada saem da pose de segurar (ombro e cotovelo se movem)")
 
 -- 7. Corte no impacto, na diagonal do golpe.
-frames(0.25)
+frames(0.3)
 local rig = Swing.LocalRig()
 local impact = rig.Duration * SwordSwing.IMPACT
 check(#cutPlays == 1, "7. o corte (CutFx) foi desenhado uma vez para o hit")
-check(rig.Duration >= 0.20 and rig.Duration <= 0.26, string.format("golpe isolado legível (%.2f s, entre 0,20 e 0,26; no spam vira 0,12)", rig.Duration))
+check(rig.Duration >= 0.22 and rig.Duration <= 0.32, string.format("golpe legível: preparação → corte → impacto → recuperação em %.2f s (0,22–0,32), o MESMO isolado ou segurando", rig.Duration))
 check(math.abs((cutPlays[1].At - 1000) - impact) <= 1 / 60 + 1e-6, string.format("7. o corte aparece no IMPACTO do golpe (%.3f s depois do clique; impacto em %.3f s)", cutPlays[1].At - 1000, impact))
 check(cutPlays[1].CutId == "Cut4", "7. o corte desenhado é o do melhor Corte (CutVisuals), não o da espada")
 -- Roll do CutFx = inclinação do golpe - 45 (o risco único do Corte já nasce a 45°).
@@ -472,11 +483,11 @@ while now - t0 < 30 do
 	runDelayed()
 	maxActive = math.max(maxActive, if Swing.LocalRig().Active then 1 else 0)
 end
-frames(0.3)
+frames(0.7) -- o golpe em curso + a intenção guardada terminam
 check(hits >= 268, string.format("2. %d hits em 30 s (~9/s)", hits))
 check(countInstances() == before, string.format("2. nenhuma instância acumulando (%d antes, %d depois)", before, countInstances()))
 check(countKind("Animation") == 0 and countKind("Animator") == 0, "2. nenhuma Animation/AnimationTrack criada (golpe procedural)")
-check(Swing.LocalRig().Duration == SwordSwing.FAST_SECONDS, "2. em spam o golpe usa a versão curta (" .. SwordSwing.FAST_SECONDS .. " s)")
+check(Swing.LocalRig().Duration == SwordSwing.SWING_SECONDS, "2. segurando, o golpe NÃO encurta (" .. SwordSwing.SWING_SECONDS .. " s): nada de micro-golpe")
 check(atRest(character, base, Swing.LocalRig()), "2/4. depois do spam, o corpo volta exatamente para a postura")
 
 -- 8. Efeitos reduzidos: sem arco/corte, com golpe.
@@ -555,6 +566,22 @@ do
 		frames(0.3)
 	end
 	check(table.concat(cycle) == "ABCA", "K13. R6: combo A→B→C→A (" .. table.concat(cycle) .. ")")
+
+	-- Segurando 3 s (9 hits/s): o mesmo limitador visual neste rig.
+	do
+		local rigX = Swing.LocalRig()
+		local h0, s0 = rigX.Hits, rigX.Swings
+		local t0x, nextX = now, now
+		while now - t0x < 3 do
+			if now >= nextX then
+				Slash.Play()
+				nextX += 1 / 9
+			end
+			frames(1 / 60)
+		end
+		frames(0.8)
+		check(rigX.Hits - h0 >= 26 and rigX.Swings - s0 >= 9 and rigX.Swings - s0 <= 13 and same(fr(shoulder), base), string.format("H11. R6: segurando 3 s = %d hits e %d golpes visuais; depois volta exatamente ao original", rigX.Hits - h0, rigX.Swings - s0))
+	end
 end
 do
 	local upgraded = Instance.new("Model")
@@ -589,6 +616,22 @@ do
 		frames(0.3)
 	end
 	check(table.concat(cycle) == "ABCA", "K15. Joint Upgrade: combo A→B→C→A (" .. table.concat(cycle) .. ")")
+
+	-- Segurando 3 s (9 hits/s): o mesmo limitador visual neste rig.
+	do
+		local rigX = Swing.LocalRig()
+		local h0, s0 = rigX.Hits, rigX.Swings
+		local t0x, nextX = now, now
+		while now - t0x < 3 do
+			if now >= nextX then
+				Slash.Play()
+				nextX += 1 / 9
+			end
+			frames(1 / 60)
+		end
+		frames(0.8)
+		check(rigX.Hits - h0 >= 26 and rigX.Swings - s0 >= 9 and rigX.Swings - s0 <= 13 and same(fr(constraint), base), string.format("H11. Avatar Joint Upgrade: segurando 3 s = %d hits e %d golpes visuais; depois volta exatamente ao original", rigX.Hits - h0, rigX.Swings - s0))
+	end
 end
 do
 	local fresh = newCharacter("Local")
@@ -705,7 +748,7 @@ do
 	end
 	Slash.Play()
 	local swingVariant = rigP.Variant
-	frames(0.3)
+	frames(0.35)
 	check(atRest(me, meBase, rigP), "P6. IDLE → golpe " .. swingVariant .. " → IDLE: de volta à postura")
 	-- Golpe tem prioridade: durante o golpe a pose é a do golpe, não a postura.
 	Slash.Play()
@@ -800,7 +843,7 @@ do
 	check(r6rig and not r6rig.HasWrist and not same(fr(rs), rsBase) and not same(fr(ls), lsBase) and same(fr(neck), neckBase), "P11. R6: postura nos dois ombros (sem cotovelo/punho; pescoço fica com o Roblox)")
 	check(r6rig and SwordSwing.SwordPitch(r6rig.Rest) >= 80 and SwordSwing.SwordPitch(r6rig.Rest) <= 110 and (fr(rs).Position - rsBase.Position).Magnitude < 1e-6, string.format("P11. R6: espada baixa só pelo ombro (%.0f°), sem sair do lugar", if r6rig then SwordSwing.SwordPitch(r6rig.Rest) else 0))
 	Slash.Play()
-	frames(0.3)
+	frames(0.35)
 	check(r6rig and not r6rig.Active and close(fr(rs), SwordSwing.Target("Shoulder", rsBase, animValue(rs), r6rig.Rest.Shoulder, r6rig.Own)), "P11. R6: golpe → volta para a postura")
 
 	local upgraded = Instance.new("Model")
@@ -868,6 +911,22 @@ do
 		table.insert(swings, { At = now, Variant = variant })
 		return impact, variant
 	end
+	-- Golpes VISUAIS (o que a espada faz), separados dos hits (Swing()).
+	local visual = {}
+	local visualRig, visualCount = nil, 0
+	hooks.after = function()
+		local r = Swing.LocalRig()
+		if not r then
+			return
+		end
+		if r ~= visualRig then
+			visualRig, visualCount = r, 0
+		end
+		if r.Swings > visualCount then
+			visualCount = r.Swings
+			table.insert(visual, { At = now, Variant = r.Variant })
+		end
+	end
 	local function seqOf(list, from)
 		local out = {}
 		for index = from or 1, #list do
@@ -919,6 +978,7 @@ do
 	-- K5: spam a 9/s segue o ciclo, sem voltar à postura entre hits.
 	frames(1.5)
 	mark = #swings
+	local vmark = #visual
 	local nextHit = now
 	local t0 = now
 	local idleBetween = false
@@ -934,8 +994,8 @@ do
 			idleBetween = true
 		end
 	end
-	local spam = seqOf(swings, mark + 1)
-	check(#spam >= 26 and spam == string.rep("ABC", math.floor(#spam / 3)) .. string.sub("ABC", 1, #spam % 3), "K5. spam a 9 hits/s: ciclo A-B-C sem quebrar (" .. #spam .. " golpes)")
+	local spam = seqOf(visual, vmark + 1)
+	check(#swings - mark >= 26 and #spam >= 9 and #spam <= 14 and spam == string.rep("ABC", math.floor(#spam / 3)) .. string.sub("ABC", 1, #spam % 3), string.format("K5. spam a 9 hits/s: %d hits, %d golpes VISUAIS em 3 s no ciclo A-B-C sem quebrar (%s)", #swings - mark, #spam, spam))
 	check(not idleBetween, "K5. hits contínuos: IDLE → A → B → C sem voltar à postura entre os hits")
 	check(#impactsK > 0 and impactsK[#impactsK].Variant ~= nil, "K18. o impacto recebe o golpe do combo (para deslocar o ponto do efeito)")
 	frames(0.5)
@@ -956,9 +1016,9 @@ do
 	frames(0.3)
 	check(seqOf(swings, mark + 4) == "BC", "K10. pausa curta (< 1,2 s) continua o combo")
 
-	-- K12: trocar de espada → A.
+	-- K12: trocar de espada → A (mesmo com um hit chegando no meio do golpe).
 	frames(1.5)
-	mark = #swings
+	local vmark12 = #visual
 	Slash.Play()
 	frames(0.3)
 	Slash.Play()
@@ -967,8 +1027,8 @@ do
 	newTool(5.4).Parent = me
 	frames(0.1)
 	Slash.Play()
-	frames(0.3)
-	check(seqOf(swings, mark + 1) == "ABA", "K12. trocar de espada recomeça o combo no A (" .. seqOf(swings, mark + 1) .. ")")
+	frames(0.4)
+	check(seqOf(visual, vmark12 + 1) == "ABA", "K12. trocar de espada recomeça o combo no A (" .. seqOf(visual, vmark12 + 1) .. ")")
 	blade = me.CutBlade.Blade
 
 	-- K16: Efeitos reduzidos: o movimento A-B-C continua; arco/corte não.
@@ -994,6 +1054,7 @@ do
 	frames(1.5)
 	attributes.AutoClickOn = true
 	mark = #swings
+	local vauto = #visual
 	local beforeAuto = countInstances()
 	local autoStart = now
 	while now - autoStart < 30 do
@@ -1010,7 +1071,9 @@ do
 	local expectedAuto = math.floor(30 / tick)
 	check(math.abs(#auto - expectedAuto) <= 1, string.format("K6. Auto Click: %d golpes em 30 s (servidor: %d ticks/s)", #auto, EconomyConfig.AutoClick.TicksPerSecond))
 	check(worstGap <= 1 / 60 + 1e-6, string.format("K6. Auto Click: ritmo fixo de %.2f s (desvio máx. %.3f s)", tick, worstGap))
-	check(string.sub(auto, 1, 9) == "ABCABCABC" and auto == string.rep("ABC", math.floor(#auto / 3)) .. string.sub("ABC", 1, #auto % 3), "K6. Auto Click segue o ciclo A-B-C")
+	local autoVisual = seqOf(visual, vauto + 1)
+	check(string.sub(autoVisual, 1, 9) == "ABCABCABC" and autoVisual == string.rep("ABC", math.floor(#autoVisual / 3)) .. string.sub("ABC", 1, #autoVisual % 3), "K6. Auto Click: os golpes visuais seguem o ciclo A-B-C")
+	check(#autoVisual >= 100 and #autoVisual <= 120, string.format("K6/H9. Auto Click: %d hits e %d golpes VISUAIS em 30 s (%.1f/s; o mesmo limitador — nada de liquidificador)", #auto, #autoVisual, #autoVisual / 30))
 	check(countInstances() == beforeAuto and countKind("Animation") == 0, "K17. 30 s de Auto Click: nenhuma instância acumulando, nenhuma Animation")
 	-- Clicando com o Auto ligado: os golpes manuais mostram o ataque (o Auto não dobra).
 	mark = #swings
@@ -1062,6 +1125,209 @@ do
 	Slash.Play()
 	frames(0.3)
 	check(seqOf(swings, mark + 1) == "A", "K11/K14. respawn (R15): o combo recomeça no A")
+	check(Swing.LocalRig().Pending == nil and Swing.LocalRig().Count == 1, "K11. respawn: nenhuma intenção de golpe herdada do corpo anterior")
+
+	-- ── H. HIT DO JOGO x GOLPE VISUAL ─────────────────────────────────────────
+	local EconomyConfigH = E.require(E.Shared.Config.EconomyConfig)
+	local holdRate = EconomyConfigH.Click.HoldClicksPerSecond
+	check(holdRate == 9 and EconomyConfigH.AutoClick.TicksPerSecond == 4 and EconomyConfigH.Click.MaxClicksPerSecond == 20,
+		string.format("H1. ritmo REAL do jogo intocado: segurar = %d hits/s, Auto Click = %d/s, teto do servidor = %d/s", holdRate, EconomyConfigH.AutoClick.TicksPerSecond, EconomyConfigH.Click.MaxClicksPerSecond))
+	local clickSourceH = fs.readFile(E.Root .. "/src/client/Controllers/ClickController.luau")
+	check(string.find(clickSourceH, "local HOLD_INTERVAL = 1 / EconomyConfig.Click.HoldClicksPerSecond", 1, true) ~= nil and not string.find(clickSourceH, "SwordSwing", 1, true),
+		"H1. o clique não conhece a espada: o hit nunca espera o golpe (ClickController igual)")
+
+	-- H2–H3: segurar 10 s (9 hits/s com o jitter do ClickController).
+	frames(1.5)
+	local rigH = Swing.LocalRig()
+	local hitsBefore, swingsBefore = rigH.Hits, rigH.Swings
+	local impactsBefore, cutsBeforeH = #impactsK, #cutPlays
+	local vmarkH = #visual
+	-- Gerador determinístico (o Lune não tem Random).
+	local seed = 7
+	local rng = { NextNumber = function(_, lo, hi)
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		return lo + (hi - lo) * seed / 2147483648
+	end }
+	local holdStart = now
+	local nextHitH = now
+	local hitsH = 0
+	local maxPending = 0
+	local earliest = math.huge -- menor fração de golpe em que outro começou
+	local lastSwingAt = nil
+	while now - holdStart < 10 do
+		if now >= nextHitH then
+			Slash.Play()
+			hitsH += 1
+			nextHitH += 1 / holdRate + rng:NextNumber(-1, 1) * EconomyConfigH.Click.HoldJitterSeconds
+		end
+		local before, prevStart, prevActive = rigH.Swings, rigH.Started, rigH.Active
+		now += 1 / 60
+		renderStep()
+		runDelayed()
+		if rigH.Swings > before and lastSwingAt and prevActive then
+			earliest = math.min(earliest, (rigH.Started - prevStart) / rigH.Duration)
+		end
+		if rigH.Swings > before then
+			lastSwingAt = now
+		end
+		maxPending = math.max(maxPending, if rigH.Pending then 1 else 0)
+	end
+	local visualH = rigH.Swings - swingsBefore
+	check(rigH.Hits - hitsBefore == hitsH and hitsH >= 88 and hitsH <= 92, string.format("H2. segurando 10 s: %d hits do jogo (≈ %d/s, o MESMO de antes; cada um chega ao golpe)", hitsH, holdRate))
+	check(visualH >= 30 and visualH <= 40, string.format("H2. segurando 10 s: %d golpes VISUAIS (%.1f/s; alvo 3–4/s, não 90 micro-golpes)", visualH, visualH / 10))
+	check(earliest >= SwordSwing.CHAIN_AT - 1e-6, string.format("H5. nenhum golpe é cortado no meio: o próximo só começa na recuperação (≥ %.0f%% do golpe; menor visto %.0f%%)", SwordSwing.CHAIN_AT * 100, earliest * 100))
+	local holdSeq = seqOf(visual, vmarkH + 1)
+	check(holdSeq == string.rep("ABC", math.floor(#holdSeq / 3)) .. string.sub("ABC", 1, #holdSeq % 3), "H4. segurando: A → B → C → A legível (" .. string.sub(holdSeq, 1, 12) .. "...)")
+	-- Soltou: no máximo o golpe guardado; nenhuma fila.
+	local releasedAt = now
+	local swingsAtRelease = rigH.Swings
+	frames(1)
+	-- (Contado depois de soltar: o efeito do último hit sai no impacto dele.)
+	-- O Corte tem o próprio limite (CUT_MIN_INTERVAL, ~10/s): com o jitter do
+	-- segurar ele já desenhava ~64 de 91 hits ANTES desta mudança; não cai.
+	check(#impactsK - impactsBefore == hitsH and #cutPlays - cutsBeforeH >= 60, string.format("H2. impacto em CADA hit (%d) e Corte no limite próprio dele (%d; antes 64 de 91) — nada espera a espada", #impactsK - impactsBefore, #cutPlays - cutsBeforeH))
+	check(maxPending <= 1 and rigH.Swings - swingsAtRelease <= 1 and not rigH.Active and rigH.Pending == nil and (lastSwingAt or 0) <= releasedAt + SwordSwing.SWING_SECONDS,
+		string.format("H3. sem fila: ao soltar, no máximo 1 golpe guardado termina (%d) e o personagem para de bater sozinho", rigH.Swings - swingsAtRelease))
+	-- 9 hits no meio de UM golpe: continua 1 golpe só + 1 intenção.
+	frames(1.5)
+	local burstBefore = rigH.Swings
+	for _ = 1, 9 do
+		Slash.Play()
+	end
+	frames(SwordSwing.SWING_SECONDS * 2 + 0.2)
+	check(rigH.Swings - burstBefore == 2, string.format("H3. 9 hits dentro do mesmo golpe = %d golpes visuais (1 + a intenção), não 9", rigH.Swings - burstBefore))
+
+	-- H6: clique isolado é IMEDIATO, e A / B / C um por clique.
+	frames(1.5)
+	local singles = {}
+	for _ = 1, 3 do
+		local before = rigH.Swings
+		Slash.Play()
+		table.insert(singles, (if rigH.Swings == before + 1 and rigH.Active and SwordSwing.Progress(rigH, now) == 0 then rigH.Variant else "?"))
+		frames(0.6)
+	end
+	check(table.concat(singles) == "ABC", "H6. clique único: o golpe começa NO MESMO quadro (sem cooldown visual) — A, espera, B, espera, C (" .. table.concat(singles) .. ")")
+
+	-- H7: spam manual irregular (0,05–0,25 s): não quebra, não acumula.
+	frames(1.5)
+	local spamStart = now
+	local spamBefore = rigH.Swings
+	local vmarkS = #visual
+	local brokeMid = false
+	local nextSpam = now
+	while now - spamStart < 5 do
+		if now >= nextSpam then
+			-- Um hit no mesmo instante em que o golpe começa (o clique) é o
+			-- caminho de Swing(): mede a fração do golpe anterior também.
+			local prevStart, prevActive, before = rigH.Started, rigH.Active, rigH.Swings
+			Slash.Play()
+			if rigH.Swings > before and prevActive and (rigH.Started - prevStart) / rigH.Duration < SwordSwing.CHAIN_AT - 1e-6 then
+				brokeMid = true
+			end
+			nextSpam = now + rng:NextNumber(0.05, 0.25)
+		end
+		local before, prevStart, prevActive = rigH.Swings, rigH.Started, rigH.Active
+		now += 1 / 60
+		renderStep()
+		runDelayed()
+		if rigH.Swings > before and prevActive and (rigH.Started - prevStart) / rigH.Duration < SwordSwing.CHAIN_AT - 1e-6 then
+			brokeMid = true
+		end
+	end
+	frames(1)
+	local spamSeq = seqOf(visual, vmarkS + 1)
+	check(not brokeMid and rigH.Swings - spamBefore <= 21 and spamSeq == string.rep("ABC", math.floor(#spamSeq / 3)) .. string.sub("ABC", 1, #spamSeq % 3) and not rigH.Active,
+		string.format("H7. spam manual irregular 5 s: %d golpes, nenhum interrompido no meio, ciclo A-B-C, para ao parar", rigH.Swings - spamBefore))
+
+	-- H8: o CORPO participa (medido nas partes resolvidas, não no Transform).
+	frames(1.5)
+	local function relTo(a, b)
+		local body = localPlayer.Character
+		return body[a].CFrame:ToObjectSpace(body[b].CFrame)
+	end
+	local restTorso = relTo("LowerTorso", "UpperTorso")
+	local restLeft = relTo("UpperTorso", "LeftUpperArm")
+	local restHead = relTo("LowerTorso", "Head")
+	local restNeck = relTo("UpperTorso", "Head")
+	local restHand = relTo("UpperTorso", "RightHand")
+	local body = {}
+	for _ = 1, 3 do
+		Slash.Play()
+		local variant = rigH.Variant
+		local peak = { Torso = 0, Left = 0, Head = 0, Neck = 0, Hand = 0, TorsoWindup = nil, TorsoStrike = nil }
+		local windupAt = rigH.Duration * SwordSwing.WINDUP_END
+		local strikeAt = rigH.Duration * SwordSwing.STRIKE_END
+		local t0b = now
+		while now - t0b < rigH.Duration do
+			frames(1 / 60)
+			local torso = relTo("LowerTorso", "UpperTorso")
+			peak.Torso = math.max(peak.Torso, angle(torso, restTorso))
+			peak.Left = math.max(peak.Left, angle(relTo("UpperTorso", "LeftUpperArm"), restLeft))
+			peak.Head = math.max(peak.Head, angle(relTo("LowerTorso", "Head"), restHead))
+			peak.Neck = math.max(peak.Neck, angle(relTo("UpperTorso", "Head"), restNeck))
+			peak.Hand = math.max(peak.Hand, angle(relTo("UpperTorso", "RightHand"), restHand))
+			if not peak.TorsoWindup and now - t0b >= windupAt then
+				peak.TorsoWindup = torso
+			end
+			if not peak.TorsoStrike and now - t0b >= strikeAt then
+				peak.TorsoStrike = torso
+			end
+		end
+		body[variant] = peak
+		frames(0.4)
+	end
+	local okBody = true
+	local lines = {}
+	for _, v in { "A", "B", "C" } do
+		local b = body[v]
+		if not b or b.Torso < 8 or b.Torso > 20 or b.Left < 10 or b.Neck < 4 or b.Head < 2 or b.Head > 9 or b.Hand < 60 or b.Hand < b.Torso * 2 then
+			okBody = false
+		end
+		if b then
+			table.insert(lines, string.format("%s: mão %.0f°, tronco %.0f°, braço esq. %.0f°, cabeça %.0f° (no pescoço %.0f°)", v, b.Hand, b.Torso, b.Left, b.Head, b.Neck))
+		end
+	end
+	check(okBody, "H8. o corpo participa em A/B/C: tronco 8–20°, braço esquerdo ≥ 10°, cabeça segue só um pouco (2–9° em relação ao quadril); o braço continua o protagonista — " .. table.concat(lines, "; "))
+	-- Direção do tronco: A gira para a esquerda no corte, B para a direita; C desce para frente.
+	local function yawOf(cf)
+		local look = cf.LookVector
+		return math.deg(math.atan2(-look.X, -look.Z))
+	end
+	local function pitchOf(cf)
+		return math.deg(math.asin(math.clamp(cf.LookVector.Y, -1, 1)))
+	end
+	local a, b, c = body.A, body.B, body.C
+	check(a and b and c and yawOf(a.TorsoStrike) - yawOf(a.TorsoWindup) > 15 and yawOf(b.TorsoStrike) - yawOf(b.TorsoWindup) < -15 and pitchOf(c.TorsoStrike) < pitchOf(c.TorsoWindup) - 10,
+		string.format("H8. tronco acompanha o corte: A gira %.0f° (para a esquerda), B %.0f° (para a direita), C desce %.0f° para frente", yawOf(a.TorsoStrike) - yawOf(a.TorsoWindup), yawOf(b.TorsoStrike) - yawOf(b.TorsoWindup), pitchOf(c.TorsoWindup) - pitchOf(c.TorsoStrike)))
+	-- Pernas nunca: o rig não conhece quadril/joelho/raiz.
+	local legs = false
+	for key, names in SwordSwing.JOINT_NAMES do
+		for _, name in names do
+			if string.find(name, "Hip", 1, true) or string.find(name, "Knee", 1, true) or string.find(name, "Root", 1, true) or string.find(name, "Ankle", 1, true) then
+				legs = true
+			end
+		end
+	end
+	check(not legs, "H10. pernas e raiz ficam com a locomoção do Roblox (idle/andar/correr/pular): o golpe só usa tronco, ombros, braços e pescoço")
+	-- H10: golpe andando: tronco e braço participam por cima do "carregar".
+	local rootH = localPlayer.Character.HumanoidRootPart
+	for _ = 1, 60 do
+		now += 1 / 60
+		rootH.CFrame = rootH.CFrame + V3.new(16, 0, 0) / 60
+		renderStep()
+	end
+	local walkTorso = relTo("LowerTorso", "UpperTorso")
+	Slash.Play()
+	local walkPeak = 0
+	for _ = 1, math.floor(SwordSwing.SWING_SECONDS * 60) do
+		now += 1 / 60
+		rootH.CFrame = rootH.CFrame + V3.new(16, 0, 0) / 60
+		renderStep()
+		runDelayed()
+		walkPeak = math.max(walkPeak, angle(relTo("LowerTorso", "UpperTorso"), walkTorso))
+	end
+	check(rigH.Idle < 0.1 and walkPeak >= 8, string.format("H10. andando + golpe: o golpe sai por cima da locomoção (tronco %.0f°), sem parar de andar", walkPeak))
+	frames(1.5)
 
 	Swing.Swing = originalSwing
 	Combat.OnSwingImpact = originalImpactK
@@ -1097,11 +1363,12 @@ do
 	-- O braço da espada é dono da pose: sem toolnone (braço solto), a mesma.
 	local withToolnone = rel("RightHand")
 	toolnone = false
-	frames(0.3)
+	-- Um ciclo de respiração inteiro (3,6 s): compara na MESMA fase dela.
+	frames(3.6)
 	local withoutToolnone = rel("RightHand")
 	toolnone = true
 	frames(0.3)
-	check(SwordSwing.Angle(withToolnone, withoutToolnone) < 0.5, "R1. a postura sai IGUAL com ou sem o \"toolnone\" tocando (não depende da animação de base)")
+	check(SwordSwing.Angle(withToolnone, withoutToolnone) < 0.5, string.format("R1. a postura sai IGUAL com ou sem o \"toolnone\" tocando (não depende da animação de base; %.2f°)", SwordSwing.Angle(withToolnone, withoutToolnone)))
 	check(logged("POSE CONFIRMADA no personagem (backend Transform"), "R1. a verificação no PostSimulation confirmou que a pose chegou às partes")
 
 	-- A, B e C: a mão de verdade no meio do corte, em lugares diferentes.
@@ -1112,8 +1379,8 @@ do
 	for _, expected in { "A", "B", "C" } do
 		Slash.Play()
 		local variant = rigR.Variant
-		local windupAt = rigR.Duration * 0.25
-		local strikeAt = rigR.Duration * 0.55
+		local windupAt = rigR.Duration * SwordSwing.WINDUP_END
+		local strikeAt = rigR.Duration * SwordSwing.STRIKE_END
 		frames(windupAt)
 		local windup = rel("RightHand")
 		local widest = SwordSwing.Angle(windup, idleHand)
@@ -1257,6 +1524,6 @@ if #problems > 0 then
 	print(#problems .. " problema(s).")
 	process.exit(1)
 end
-print("OK: golpe da espada a cada hit, sincronizado com o corte, sem acumular nada.")
+print("OK: golpe da espada com ritmo visual próprio (hits do jogo intactos), corpo participando, sincronizado com o corte, sem acumular nada.")
 print("REQUER VALIDAÇÃO NO ROBLOX STUDIO: a pose real sobre o Animator, leitura em 3a pessoa e o rastro da lâmina.")
 process.exit(0)

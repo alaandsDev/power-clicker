@@ -401,3 +401,21 @@ PC.16. Celular: as 3 regiões reconhecíveis sem texto; nada cobre CLIQUE/Auto.
 PC.17. FPS: comparar com a Fase B no meio de cada área 4–6 (+107 peças, 0 luzes novas, 2 emissores novos com LOD, 0 loops novos).
 
 Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 10 (landmarks 1–6, molduras 1–6, transições 3→4, 4→5, 5→6 e calor do 7, Neon só como acento, cenário fora da safe lane / frente da barreira / fileiras / pads / câmera, estágios 7–10 sem cenário, orçamento por estágio e por fase, emissores ≤ 5 com um único controlador) e `python tools/render_power_path.py <json> <saida> <tag> C`.
+
+### Espada — ritmo visual e corpo no golpe (SW) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+Antes de começar: no Output, filtrar por `[SwordRuntime]` — cada golpe visual escreve `COMBO = X | GameplayHits N | VisualSwings M` (só no Studio); o painel de debug mostra `HITS n / SWINGS m`, RIG, BACKEND e COMBO.
+SW.1. SEGURAR o clique 10 s numa barreira (cronometrar): o número de hits/dano é o de antes (≈ 9/s; o HP cai no mesmo ritmo, a faixa "≈N golpes" não muda) e a espada faz ≈ 38 golpes VISUAIS legíveis (≈ 3,8/s): dá para ver preparação → corte → recuperação em cada um. Nada de braço tremendo.
+SW.2. Soltar o clique no meio: o personagem termina o golpe em curso (+ no máximo 1) e PARA — não continua batendo sozinho.
+SW.3. Clique único: o golpe A sai NA HORA (sem atraso). Esperar 1 s, clicar: B. Esperar, clicar: C. Esperar > 1,2 s, clicar: volta ao A.
+SW.4. Spam manual (cliques rápidos e irregulares): nenhum golpe é cortado no meio, nada acumula, A→B→C continua.
+SW.5. Auto Click ligado (sem clicar): os hits continuam a 4/s e a espada faz ≈ 3,8 golpes/s, em A→B→C — sem "liquidificador".
+SW.6. Corpo: em A o tronco gira um pouco acompanhando o corte (direita → esquerda) e o braço esquerdo abre; em B o contrário; no C o tronco sobe/recua e desce para frente, o braço esquerdo recolhe. A cabeça acompanha só de leve e continua olhando o alvo. Não pode parecer "manequim + braço".
+SW.7. Postura entre golpes: parado com a espada, a postura de combate (espada baixa, para o lado) — o braço não volta para o "braço reto" do Roblox entre os golpes.
+SW.8. Andar, correr e pular batendo: pernas/locomoção normais, o golpe sai por cima, nada trava nem quebra o braço.
+SW.9. Rastro (Trail) da lâmina: acompanha o golpe visual; segurando, não pisca 9 vezes por segundo.
+SW.10. CutFx/impacto: continuam aparecendo por hit (como antes). Avaliar se ~9 impactos/s + ~6–7 Cortes/s ficam exagerados contra 3,8 golpes/s (NÃO alterado nesta correção — só observar e reportar).
+SW.11. Respawn no meio do combo: o novo corpo começa no A, sem golpe herdado. Trocar de espada (skin) no meio: combo recomeça no A.
+SW.12. R15 normal, R15 com Avatar Joint Upgrade (AnimationConstraint) e R6: os três golpeiam com o mesmo ritmo; no R6 só os ombros participam (o R6 não tem cintura/pescoço separados — limitação conhecida).
+SW.13. Dois jogadores (Test > 2): o golpe do outro jogador por perto também sai no ritmo visual limitado (não a cada sinal).
+SW.14. Efeitos reduzidos: o golpe da espada e o corpo continuam; só arco/Corte somem (como antes).
+SW.15. Sem camera shake novo por golpe; o feedback de câmera continua o do CombatFx.
