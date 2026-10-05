@@ -60,6 +60,7 @@ local CONTROLLER_ORDER = {
 	"WorldAmbientController", -- per-world lighting (client only)
 	"StationFxController", -- lobby station machines: core spin, rings, rising arrows, technician
 	"TrainingFieldController", -- training field: padlock per player, dummies react to whoever trains
+	"RewardChestController", -- rewards chest glows when the daily reward can be claimed (same state as the menu badge)
 	"SpawnCameraController", -- aims the camera along the spawn marker after the server teleport
 	"InteractController", -- world stations (ProximityPrompts) open panels
 	"TutorialController", -- must come after every controller that adds menu buttons

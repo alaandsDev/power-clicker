@@ -1177,6 +1177,7 @@ local function buildAreas(model: Model, origin: Vector3, palette: Palette)
 						Local = station.Local,
 						Color = station.Color,
 						Label = string.format("%s %s", station.Icon, StationMachines.Upper(Text.GetFor(nil, station.NameKey))),
+						Flow = if station.Style == "RewardTotem" then "In" else "Out",
 					})
 				end
 			end

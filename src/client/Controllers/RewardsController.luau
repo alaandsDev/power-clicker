@@ -6,6 +6,8 @@
 	the server alone decides whether a claim is valid.
 ]]
 
+local Players = game:GetService("Players")
+
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = Shared:WaitForChild("Config")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
@@ -54,6 +56,12 @@ local function refresh()
 		Build.paint(claimButton, "BackgroundColor3", Theme.Colors.Disabled)
 	end
 	MenuController.SetBadge(menuButton, preview.CanClaim)
+	-- O mesmo estado do badge, para o baú da Central (RewardChestController).
+	-- Atributo do jogador LOCAL: não replica, não decide nada no servidor.
+	local player = Players.LocalPlayer
+	if player and player:GetAttribute("RewardReady") ~= preview.CanClaim then
+		player:SetAttribute("RewardReady", preview.CanClaim)
+	end
 end
 
 local function claim()

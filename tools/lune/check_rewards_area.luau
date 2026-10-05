@@ -71,7 +71,24 @@ local walkwayEnd = centre.Magnitude - area.Radius + 2
 local floorFront = centre.Magnitude - halfZ
 check(walkwayEnd >= floorFront, string.format("1. a calçada da praça chega no piso (termina a %.0f; piso começa a %.0f)", walkwayEnd, floorFront))
 local plaza = world:FindFirstChild("AdventurePlaza", true)
-check(plaza and plaza:FindFirstChild("PlazaMedallion") and #plaza:GetChildren() > 0, "1. centro com medalhão, caminhos e placa de direção")
+local cup = plaza and plaza:FindFirstChild("TrophyCup")
+local trophyTop = 0
+if plaza then
+	for _, d in plaza:GetDescendants() do
+		if d:IsA("BasePart") and string.sub(d.Name, 1, 6) == "Trophy" then
+			trophyTop = math.max(trophyTop, d.CFrame.Position.Y + d.Size.Y / 2)
+		end
+	end
+end
+check(plaza and plaza:FindFirstChild("PlazaMedallion") and plaza:FindFirstChild("TrophyPedestal") and cup and trophyTop > 4.5 and trophyTop < 7.5, string.format("1. centro: troféu num pedestal baixo encaixado no medalhão (topo %.1f studs: visível, sem tapar o mural nem o baú)", trophyTop))
+check(plaza and plaza:FindFirstChild("PlazaSignPost") == nil, "1. sem placa de direção redundante no fundo (o mural e o baú já dizem o que são)")
+local flows = 0
+for _, d in (plaza and plaza:GetChildren() or {}) do
+	if d.Name == "PlazaFlow" then
+		flows += 1
+	end
+end
+check(flows == 8, "1. setas douradas no piso: mural → troféu → baú")
 
 -- ── 2. Estações ─────────────────────────────────────────────────────────────
 local quests = world:FindFirstChild("Station_Quests_Machine", true)
@@ -207,7 +224,7 @@ for _, model in { quests, rewards, plaza } do
 		end
 	end
 end
-check(textsOk and guiCount >= 6, string.format("4. %d textos físicos (SurfaceGui), presos na estrutura, de frente para quem chega, sem nada na frente; nenhum BillboardGui nem luz", guiCount))
+check(textsOk and guiCount >= 4, string.format("4. %d textos físicos (SurfaceGui), presos na estrutura, de frente para quem chega, sem nada na frente; nenhum BillboardGui nem luz", guiCount))
 local function guiText(model, name)
 	local part = model:FindFirstChild(name, true)
 	local gui = part and part:FindFirstChildOfClass("SurfaceGui")
@@ -240,7 +257,8 @@ check(#intruders == 0, "5. nenhuma árvore, pedra ou objeto antigo sobre o piso 
 
 -- ── 6. Circulação ───────────────────────────────────────────────────────────
 local entrance = V3.new(centre.X, 3, centre.Z - halfZ - 1)
-local middle = V3.new(centre.X, 3, centre.Z - 2)
+-- "Centro" = de frente para o troféu (o pedestal é sólido).
+local middle = V3.new(centre.X, 3, centre.Z - 7.5)
 local exit = V3.new(centre.X, 3, centre.Z - halfZ - 1)
 local function walk(a, b)
 	for step = 0, 60 do
@@ -291,13 +309,22 @@ check(petOk, "6. pet seguindo o rastro ao lado do jogador (±1,5 stud) também p
 -- Centro livre: faixa de 16 studs no meio, da frente até o medalhão.
 local freeOk = true
 for x = -8, 8, 2 do
-	for z = -halfZ + 1, 6, 2 do
+	for z = -halfZ + 1, -7, 2 do
 		if blocked(V3.new(centre.X + x, 3, centre.Z + z)) then
 			freeOk = false
 		end
 	end
 end
-check(freeOk, "6. corredor central livre (16 studs de largura, da borda até depois do medalhão)")
+check(freeOk, "6. corredor central livre (16 studs de largura, da borda até a frente do troféu)")
+-- Volta ao redor do troféu (por trás também), com folga de avatar.
+local around = true
+for angle = 0, 330, 30 do
+	local p = V3.new(centre.X + math.cos(math.rad(angle)) * 4.6, 3, centre.Z + math.sin(math.rad(angle)) * 4.6)
+	if blocked(p) then
+		around = false
+	end
+end
+check(around, "6. dá para dar a volta no troféu (anel de 4,6 studs livre)")
 
 -- ── 7. Orçamento e restos ───────────────────────────────────────────────────
 local parts = 0
@@ -318,6 +345,69 @@ for _, d in world:GetDescendants() do
 	end
 end
 check(#leftovers == 0, "7. quiosques antigos (balcão, toldo, billboard) removidos " .. table.concat(leftovers, ","))
+
+-- ── 8. Baú: estado de prêmio (cliente) ─────────────────────────────────────
+do
+	local tagged = {}
+	for _, d in rewards:GetDescendants() do
+		if d:HasTag("StationReward") then
+			table.insert(tagged, d)
+		end
+	end
+	local Sig = { Connect = function()
+		return { Disconnect = function() end }
+	end }
+	E.stubs.CollectionService = {
+		GetTagged = function(_, tag)
+			return if tag == "StationReward" then tagged else {}
+		end,
+		GetInstanceAddedSignal = function()
+			return Sig
+		end,
+		GetInstanceRemovedSignal = function()
+			return Sig
+		end,
+	}
+	local attrs = {}
+	local player = { GetAttribute = function(_, k)
+		return attrs[k]
+	end }
+	E.stubs.Players = { LocalPlayer = player, GetPlayers = function()
+		return { player }
+	end }
+	local settings = { ReducedEffects = false }
+	E.stubModules["StarterPlayer.Client.Controllers.DataController"] = { Get = function(k)
+		return if k == "Settings" then settings else nil
+	end, Changed = Sig }
+	local camera = { CFrame = CF.new(rewards:FindFirstChild("Station_Rewards", true).CFrame.Position + V3.new(0, 4, -12)) }
+	E.stubs.Workspace = setmetatable({ CurrentCamera = camera }, { __index = E.Workspace })
+	local Fx = E.require(E.Client.Controllers.RewardChestController)
+	Fx.Init()
+	local glow = rewards:FindFirstChild("ChestGlow", true)
+	local bar = rewards:FindFirstChild("ChestMarkBar", true)
+	local sparkle = rewards:FindFirstChild("ChestSparkle", true)
+	if sparkle and not sparkle:IsA("ParticleEmitter") then
+		sparkle = sparkle:FindFirstChildWhichIsA("ParticleEmitter")
+	end
+	check(Fx.Count() == 4 and glow and bar and sparkle and not sparkle:HasTag("StationParticles"), "8. baú registra brilho, \"!\" (2 peças) e faíscas pela tag StationReward")
+	attrs.RewardReady = false
+	Fx.Step(10)
+	check(glow.Transparency >= 0.7 and bar.Transparency == 1 and not sparkle.Enabled, "8. sem prêmio: baú tranquilo (brilho quase apagado, sem \"!\", sem faíscas)")
+	attrs.RewardReady = true
+	Fx.Step(11)
+	check(glow.Transparency <= 0.35 and bar.Transparency == 0 and sparkle.Enabled, "8. prêmio disponível (mesmo CanClaim do badge do menu): brilho dourado interno, \"!\" e poucas faíscas")
+	settings.ReducedEffects = true
+	Fx.Step(12.5)
+	check(not sparkle.Enabled and bar.Transparency == 0, "8. \"Efeitos reduzidos\": sem faíscas, o \"!\" continua")
+	settings.ReducedEffects = false
+	attrs.RewardReady = false
+	Fx.Step(14)
+	check(glow.Transparency >= 0.7 and bar.Transparency == 1 and not sparkle.Enabled, "8. pegou o prêmio: volta ao estado tranquilo")
+	local source = require("@lune/fs").readFile(E.Root .. "/src/client/Controllers/RewardChestController.luau")
+	check(not string.find(source, "FireServer", 1, true) and not string.find(source, "InvokeServer", 1, true) and not string.find(source, "DailyRewardLogic", 1, true) and not string.find(source, "task.wait", 1, true), "8. o baú não pede nada ao servidor e não recalcula o prêmio (lê o estado do RewardsController)")
+	local rc = require("@lune/fs").readFile(E.Root .. "/src/client/Controllers/RewardsController.luau")
+	check(string.find(rc, 'SetAttribute("RewardReady", preview.CanClaim)', 1, true) ~= nil, "8. RewardReady vem do MESMO preview.CanClaim que acende o badge do menu")
+end
 
 if #problems > 0 then
 	print(#problems .. " problema(s).")

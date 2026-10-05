@@ -58,6 +58,7 @@ StationMachines.TAG_HOLO = "StationHolo" -- holograma (BillboardGui) que flutua 
 StationMachines.TAG_ENGAGE = "StationEngage" -- ponto de uso (jogador perto = a estação "acorda")
 StationMachines.TAG_RISE = "StationRise" -- emissor: poucos idle, mais com o jogador perto (IdleRate/EngagedRate)
 StationMachines.TAG_BURST = "StationBurst" -- emissor: rajada local quando o jogador renasce de verdade
+StationMachines.TAG_REWARD = "StationReward" -- baú de Prêmios: Role Glow / Mark / Sparkle, aceso só com prêmio disponível (cliente)
 
 export type Theme = {
 	Stone: Color3,
@@ -1577,9 +1578,14 @@ function StationMachines.BuildQuestBoard(parent: Instance, base: CFrame, panel: 
 	local Wood, Slate, Metal = Enum.Material.Wood, Enum.Material.Slate, Enum.Material.Metal
 	local floorTop = 0.6
 	for _, side in { -1, 1 } do
-		piece(kit, "BoardFooting", Vector3.new(1.8, 1.0, 1.8), CFrame.new(side * 5.6, floorTop + 0.5, 0), theme.StoneDark, Slate, true)
+		piece(kit, "BoardFooting", Vector3.new(2.4, 0.5, 2.4), CFrame.new(side * 5.6, floorTop + 0.25, 0), theme.StoneDark, Slate, true)
+		piece(kit, "BoardFooting", Vector3.new(1.7, 0.7, 1.7), CFrame.new(side * 5.6, floorTop + 0.85, 0), theme.Stone, Slate, true)
 		piece(kit, "BoardPost", Vector3.new(0.9, 10.2, 0.9), CFrame.new(side * 5.6, floorTop + 5.6, 0), WOOD_DARK, Wood, true)
+		-- Mão-francesa atrás do poste (dá profundidade de perfil).
+		strut(kit, "BoardBrace", Vector3.new(side * 5.6, floorTop + 1.2, 1.9), Vector3.new(side * 5.6, floorTop + 6.0, 0.35), 0.45, 0.45, WOOD_DARK, Wood, false)
 	end
+	-- Fundo do mural, mais largo e escuro: a moldura ganha espessura.
+	piece(kit, "BoardBack", Vector3.new(11.4, 6.6, 0.3), CFrame.new(0, floorTop + 5.4, 0.42), WOOD_DARK, Enum.Material.WoodPlanks, false)
 	local board = piece(kit, "Station_" .. panel, Vector3.new(10.6, 6.0, 0.6), CFrame.new(0, floorTop + 5.4, 0), WOOD, Enum.Material.WoodPlanks, true)
 	-- Moldura dourada.
 	for _, y in { 2.45, 8.35 } do
@@ -1593,12 +1599,15 @@ function StationMachines.BuildQuestBoard(parent: Instance, base: CFrame, panel: 
 		piece(kit, "BoardRoof", Vector3.new(13.2, 0.45, 2.3), CFrame.new(0, floorTop + 11.0, side * 0.85) * CFrame.Angles(math.rad(-side * 28), 0, 0), WOOD_DARK, Enum.Material.WoodPlanks, false)
 	end
 	piece(kit, "BoardRidge", Vector3.new(13.4, 0.3, 0.3), CFrame.new(0, floorTop + 11.6, 0), theme.Gold, Metal, false)
+	-- Medalha no alto do telhado (o brasão das missões).
+	piece(kit, "BoardMedal", Vector3.new(0.25, 1.5, 1.5), CFrame.new(0, floorTop + 12.4, -0.15) * FACING, theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
+	piece(kit, "BoardMedal", Vector3.new(0.3, 0.8, 0.8), CFrame.new(0, floorTop + 12.4, -0.24) * FACING, Color3.fromRGB(150, 60, 50), Enum.Material.SmoothPlastic, false, nil, Enum.PartType.Cylinder)
 	-- Placa logo abaixo do telhado, na frente do quadro.
 	nameplate(kit, CFrame.new(0, floorTop + 9.55, -0.55), options.Title, options.Subtitle, 6.4)
 	-- Três pergaminhos: dois em aberto, um concluído.
 	for index, x in { -3.3, 0, 3.3 } do
 		local tilt = CFrame.Angles(0, 0, math.rad(({ -3, 2, -2 })[index]))
-		local at = CFrame.new(x, floorTop + 5.2, -0.36) * tilt
+		local at = CFrame.new(x, floorTop + 5.2, ({ -0.36, -0.46, -0.4 })[index]) * tilt
 		piece(kit, "QuestCard", Vector3.new(2.6, 3.4, 0.08), at, PARCHMENT, Enum.Material.SmoothPlastic, false)
 		piece(kit, "QuestPin", Vector3.new(0.12, 0.4, 0.4), at * CFrame.new(0, 1.5, -0.06) * FACING, theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
 		piece(kit, "QuestBox", Vector3.new(0.7, 0.7, 0.06), at * CFrame.new(-0.7, 0.55, -0.06), INK, Enum.Material.SmoothPlastic, false)
@@ -1634,36 +1643,72 @@ function StationMachines.BuildRewardTotem(parent: Instance, base: CFrame, panel:
 	local kit: Kit = { Parent = model, Base = base, Theme = theme, Count = 0 }
 	local Slate, Metal, Neon = Enum.Material.Slate, Enum.Material.Metal, Enum.Material.Neon
 	local floorTop = 0.6
-	-- Pedestal de dois degraus.
-	piece(kit, "TotemStep", Vector3.new(7.4, 0.8, 5.2), CFrame.new(0, floorTop + 0.4, 0), theme.StoneDark, Slate, true)
-	piece(kit, "TotemStep", Vector3.new(5.8, 0.8, 4.0), CFrame.new(0, floorTop + 1.2, 0.2), theme.Stone, Slate, true)
-	piece(kit, "TotemTrim", Vector3.new(7.5, 0.18, 0.2), CFrame.new(0, floorTop + 0.75, -2.55), theme.Gold, Metal, false)
+	--[[
+		O BAÚ é o protagonista do lado de Prêmios (~25% mais presença que a
+		primeira versão, sem escalar o resto): pedestal de três degraus com
+		friso dourado e cantoneiras, baú maior com pés e tampa em dois níveis
+		bem aberta, e o conteúdo à mostra (moedas e uma gema saindo).
+	]]
+	piece(kit, "TotemStep", Vector3.new(8.2, 0.6, 6.0), CFrame.new(0, floorTop + 0.3, -0.1), theme.StoneDark, Slate, true)
+	piece(kit, "TotemStep", Vector3.new(7.0, 0.6, 5.0), CFrame.new(0, floorTop + 0.9, 0.1), theme.Stone, Slate, true)
+	piece(kit, "TotemStep", Vector3.new(5.8, 0.4, 4.0), CFrame.new(0, floorTop + 1.4, 0.2), Color3.fromRGB(188, 182, 170), Enum.Material.Marble, true)
+	piece(kit, "TotemTrim", Vector3.new(8.3, 0.18, 0.2), CFrame.new(0, floorTop + 0.55, -3.1), theme.Gold, Metal, false)
+	piece(kit, "TotemTrim", Vector3.new(7.1, 0.18, 0.2), CFrame.new(0, floorTop + 1.15, -2.4), theme.Gold, Metal, false)
+	for _, side in { -1, 1 } do
+		piece(kit, "TotemCorner", Vector3.new(0.5, 1.6, 0.5), CFrame.new(side * 3.85, floorTop + 0.8, -2.85), theme.Gold, Metal, false)
+	end
 	local top = floorTop + 1.6
-	-- Baú: corpo, tampa entreaberta, cintas e fecho dourados, brilho na fresta.
-	local chest = piece(kit, "Station_" .. panel, Vector3.new(4.0, 2.0, 2.6), CFrame.new(0, top + 1.0, 0.2), WOOD, Enum.Material.WoodPlanks, true)
-	local hinge = CFrame.new(0, top + 2.0, 1.5)
-	piece(kit, "ChestLid", Vector3.new(4.1, 0.55, 2.7), hinge * CFrame.Angles(math.rad(28), 0, 0) * CFrame.new(0, 0.28, -1.32), WOOD_DARK, Enum.Material.WoodPlanks, false)
-	for _, x in { -1.3, 1.3 } do
-		piece(kit, "ChestBand", Vector3.new(0.32, 2.06, 2.66), CFrame.new(x, top + 1.0, 0.2), theme.Gold, Metal, false)
-		piece(kit, "ChestBand", Vector3.new(0.32, 0.6, 2.76), hinge * CFrame.Angles(math.rad(28), 0, 0) * CFrame.new(x, 0.28, -1.32), theme.Gold, Metal, false)
+	-- Pés, corpo, cintas e fecho.
+	for _, x in { -2.2, 2.2 } do
+		piece(kit, "ChestFoot", Vector3.new(0.6, 0.3, 3.3), CFrame.new(x, top + 0.15, 0.2), theme.Gold, Metal, false)
 	end
-	piece(kit, "ChestLock", Vector3.new(0.7, 0.8, 0.25), CFrame.new(0, top + 1.5, -1.18), theme.Gold, Metal, false)
-	local glow = piece(kit, "ChestGlow", Vector3.new(3.6, 0.3, 2.2), CFrame.new(0, top + 2.1, 0.25), theme.Energy, Neon, false, 0.35)
-	glow:AddTag(StationMachines.TAG_CORE)
-	-- Moedas e gemas ao pé do baú.
-	for index, at in { Vector3.new(-2.5, 0.12, -0.9), Vector3.new(-2.5, 0.36, -0.9), Vector3.new(-2.15, 0.12, -1.55), Vector3.new(2.45, 0.12, -1.2) } do
-		piece(kit, "RewardCoin", Vector3.new(0.24, 0.9, 0.9), CFrame.new(at.X, top + at.Y, at.Z) * UPRIGHT * CFrame.Angles(math.rad(index * 25), 0, 0), theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
+	local chest = piece(kit, "Station_" .. panel, Vector3.new(5.0, 2.4, 3.2), CFrame.new(0, top + 1.5, 0.2), WOOD, Enum.Material.WoodPlanks, true)
+	for _, x in { -1.6, 1.6 } do
+		piece(kit, "ChestBand", Vector3.new(0.36, 2.46, 3.26), CFrame.new(x, top + 1.5, 0.2), theme.Gold, Metal, false)
 	end
-	crystal(kit, "RewardGem", Vector3.new(2.5, top + 0.65, -0.3), 1.2, Vector3.new(0, 0, 12), Color3.fromRGB(120, 210, 255), 0.1)
-	crystal(kit, "RewardGem", Vector3.new(2.0, top + 0.5, 0.6), 0.9, Vector3.new(0, 0, -10), Color3.fromRGB(255, 120, 180), 0.1)
+	piece(kit, "ChestRim", Vector3.new(5.1, 0.24, 3.3), CFrame.new(0, top + 2.62, 0.2), theme.Gold, Metal, false)
+	piece(kit, "ChestLock", Vector3.new(0.85, 1.0, 0.3), CFrame.new(0, top + 2.0, -1.5), theme.Gold, Metal, false)
+	-- Tampa bem aberta (52°), em dois níveis para ler como baú de longe.
+	local hinge = CFrame.new(0, top + 2.7, 1.8) * CFrame.Angles(math.rad(52), 0, 0)
+	piece(kit, "ChestLid", Vector3.new(5.1, 0.6, 3.3), hinge * CFrame.new(0, 0.3, -1.62), WOOD_DARK, Enum.Material.WoodPlanks, false)
+	piece(kit, "ChestLid", Vector3.new(4.4, 0.45, 2.5), hinge * CFrame.new(0, 0.8, -1.62), WOOD_DARK, Enum.Material.WoodPlanks, false)
+	for _, x in { -1.6, 1.6 } do
+		piece(kit, "ChestBand", Vector3.new(0.36, 1.1, 3.36), hinge * CFrame.new(x, 0.55, -1.62), theme.Gold, Metal, false)
+	end
+	-- Conteúdo: brilho dourado por dentro (o cliente acende quando há prêmio
+	-- para pegar), moedas por cima e uma gema saindo.
+	local glow = piece(kit, "ChestGlow", Vector3.new(4.5, 0.25, 2.7), CFrame.new(0, top + 2.62, 0.2), theme.Energy, Neon, false, 0.75)
+	glow:SetAttribute("Role", "Glow")
+	glow:AddTag(StationMachines.TAG_REWARD)
+	for index, at in { Vector3.new(-1.0, 2.8, -0.2), Vector3.new(0.2, 2.85, 0.5), Vector3.new(1.1, 2.8, -0.3) } do
+		piece(kit, "ChestCoin", Vector3.new(0.24, 1.0, 1.0), CFrame.new(at.X, top + at.Y, at.Z) * UPRIGHT * CFrame.Angles(math.rad(index * 30), 0, 0), theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
+	end
+	crystal(kit, "RewardGem", Vector3.new(-0.3, top + 3.2, 0.7), 1.3, Vector3.new(0, 0, 14), Color3.fromRGB(120, 210, 255), 0.1)
+	-- Fora do baú: uma pilha de moedas e uma gema rosa no degrau.
+	for index, at in { Vector3.new(-3.0, 0.12, -1.6), Vector3.new(-3.0, 0.36, -1.6), Vector3.new(-2.55, 0.12, -2.2) } do
+		piece(kit, "RewardCoin", Vector3.new(0.24, 0.9, 0.9), CFrame.new(at.X, top - 0.4 + at.Y, at.Z) * UPRIGHT * CFrame.Angles(math.rad(index * 25), 0, 0), theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
+	end
+	crystal(kit, "RewardGem", Vector3.new(2.9, top - 0.1, -1.7), 0.9, Vector3.new(0, 0, -10), Color3.fromRGB(255, 120, 180), 0.1)
+	-- Faíscas douradas e um "!" pequeno: só com prêmio disponível (cliente).
+	local sparkle = emitter(glow, "ChestSparkle", theme.Energy, 3, NumberRange.new(1, 2.5), NumberRange.new(0.8, 1.4), 0.25, 25, Vector3.new(0, 1, 0))
+	sparkle.Enabled = false
+	-- Só o RewardChestController liga/desliga (com prêmio e sem "Efeitos reduzidos").
+	sparkle:RemoveTag(StationMachines.TAG_PARTICLES)
+	sparkle:SetAttribute("Role", "Sparkle")
+	sparkle:AddTag(StationMachines.TAG_REWARD)
+	for _, spec in { { "Bar", Vector3.new(0.34, 1.0, 0.34), 5.35 }, { "Dot", Vector3.new(0.36, 0.36, 0.36), 4.6 } } do
+		local mark = piece(kit, "ChestMark" .. spec[1], spec[2], CFrame.new(0, top + spec[3], -0.3), theme.Energy, Neon, false, 1)
+		mark:SetAttribute("Role", "Mark")
+		mark:AddTag(StationMachines.TAG_REWARD)
+	end
 	-- Arco de pedra atrás, com a placa e o presente no alto.
 	for _, side in { -1, 1 } do
-		piece(kit, "TotemPillar", Vector3.new(1.4, 8.4, 1.4), CFrame.new(side * 4.4, floorTop + 4.2, 2.3), theme.Stone, Slate, true)
-		piece(kit, "TotemCap", Vector3.new(1.8, 0.4, 1.8), CFrame.new(side * 4.4, floorTop + 8.6, 2.3), theme.Gold, Metal, false)
+		piece(kit, "TotemPillar", Vector3.new(1.4, 8.4, 1.4), CFrame.new(side * 4.9, floorTop + 4.2, 2.6), theme.Stone, Slate, true)
+		piece(kit, "TotemCap", Vector3.new(1.8, 0.4, 1.8), CFrame.new(side * 4.9, floorTop + 8.6, 2.6), theme.Gold, Metal, false)
 	end
-	piece(kit, "TotemBeam", Vector3.new(10.6, 1.5, 1.6), CFrame.new(0, floorTop + 9.55, 2.3), theme.StoneDark, Slate, false)
-	nameplate(kit, CFrame.new(0, floorTop + 9.6, 1.35), options.Title, options.Subtitle, 7.2)
-	local giftAt = CFrame.new(0, floorTop + 11.4, 2.3) * CFrame.Angles(0, math.rad(20), 0)
+	piece(kit, "TotemBeam", Vector3.new(11.6, 1.5, 1.6), CFrame.new(0, floorTop + 9.55, 2.6), theme.StoneDark, Slate, false)
+	nameplate(kit, CFrame.new(0, floorTop + 9.6, 1.65), options.Title, options.Subtitle, 7.2)
+	local giftAt = CFrame.new(0, floorTop + 11.4, 2.6) * CFrame.Angles(0, math.rad(20), 0)
 	piece(kit, "TotemGift", Vector3.new(2.2, 2.2, 2.2), giftAt, Color3.fromRGB(226, 92, 70), Enum.Material.SmoothPlastic, false)
 	piece(kit, "TotemRibbon", Vector3.new(2.3, 2.3, 0.45), giftAt, theme.Gold, Metal, false)
 	piece(kit, "TotemRibbon", Vector3.new(0.45, 2.3, 2.3), giftAt, theme.Gold, Metal, false)
@@ -1676,13 +1721,14 @@ function StationMachines.BuildRewardTotem(parent: Instance, base: CFrame, panel:
 	return model, chest
 end
 
-export type PlazaStation = { Local: Vector3, Color: Color3, Label: string }
+export type PlazaStation = { Local: Vector3, Color: Color3, Label: string, Flow: string? } -- Flow: "Out" (Missões) / "In" (Prêmios)
 
 --[[
-	CENTRO DA PRAÇA: medalhão de pedra com rosa-dos-ventos dourada, um
-	caminho no piso do medalhão até cada estação (na cor dela) e, no fundo,
-	uma placa de direção de madeira (📋 ← → 🎁). O meio fica LIVRE para
-	circular; nada aqui é sólido além do poste da placa.
+	CENTRO DA PRAÇA: medalhão de pedra com aro dourado e, encaixado nele, um
+	pedestal baixo com TROFÉU (a conquista entre a missão e o prêmio); um
+	caminho no piso até cada estação, com setas douradas no sentido
+	mural → troféu → baú. A frente fica livre para circular. (A placa de
+	direção do fundo saiu: o mural e o baú já dizem o que são.)
 	`base` = centro da área no chão, -Z = frente (de onde se chega).
 ]]
 function StationMachines.DecorateAdventurePlaza(parent: Instance, base: CFrame, stations: { PlazaStation }, depth: number): Model
@@ -1696,13 +1742,24 @@ function StationMachines.DecorateAdventurePlaza(parent: Instance, base: CFrame, 
 	piece(kit, "PlazaMedallion", Vector3.new(0.08, medallion * 2, medallion * 2), CFrame.new(0, floorTop + 0.04, 0) * UPRIGHT, theme.StoneDark, Slate, false, nil, Enum.PartType.Cylinder)
 	piece(kit, "PlazaRing", Vector3.new(0.1, medallion * 2 - 1.2, medallion * 2 - 1.2), CFrame.new(0, floorTop + 0.05, 0) * UPRIGHT, theme.Gold, Metal, false, nil, Enum.PartType.Cylinder)
 	piece(kit, "PlazaMedallion", Vector3.new(0.12, medallion * 2 - 2.2, medallion * 2 - 2.2), CFrame.new(0, floorTop + 0.06, 0) * UPRIGHT, theme.Stone, Slate, false, nil, Enum.PartType.Cylinder)
-	for _, angle in { 0, 90 } do
-		piece(kit, "PlazaCompass", Vector3.new(0.5, 0.08, medallion * 2 - 2.6), CFrame.new(0, floorTop + 0.1, 0) * CFrame.Angles(0, math.rad(angle), 0), theme.Gold, Metal, false)
+	--[[
+		CONQUISTA no centro: pedestal baixo de pedra encaixado no medalhão
+		(aro dourado) com um troféu em cima. Missão → 🏆 → Prêmio. Baixo o
+		bastante (~6 studs) para não tapar o mural nem o baú.
+	]]
+	upright(kit, "TrophyPlinth", Vector3.new(0, floorTop + 0.3, 0), 0.6, 5.2, theme.StoneDark, Slate, true)
+	upright(kit, "TrophyPedestal", Vector3.new(0, floorTop + 1.3, 0), 1.4, 3.8, theme.Stone, Slate, true)
+	upright(kit, "TrophyBand", Vector3.new(0, floorTop + 1.95, 0), 0.22, 4.0, theme.Gold, Metal, false)
+	piece(kit, "TrophyBase", Vector3.new(1.5, 0.6, 1.5), CFrame.new(0, floorTop + 2.3, 0), WOOD_DARK, Enum.Material.Wood, false)
+	upright(kit, "TrophyStem", Vector3.new(0, floorTop + 3.0, 0), 0.9, 0.45, theme.Gold, Metal, false)
+	piece(kit, "TrophyKnot", Vector3.new(0.8, 0.8, 0.8), CFrame.new(0, floorTop + 3.4, 0), theme.Gold, Metal, false, nil, Enum.PartType.Ball)
+	upright(kit, "TrophyCup", Vector3.new(0, floorTop + 4.45, 0), 1.7, 2.0, theme.Gold, Metal, false)
+	upright(kit, "TrophyRim", Vector3.new(0, floorTop + 5.35, 0), 0.18, 2.3, theme.Crystal, Metal, false)
+	for _, side in { -1, 1 } do
+		piece(kit, "TrophyHandle", Vector3.new(0.6, 1.1, 0.25), CFrame.new(side * 1.25, floorTop + 4.6, 0) * CFrame.Angles(0, 0, math.rad(side * -15)), theme.Gold, Metal, false)
 	end
-	for _, angle in { 45, 135 } do
-		piece(kit, "PlazaCompass", Vector3.new(0.3, 0.08, medallion * 1.1), CFrame.new(0, floorTop + 0.1, 0) * CFrame.Angles(0, math.rad(angle), 0), theme.Gold, Metal, false)
-	end
-	-- Caminho até cada estação, na cor dela, entre o medalhão e a estação.
+	-- Caminho até cada estação, na cor dela, com setas douradas no sentido
+	-- da história: do mural PARA o troféu, do troféu PARA o baú.
 	for _, station in stations do
 		local target = Vector3.new(station.Local.X, 0, station.Local.Z)
 		local direction = target.Unit
@@ -1716,18 +1773,16 @@ function StationMachines.DecorateAdventurePlaza(parent: Instance, base: CFrame, 
 			for _, side in { -1, 1 } do
 				piece(kit, "PlazaPathEdge", Vector3.new(0.22, 0.1, length), frame * CFrame.new(side * 1.7, 0.01, 0), theme.Gold, Metal, false)
 			end
+			-- As setas correm do mural para o troféu e do troféu para o baú:
+			-- apontam para a estação "In" (Prêmios) e para o centro na "Out".
+			local towards = if station.Flow == "In" then 1 else -1
+			for _, along in { -0.22, 0.22 } do
+				for _, side in { -1, 1 } do
+					-- "V" deitado no piso, apontando para `towards` ao longo do caminho.
+					piece(kit, "PlazaFlow", Vector3.new(0.26, 0.1, 1.3), frame * CFrame.new(side * 0.42, 0.02, along * length) * CFrame.Angles(0, math.rad(side * towards * 35), 0), theme.Gold, Metal, false)
+				end
+			end
 		end
-	end
-	-- Placa de direção no fundo, fora do meio da praça.
-	local postZ = depth / 2 - 3.5
-	piece(kit, "PlazaSignPost", Vector3.new(0.6, 6.2, 0.6), CFrame.new(0, floorTop + 3.1, postZ), WOOD_DARK, Enum.Material.Wood, true)
-	piece(kit, "PlazaSignCap", Vector3.new(0.9, 0.3, 0.9), CFrame.new(0, floorTop + 6.35, postZ), theme.Gold, Metal, false)
-	for index, station in stations do
-		local side = if station.Local.X >= 0 then 1 else -1
-		local y = floorTop + 5.2 - (index - 1) * 1.3
-		-- Quem olha a placa de frente tem +X local à ESQUERDA.
-		local text = if side == 1 then "◀ " .. station.Label else station.Label .. " ▶"
-		plate(kit, "PlazaSignArrow", Vector3.new(4.6, 0.95, 0.22), CFrame.new(side * 2.4, y, postZ - 0.42), text, Color3.fromRGB(250, 236, 200), 70)
 	end
 	model:SetAttribute("PartCount", kit.Count)
 	model.Parent = parent

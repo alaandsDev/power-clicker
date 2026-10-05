@@ -255,6 +255,7 @@ if __name__ == "__main__":
     render(parts, Cam([0, 9, rz - 26], [0, 5, rz + 2], fov=72), out_prefix + "_rewards_2_front.png", f"{label} - Missoes/Premios: frente")
     render(parts, Cam([30, 9, rz - 20], [-4, 4, rz + 2], fov=68), out_prefix + "_rewards_3_side.png", f"{label} - Missoes/Premios: 3/4")
     render(parts, Cam([0, 62, rz - 30], [0, 0, rz], fov=62), out_prefix + "_rewards_4_aerial.png", f"{label} - Missoes/Premios: aerea")
+    render(parts, Cam([-12, 5.5, rz - 12], [-19, 3.5, rz + 2], fov=62), out_prefix + "_rewards_6_chest.png", f"{label} - Premios de perto")
     # Circulação lateral: na altura do olho, cruzando a praça entre as áreas.
     render(parts, Cam([-30, 6, 70], [60, 4, -40], fov=72), out_prefix + "_circulation.png", f"{label} - circulacao lateral (altura do jogador)")
     print("renders em " + out_prefix + "_{spawn,overview,gate,top,upgrades_*,<estação>_*}.png")
