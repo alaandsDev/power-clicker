@@ -287,7 +287,11 @@ local function makeClient(userId: number)
 	controller.Init()
 	controller.Start()
 	local clientRows = {}
+	local clientPads = {}
 	for _, d in clientWorlds:GetDescendants() do
+		if d:IsA("BasePart") and d:GetAttribute("WinPad") == true then
+			clientPads[d.Name] = d
+		end
 		if d:IsA("BasePart") and d:GetAttribute("Wall") == true then
 			local id = d:GetAttribute("StageId")
 			clientRows[id] = clientRows[id] or {}
@@ -301,6 +305,7 @@ local function makeClient(userId: number)
 		end,
 		Handlers = handlers,
 		Rows = clientRows,
+		Pads = clientPads,
 		UserId = userId,
 	}
 end
@@ -382,6 +387,12 @@ local function noticesOf(kind: string, target: any?)
 		end
 	end
 	return list
+end
+-- Texto da placa do pad como o CLIENTE a mostra.
+local function padText(client, padName: string): string
+	local gui = client.Pads[padName]:FindFirstChildOfClass("BillboardGui")
+	local label = gui and gui:FindFirstChildOfClass("TextLabel")
+	return if label then label.Text else ""
 end
 local function wins(player)
 	return (currency[player] or {}).Wins or 0
@@ -523,6 +534,10 @@ removePlayer(r)
 respawn(A, frontOf(b1[1]))
 task.wait(1.2) -- a janela antiga de A acaba
 breakStage(A, b1, first.Hp)
+sync(clientA)
+task.wait(0.6) -- a placa dos pads é reescrita a cada 0,5 s
+check(string.find(padText(clientA, padNormal), "+", 1, true) ~= nil and clientA.Pads[padNormal].LocalTransparencyModifier == 0,
+	"P1. com a barreira aberta para A, a placa do pad mostra o prêmio e o pad fica aceso")
 moveTo(A, V3.new(b1[2].CFrame.Position.X, 3, 0)) -- no meio do bloco
 moveTo(B, frontOf(b1[1]))
 task.wait(1.2)
@@ -532,6 +547,20 @@ task.wait(1.6)
 sync(clientA)
 check(not WallService.IsOpen(A, first.Id) and clientStageWhole(clientA, first.Id), "6. com A fora, a barreira de A volta inteira (com detalhes)")
 check(WallService.Validate(A), "6. A atravessou com a passagem aberta: continua válido do outro lado depois de ela se refazer")
+-- P. Pad de barreira FECHADA: não paga, mas avisa por quê (antes era calado).
+do
+	local before = wins(A)
+	local closedBefore = #noticesOf("WinPadClosed", A)
+	touch(padNormal, A)
+	touch(padDouble, A) -- mesmo passo: um aviso só
+	local list = noticesOf("WinPadClosed", A)
+	check(wins(A) == before and #list == closedBefore + 1 and list[#list][3].Order == first.Order,
+		"P2. pisar no pad com a barreira 1 já refeita não paga e avisa uma vez (WinPadClosed, barreira 1)")
+	task.wait(0.6)
+	check(string.find(padText(clientA, padNormal), "1", 1, true) ~= nil
+		and string.find(padText(clientA, padNormal), "🔒", 1, true) ~= nil and clientA.Pads[padNormal].LocalTransparencyModifier > 0,
+		"P3. no cliente de A a placa vira '🔒 Quebre a barreira 1' e o pad fica apagado")
+end
 
 -- M4. A na Barreira 2, B na Barreira 1, ao mesmo tempo.
 moveTo(A, frontOf(b2[1]))

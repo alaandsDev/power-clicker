@@ -132,6 +132,8 @@ local objectiveChip: TextLabel
 -- até quando vale a "primeira conquista" que acabou de acontecer.
 local winPads: { BasePart } = {}
 local firstClearUntil: { [string]: number } = {}
+-- Quanto o pad some quando a barreira dele não está aberta para este jogador.
+local PAD_CLOSED_FADE = 0.6
 
 local function stageOrder(stageId: string): number
 	for _, stage in WallConfig.Stages do
@@ -651,10 +653,23 @@ local function refreshPads()
 		local gui = pad:FindFirstChildOfClass("BillboardGui")
 		local label = if gui then gui:FindFirstChildOfClass("TextLabel") else nil
 		if stage and label then
-			local index = tonumber(pad:GetAttribute("PadIndex")) or WinPadRules.IndexOf(stage, tonumber(pad:GetAttribute("Wins")) or 0) or 1
-			local firstClear = (firstClearUntil[stage.Id] or 0) > os.clock()
-			local amount = WinPadRules.Payout(stage, index, WinPadRules.Share(stage, tower, firstClear))
-			label.Text = Text.Get(if WinPadRules.IsDouble(stage, index) then "wall.padWinsDouble" else "wall.padWins", { amount = NumberFormat.Short(amount) })
+			--[[
+				O pad só paga logo depois de ESTE jogador quebrar ESTA barreira
+				(a janela de WallConfig.OpenSeconds). Fora dela a placa diz o que
+				fazer e o pad fica apagado — antes ela mostrava o prêmio e o pad
+				não pagava nada, o que parecia defeito.
+			]]
+			local view = views[stage.Id]
+			local open = view ~= nil and view.Open
+			pad.LocalTransparencyModifier = if open then 0 else PAD_CLOSED_FADE
+			if open then
+				local index = tonumber(pad:GetAttribute("PadIndex")) or WinPadRules.IndexOf(stage, tonumber(pad:GetAttribute("Wins")) or 0) or 1
+				local firstClear = (firstClearUntil[stage.Id] or 0) > os.clock()
+				local amount = WinPadRules.Payout(stage, index, WinPadRules.Share(stage, tower, firstClear))
+				label.Text = Text.Get(if WinPadRules.IsDouble(stage, index) then "wall.padWinsDouble" else "wall.padWins", { amount = NumberFormat.Short(amount) })
+			else
+				label.Text = Text.Get("wall.padClosed", { order = tostring(stage.Order) })
+			end
 		end
 	end
 end
@@ -717,10 +732,24 @@ function WallController.Init()
 		end
 		if kind == "WinPad" then
 			SoundController.Play("Reward")
-			NotificationController.Show(Text.Get("wall.gotWins", {
-				amount = NumberFormat.Short(tonumber(payload.Wins) or 0),
-				icon = Theme.Icons.Wins,
-			}), "Good")
+			local share = tonumber(payload.Share) or 1
+			if share < 1 then
+				-- Repetição: diz quanto do prêmio cheio veio (WallConfig.Repeat).
+				NotificationController.Show(Text.Get("wall.gotWinsRepeat", {
+					amount = NumberFormat.Short(tonumber(payload.Wins) or 0),
+					icon = Theme.Icons.Wins,
+					percent = tostring(math.floor(share * 100 + 0.5)),
+				}), "Good")
+			else
+				NotificationController.Show(Text.Get("wall.gotWins", {
+					amount = NumberFormat.Short(tonumber(payload.Wins) or 0),
+					icon = Theme.Icons.Wins,
+				}), "Good")
+			end
+		elseif kind == "WinPadClosed" then
+			NotificationController.Show(Text.Get("wall.padClosedHint", {
+				order = tostring(tonumber(payload.Order) or stageOrder(tostring(payload.StageId))),
+			}), "Info")
 		elseif kind == "WallBroken" then
 			-- Só chega para quem quebrou: a barreira dos outros continua inteira.
 			if payload.ById == Players.LocalPlayer.UserId then

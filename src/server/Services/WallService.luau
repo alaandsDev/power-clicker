@@ -83,6 +83,7 @@ type Run = {
 	-- a barreira se refaz atrás dele.
 	Passed: { [string]: boolean },
 	LastPush: number,
+	LastPadNotice: number,
 }
 
 -- Quanto além da face da barreira o centro do personagem pode estar (atraso
@@ -91,6 +92,9 @@ local PASS_TOLERANCE = 2
 -- Onde quem atravessou sem direito é colocado de volta: à frente da barreira.
 local PUSH_BACK = 6
 local VALIDATE_SECONDS = 0.25
+-- Intervalo mínimo entre dois avisos de "este pad não paga agora" (o Touched
+-- dispara várias vezes por passo).
+local PAD_NOTICE_SECONDS = 3
 
 local log = Logger.new("Walls")
 
@@ -122,7 +126,7 @@ end
 local function runOf(player: Player): Run
 	local run = runs[player]
 	if not run then
-		run = { Stages = {}, Passed = {}, LastPush = 0 }
+		run = { Stages = {}, Passed = {}, LastPush = 0, LastPadNotice = 0 }
 		runs[player] = run
 	end
 	return run
@@ -343,6 +347,16 @@ local function onPadTouched(pad: BasePart, hit: BasePart)
 	local run = runOf(player)
 	local state = run.Stages[geo.Stage.Id]
 	if not state or not state.Open or os.clock() >= state.OpenUntil then
+		--[[
+			O pad só paga logo depois de ESTE jogador quebrar ESTA barreira. Antes
+			isto voltava calado e parecia defeito ("pisei e não ganhei"): agora
+			o jogador fica sabendo o porquê.
+		]]
+		local now = os.clock()
+		if now - run.LastPadNotice >= PAD_NOTICE_SECONDS then
+			run.LastPadNotice = now
+			NetService.FireClient("Notify", player, "WinPadClosed", { StageId = geo.Stage.Id, Order = geo.Stage.Order })
+		end
 		return
 	end
 	if state.Claimed == state.Opening then

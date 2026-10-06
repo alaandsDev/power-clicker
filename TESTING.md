@@ -499,3 +499,19 @@ SW2.17. R6: ombros + RootJoint (o corpo inteiro gira um pouco, pernas juntas) + 
 SW2.18. Respawn no meio do combo: corpo novo começa no A, postura limpa.
 SW2.19. Trocar de espada: combo volta ao A, corpo continua participando.
 SW2.20. Dois jogadores: o golpe do outro (perto) também tem o corpo, no mesmo ritmo limitado.
+
+### Pads de vitória — feedback de pad fechado (WP) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+
+Regra (não mudou): o pad de uma barreira só paga nos `OpenSeconds` (14 s) logo
+depois de VOCÊ quebrar AQUELA barreira, um pad por abertura, e pegar o prêmio
+leva de volta para a praça. Os pads da barreira N ficam na entrada da área N+1.
+Antes, fora dessa janela a placa mostrava o prêmio e o servidor não pagava nada
+em silêncio ("pisei e não ganhei"). Automatizado em `check_corridor` (P1–P3).
+
+1. WP.1 Antes de quebrar a barreira 1: os dois pads dela ficam apagados com a
+   placa "🔒 Quebre a barreira 1".
+2. WP.2 Quebrar a barreira 1: os pads acendem e mostram o prêmio (1ª vez: valor cheio).
+3. WP.3 Esperar a barreira se refazer (14 s) e pisar no pad: nada pago, aviso
+   "Este pad só paga logo depois de você quebrar a barreira 1." (uma vez a cada 3 s).
+4. WP.4 Repetindo uma barreira já conquistada: o aviso do prêmio diz a fração
+   ("repetição: 20% do prêmio"); abaixo do seu melhor estágio a fração cai.
