@@ -22,6 +22,11 @@ Câmeras (todas derivadas do CorridorLayout, a mesma conta do WorldBuilder):
   3→4, 4→5, 5→6 e o primeiro calor do 7, entrada / landmark / câmera
   normal / barreira / aérea de cada estágio, folhas 4/5/6 e 1→6 SEM TEXTO
   na mesma câmera relativa e vistas longas com vários estágios.
+
+  Com o 4º argumento "D": a Fase D (estágios 7–9) — transições 6→7, 7→8,
+  8→9 e 9→área do 10; entrada / câmera normal / landmark / barreira /
+  lateral / aérea de cada estágio; o 9 olhando para o 10; folhas 7/8/9 e
+  1→9 SEM TEXTO; vista longa 6→9 e a aérea completa lobby → área do 10.
 """
 import os
 import sys
@@ -155,6 +160,71 @@ def phase_c(parts, out, tag):
     shot("c63_vista_longa_pelo_corredor", [A[3] - 20, 48, 0], [A[6] + 40, 10, 0], "vista longa pelo corredor: 4 -> 7", fov=60, text=False)
 
 
+
+def phase_d(parts, out, tag):
+    """Câmeras da Fase D (estágios 7–9), relativas ao CorridorLayout."""
+    A = [s["start"] for s in SEG]
+    B = [s["wall"] for s in SEG]
+    D = [s["depth"] for s in SEG]
+    END = [s["end"] for s in SEG]
+
+    def shot(name, eye, target, title, fov=70, text=True):
+        R.render(parts, R.Cam(eye, target, fov=fov), f"{out}/{name}.png", f"{tag} - {title}", show_text=text)
+
+    def aerial(name, index, title):
+        cx = (A[index] + END[index]) / 2
+        span = END[index] - A[index] + 20
+        R.render(parts, None, f"{out}/{name}.png", f"{tag} - {title}", show_text=False, ortho=(cx, 0, W / span))
+
+    def stage(prefix, i, label, landmark_target):
+        prev = i - 1
+        shot(f"{prefix}0_transicao_{i}_{i + 1}", [B[prev] + D[prev] + 4, 12, -24], [A[i] + 40, 8, 6], f"transicao {i}-{i + 1}: depois da Barreira {i}")
+        shot(f"{prefix}1_entrada", [A[i] + 6, 9, -4], [B[i], 12, 4], f"{i + 1} {label}: entrada")
+        shot(f"{prefix}2_camera_jogador", [A[i] + 48, 8, 3], [A[i] + 90, 7, 0], f"{i + 1} {label}: camera normal do jogador")
+        shot(f"{prefix}3_landmark", [A[i] + 26, 9, 12], landmark_target, f"{i + 1} {label}: landmark")
+        shot(f"{prefix}4_aproximando_b{i + 1}", [B[i] - 46, 10, -16], [B[i], 12, 0], f"{i + 1} {label}: aproximando da Barreira {i + 1}", fov=72)
+        shot(f"{prefix}5_lateral", [A[i] + 55, 70, -150], [A[i] + 75, 12, 0], f"{i + 1} {label}: lateral (silhueta)", fov=62, text=False)
+        aerial(f"{prefix}6_aerea", i, f"{i + 1} {label}: aerea")
+
+    stage("d1", 6, "vulcanico", [A[6] + 55, 18, -34])
+    stage("d2", 7, "magma", [A[7] + 52, 16, -32])
+    stage("d3", 8, "energia", [A[8] + 55, 22, 32])
+    # 9 olhando para o 10 (e o fim do 9 → área reservada).
+    shot("d37_olhando_o_10", [A[8] + 60, 10, 0], [A[9] + 60, 18, 0], "9 energia: olhando para frente (Barreira 9 e alem)", fov=66)
+    shot("d38_transicao_9_10", [B[8] + D[8] + 4, 12, -22], [A[9] + 40, 14, 4], "transicao 9-area do 10 (pre-Colosso)")
+
+    def sheet(indices, name, cols):
+        panels = []
+        for i in indices:
+            R.render(parts, R.Cam([A[i] + 20, 9, -10], [A[i] + 110, 10, 6], fov=70), f"{out}/_cmp.png", None, show_text=False)
+            panels.append(Image.open(f"{out}/_cmp.png").resize((640, 360)))
+        os.remove(f"{out}/_cmp.png")
+        rows = (len(panels) + cols - 1) // cols
+        img = Image.new("RGB", (644 * cols - 4, 364 * rows - 4), (255, 255, 255))
+        for k, im in enumerate(panels):
+            img.paste(im, ((k % cols) * 644, (k // cols) * 364))
+        img.save(f"{out}/{name}.png")
+
+    sheet([6, 7, 8], "d60_comparacao_7_8_9_sem_texto", 3)
+    sheet(list(range(9)), "d61_comparacao_1_a_9_sem_texto", 3)
+    shot("d62_vista_longa_6_a_9", [A[6] - 120, 95, -200], [A[7] + 120, 10, 0], "vista longa: ancestral, vulcanico, magma, energia", fov=72, text=False)
+    shot("d63_vista_longa_pelo_corredor_9_para_10", [A[8] - 20, 40, 0], [A[9] + 160, 16, 0], "vista longa pelo corredor: 9 -> area do 10", fov=60, text=False)
+    # Aérea completa: lobby → 1 … 9 → área reservada do 10, em 3 faixas.
+    lo, hi = -40, A[9] + 120
+    span = (hi - lo) / 3
+    strips = []
+    for k in range(3):
+        cx = lo + span * (k + 0.5)
+        R.render(parts, None, f"{out}/_strip.png", None, show_text=False, ortho=(cx, 0, W / span))
+        strips.append(Image.open(f"{out}/_strip.png").crop((0, H // 2 - 110, W, H // 2 + 110)))
+    os.remove(f"{out}/_strip.png")
+    img = Image.new("RGB", (W, 26 + 220 * 3), (0, 0, 0))
+    for k, strip in enumerate(strips):
+        img.paste(strip, (0, 26 + 220 * k))
+    ImageDraw.Draw(img).text((10, 5), f"{tag} - aerea completa: lobby -> 1 ... 9 -> area reservada do 10 (3 faixas)", fill=(255, 255, 255))
+    img.save(f"{out}/d64_aerea_completa.png")
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "build", "map_parts.json")
@@ -167,6 +237,9 @@ def main():
         return
     if len(sys.argv) > 4 and sys.argv[4] == "C":
         phase_c(parts, out, tag)
+        return
+    if len(sys.argv) > 4 and sys.argv[4] == "D":
+        phase_d(parts, out, tag)
         return
 
     def shot(name, cam, title, text=True):

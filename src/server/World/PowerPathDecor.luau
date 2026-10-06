@@ -67,6 +67,21 @@ local C = {
 	-- Calor (indício do 7).
 	Scorched = Color3.fromRGB(46, 38, 36),
 	Heat = Color3.fromRGB(255, 112, 40),
+	-- Vulcânico (7): basalto, crosta quente.
+	Basalt = Color3.fromRGB(50, 42, 40),
+	BasaltDark = Color3.fromRGB(34, 29, 28),
+	Crust = Color3.fromRGB(96, 38, 22),
+	-- Magma cristalizado (8): rocha negra, cristal vermelho, núcleo laranja.
+	BlackRock = Color3.fromRGB(26, 22, 22),
+	MagmaCrystal = Color3.fromRGB(150, 26, 30),
+	MagmaDeep = Color3.fromRGB(96, 16, 22),
+	MagmaFlow = Color3.fromRGB(176, 58, 22),
+	MagmaCore = Color3.fromRGB(255, 132, 40),
+	-- Energia (9): grafite, azul profundo, violeta; energia violeta-branca.
+	Graphite = Color3.fromRGB(32, 32, 42),
+	Void = Color3.fromRGB(44, 30, 64),
+	DeepBlue = Color3.fromRGB(38, 42, 82),
+	Pulse = Color3.fromRGB(186, 140, 255),
 }
 
 type Ctx = {
@@ -300,13 +315,19 @@ end
 	Controller) liga cada um só perto da câmera e sem "Efeitos reduzidos".
 	Presets por nome (Theme.Ambient / Decor.Fx).
 ]]
-type Preset = { Rate: number, Life: NumberRange, Speed: NumberRange, Spread: number, Size: number, Color: Color3, Light: number, Accel: Vector3? }
+type Preset = { Rate: number, Life: NumberRange, Speed: NumberRange, Spread: number, Size: number, Color: Color3, Light: number, Accel: Vector3?, Texture: string?, Grow: number?, Fade: number? }
 local PRESETS: { [string]: Preset } = {
 	FrostSparkle = { Rate = 5, Life = NumberRange.new(1.4, 2.4), Speed = NumberRange.new(0.3, 1.2), Spread = 180, Size = 0.5, Color = C.Icicle, Light = 0.6 },
 	-- Motes de energia subindo devagar dos cristais (estágio 4).
 	CrystalMotes = { Rate = 4, Life = NumberRange.new(2.5, 3.5), Speed = NumberRange.new(0.6, 1.4), Spread = 25, Size = 0.35, Color = Color3.fromRGB(150, 236, 255), Light = 0.8 },
 	-- Brasas raras no fim do 6: o primeiro sinal do vulcânico.
 	Embers = { Rate = 3, Life = NumberRange.new(1.8, 2.8), Speed = NumberRange.new(1, 2.2), Spread = 20, Size = 0.25, Color = Color3.fromRGB(255, 130, 50), Light = 1, Accel = Vector3.new(0, 0.8, 0) },
+	-- Fumaça MUITO controlada do respiro vulcânico (7): pouca, lenta, escura.
+	Smoke = { Rate = 1.2, Life = NumberRange.new(4, 6), Speed = NumberRange.new(0.8, 1.6), Spread = 12, Size = 3, Grow = 7, Fade = 0.8, Color = Color3.fromRGB(58, 50, 48), Light = 0, Accel = Vector3.new(0, 0.4, 0), Texture = "rbxasset://textures/particles/smoke_main.dds" },
+	-- Faíscas de magma subindo do cristal maior (8).
+	MagmaSparks = { Rate = 5, Life = NumberRange.new(1.2, 2), Speed = NumberRange.new(1.5, 3), Spread = 30, Size = 0.3, Color = Color3.fromRGB(255, 120, 40), Light = 1, Accel = Vector3.new(0, 1.2, 0) },
+	-- Motes de energia pairando em volta do arco flutuante (9): devagar, em todas as direções.
+	EnergyMotes = { Rate = 4, Life = NumberRange.new(3, 4.5), Speed = NumberRange.new(0.2, 0.6), Spread = 180, Size = 0.35, Color = Color3.fromRGB(200, 170, 255), Light = 0.9 },
 }
 
 local function ambient(owner: BasePart, presetName: string)
@@ -315,13 +336,13 @@ local function ambient(owner: BasePart, presetName: string)
 	local fx = Instance.new("ParticleEmitter")
 	fx.Name = presetName
 	fx.Enabled = false
-	fx.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	fx.Texture = preset.Texture or "rbxasset://textures/particles/sparkles_main.dds"
 	fx.Rate = preset.Rate
 	fx.Lifetime = preset.Life
 	fx.Speed = preset.Speed
 	fx.SpreadAngle = Vector2.new(preset.Spread, preset.Spread)
-	fx.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, preset.Size), NumberSequenceKeypoint.new(1, 0) })
-	fx.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+	fx.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, preset.Size), NumberSequenceKeypoint.new(1, preset.Grow or 0) })
+	fx.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, preset.Fade or 0.3), NumberSequenceKeypoint.new(1, 1) })
 	fx.LightEmission = preset.Light
 	fx.Color = ColorSequence.new(preset.Color)
 	if preset.Accel then
@@ -379,11 +400,11 @@ end
 	continua sólido, a energia é o detalhe). `base` = centro da base, já com
 	inclinação e giro. 2–3 peças por prisma.
 ]]
-local function prism(ctx: Ctx, base: CFrame, w: number, h: number, tip: number, color: Color3, material: Enum.Material, vein: boolean): BasePart
+local function prism(ctx: Ctx, base: CFrame, w: number, h: number, tip: number, color: Color3, material: Enum.Material, vein: boolean, veinColor: Color3?): BasePart
 	local body = piece(ctx, Vector3.new(w, h, w), base * CFrame.new(0, h / 2, 0), color, material, true, { Transparency = if material == M.Glass then 0.15 else 0 })
 	piece(ctx, Vector3.new(w, tip, w), base * CFrame.new(0, h + tip / 2, 0), color, material, false, { Wedge = true, Transparency = if material == M.Glass then 0.15 else 0 })
 	if vein then
-		piece(ctx, Vector3.new(math.min(w * 0.16, 0.5), h * 0.7, w + 0.12), base * CFrame.new(0, h * 0.42, 0), C.Energy, M.Neon, false)
+		piece(ctx, Vector3.new(math.min(w * 0.16, 0.5), h * 0.7, w + 0.12), base * CFrame.new(0, h * 0.42, 0), veinColor or C.Energy, M.Neon, false)
 	end
 	return body
 end
@@ -576,6 +597,235 @@ B.EmberVent = function(ctx, x, side, z, s, _yaw)
 	end
 end
 
+-- ── 7 Rocha vulcânica ───────────────────────────────────────────────────────
+
+-- Fissura quente que corta o chão (rente; pode cruzar a faixa VISUALMENTE,
+-- topo < 0,3): crosta escura + linha de brasa. Sem colisão, sem hazard.
+B.LavaCrack = function(ctx, x, side, z, s, yaw)
+	local cf = at(x, 0, side * z) * CFrame.Angles(0, RAD(yaw * side), 0)
+	piece(ctx, Vector3.new(16 * s, 0.1, 2.4 * s), cf * CFrame.new(0, 0.05, 0), C.Crust, M.CrackedLava, false)
+	piece(ctx, Vector3.new(14 * s, 0.16, 0.35), cf * CFrame.new(0, 0.08, 0), C.Heat, M.Neon, false)
+end
+
+-- Ponta de basalto (prisma sem veio).
+B.VolcanicSpire = function(ctx, x, side, z, s, yaw)
+	prism(ctx, lean(x, z, side, 12, yaw), 4.5 * s, 16 * s, 6 * s, C.Basalt, M.Basalt, false)
+end
+
+-- Colunas de basalto saindo da parede (camadas de rocha, alturas diferentes).
+B.BasaltColumns = function(ctx, x, side, _z, s, _yaw)
+	local top = wallHeight(ctx, x)
+	for index, f in { 0.5, 0.78, 0.62 } do
+		local h = top * f * s
+		piece(ctx, Vector3.new(h, 4, 4), at(x + (index - 2) * 4, h / 2, side * (ctx.Half - 1.5)) * VERTICAL, if index == 2 then C.BasaltDark else C.Basalt, M.Basalt, true, { Shape = Enum.PartType.Cylinder })
+	end
+end
+
+--[[
+	LANDMARK 7: paredão de rocha vulcânica QUEBRADO — duas lajes enormes de
+	basalto inclinadas (como se o Caminho tivesse rachado a montanha), duas
+	pontas e uma fissura quente subindo pela face. Faz o jogador parecer
+	pequeno; a avenida fica livre.
+]]
+B.VolcanicCliff = function(ctx, x, side, z, s, yaw)
+	local h1 = 34 * s
+	local slab = at(x, -0.5, side * (z + 4)) * CFrame.Angles(side * RAD(-8), RAD(yaw), RAD(4 * side))
+	local main = piece(ctx, Vector3.new(14 * s, h1, 7), slab * CFrame.new(0, h1 / 2, 0), C.Basalt, M.Basalt, true, { Shadow = true })
+	piece(ctx, Vector3.new(0.5, h1 * 0.65, 0.3), slab * CFrame.new(1.5, h1 * 0.45, -side * 3.6), C.Heat, M.Neon, false)
+	local h2 = 26 * s
+	piece(ctx, Vector3.new(10 * s, h2, 6), at(x + 9 * s, -0.5, side * (z + 1)) * CFrame.Angles(side * RAD(-14), RAD(-yaw - 10), 0) * CFrame.new(0, h2 / 2, 0), C.BasaltDark, M.Basalt, true, { Shadow = true })
+	prism(ctx, lean(x - 7 * s, z - 1, side, 18, 25 + yaw), 4 * s, 18 * s, 6 * s, C.BasaltDark, M.Basalt, false)
+	prism(ctx, lean(x + 3 * s, z + 8, side, 6, -20 + yaw), 5 * s, 26 * s, 8 * s, C.Basalt, M.Basalt, false)
+	if ctx.Fx then
+		ambient(main, ctx.Fx)
+	end
+end
+
+-- Respiro vulcânico junto da parede: monte de basalto com fresta quente e,
+-- se a entrada pedir, um fio de fumaça controlada.
+B.VolcanicVent = function(ctx, x, side, z, s, _yaw)
+	local mound = piece(ctx, Vector3.new(8, 3, 7) * s, at(x, 1, side * z) * CFrame.Angles(0, RAD(15), RAD(4)), C.BasaltDark, M.Basalt, true)
+	piece(ctx, Vector3.new(5 * s, 0.3, 0.35), at(x, 2.55 * s, side * z) * CFrame.Angles(0, RAD(15), 0), C.Heat, M.Neon, false)
+	if ctx.Fx then
+		ambient(mound, ctx.Fx)
+	end
+end
+
+-- Barreira 7: MASSA DE ROCHA VULCÂNICA — dois blocos de basalto com pontas
+-- nas bordas, fissura quente na face interna, laje bruta por cima das
+-- fileiras com uma veia de brasa.
+B.VolcanicGate = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(4.4, 34, 4.4), at(x - 3, 17, side * (half - 2)) * CFrame.Angles(0, RAD(5 * side), 0), C.Basalt, M.Basalt, true)
+		piece(ctx, Vector3.new(4.4, 8, 4.4), at(x - 3, 38, side * (half - 2)) * CFrame.Angles(0, if side > 0 then math.pi else 0, 0), C.BasaltDark, M.Basalt, false, { Wedge = true })
+		piece(ctx, Vector3.new(0.4, 18, 0.4), at(x - 3, 9, side * (half - 4.4)), C.Heat, M.Neon, false)
+	end
+	piece(ctx, Vector3.new(8, 4, half * 2), at(segment.Barrier + 3, 32.5, 0), C.BasaltDark, M.Basalt, false, { Shadow = true })
+	piece(ctx, Vector3.new(0.3, 0.6, 50), at(segment.Barrier - 1.15, 32.5, 0), C.Heat, M.Neon, false)
+end
+
+-- ── 8 Magma cristalizado ────────────────────────────────────────────────────
+
+-- Transição 7 → 8: o primeiro cristal vermelho rompendo o basalto.
+B.MagmaShard = function(ctx, x, side, z, s, _yaw)
+	piece(ctx, Vector3.new(4.4, 2, 4) * s, at(x, 0.8, side * z) * CFrame.Angles(RAD(6), RAD(30), 0), C.BasaltDark, M.Basalt, true)
+	prism(ctx, at(x, 1, side * z) * CFrame.Angles(side * RAD(-10), RAD(40), 0), 2.6 * s, 6 * s, 2.6 * s, C.MagmaCrystal, M.Glass, false)
+end
+
+--[[
+	LANDMARK 8: formação de CRISTAL DE MAGMA que rompeu o chão — duas lajes de
+	rocha negra levantadas, um cristal vermelho enorme com núcleo laranja
+	(veio) e cristais menores. Magma = corpo quente + linha brilhante.
+]]
+B.MagmaFormation = function(ctx, x, side, z, s, yaw)
+	for index, dx in { -5, 6 } do
+		piece(ctx, Vector3.new(10 * s, 3, 6 * s), at(x + dx * s, 0.6, side * (z - 2)) * CFrame.Angles(side * RAD(if index == 1 then 25 else 18), RAD(yaw + index * 20), 0), C.BlackRock, M.Basalt, true)
+	end
+	local main = prism(ctx, lean(x, z + 2, side, 10, 15 + yaw), 6.5 * s, 30 * s, 9 * s, C.MagmaCrystal, M.Glass, true, C.MagmaCore)
+	prism(ctx, lean(x - 6 * s, z - 2, side, 22, -20 + yaw), 4 * s, 17 * s, 5 * s, C.MagmaDeep, M.Glass, false)
+	if s >= 0.9 then
+		prism(ctx, lean(x + 6 * s, z + 5, side, 6, 35 + yaw), 4.5 * s, 22 * s, 6 * s, C.MagmaCrystal, M.Glass, false)
+	end
+	if ctx.Fx then
+		ambient(main, ctx.Fx)
+	end
+end
+
+-- Magma correndo entre as formações (rente): crosta quente + núcleo.
+B.MagmaFlow = function(ctx, x, side, z, s, yaw)
+	local cf = at(x, 0, side * z) * CFrame.Angles(0, RAD(yaw * side), 0)
+	piece(ctx, Vector3.new(18 * s, 0.12, 3), cf * CFrame.new(0, 0.06, 0), C.MagmaFlow, M.CrackedLava, false)
+	piece(ctx, Vector3.new(16 * s, 0.18, 0.5), cf * CFrame.new(0, 0.09, 0), C.MagmaCore, M.Neon, false)
+end
+
+-- Parede de rocha negra vazando magma (e, grande, um cristal crescendo dela).
+B.WallMagma = function(ctx, x, side, _z, s, yaw)
+	local top = wallHeight(ctx, x)
+	piece(ctx, Vector3.new(3, top * 0.6, 0.4), at(x, top * 0.3, side * (ctx.Half - 0.2)), C.MagmaFlow, M.CrackedLava, false)
+	piece(ctx, Vector3.new(0.4, top * 0.5, 0.3), at(x, top * 0.32, side * (ctx.Half - 0.45)), C.MagmaCore, M.Neon, false)
+	if s >= 1 then
+		prism(ctx, at(x + 5, top * 0.3, side * (ctx.Half + 1)) * CFrame.Angles(side * RAD(-60), RAD(yaw), 0), 4, 9, 4, C.MagmaCrystal, M.Glass, false)
+	end
+end
+
+-- Barreira 8: MAGMA CRISTALIZADO bloqueando — pilares de cristal vermelho
+-- com núcleo laranja nas bordas e a laje de rocha negra rachada por cima.
+B.MagmaSeal = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(3.6, 30, 3.6), at(x - 3, 15, side * (half - 2)), C.MagmaCrystal, M.Glass, true, { Transparency = 0.15 })
+		piece(ctx, Vector3.new(3.6, 7, 3.6), at(x - 3, 33.5, side * (half - 2)) * CFrame.Angles(0, if side > 0 then math.pi else 0, 0), C.MagmaDeep, M.Glass, false, { Wedge = true, Transparency = 0.15 })
+		piece(ctx, Vector3.new(0.45, 20, 3.8), at(x - 3, 11, side * (half - 2)), C.MagmaCore, M.Neon, false)
+	end
+	piece(ctx, Vector3.new(8, 4, half * 2), at(segment.Barrier + 3, 32.5, 0), C.BlackRock, M.Basalt, false, { Shadow = true })
+	piece(ctx, Vector3.new(0.3, 0.6, 60), at(segment.Barrier - 1.15, 32.5, 0), C.MagmaCore, M.Neon, false)
+end
+
+-- Transição 8 → 9: cristal ESCURECENDO, o veio já é de outra energia (fria).
+B.DarkCrystal = function(ctx, x, side, z, s, yaw)
+	prism(ctx, lean(x, z, side, 14, 30 + yaw), 3.6 * s, 14 * s, 5 * s, C.Void, M.Glass, true, C.Pulse)
+end
+
+-- Linha de energia no chão (rente) sobre placa escura: substitui a fissura.
+B.EnergyLine = function(ctx, x, side, z, s, yaw)
+	local cf = at(x, 0, side * z) * CFrame.Angles(0, RAD(yaw * side), 0)
+	piece(ctx, Vector3.new(16 * s, 0.08, 2), cf * CFrame.new(0, 0.04, 0), C.Graphite, M.Slate, false)
+	piece(ctx, Vector3.new(14 * s, 0.12, 0.4), cf * CFrame.new(0, 0.07, 0), C.Pulse, M.Neon, false)
+end
+
+-- ── 9 Energia / cósmico ─────────────────────────────────────────────────────
+
+-- Circuito atravessando a faixa (rente): uma "interrupção" visual do
+-- Caminho — placa escura + linha de energia. O piso físico continua inteiro.
+B.EnergyCircuit = function(ctx, x, _side, _z, s, _yaw)
+	piece(ctx, Vector3.new(2.4 * s, 0.06, ctx.Half * 2 - 10), at(x, 0.03, 0), C.Graphite, M.Slate, false)
+	piece(ctx, Vector3.new(0.4, 0.1, 20), at(x, 0.05, 0), C.Pulse, M.Neon, false)
+end
+
+-- Painel recuado na parede com uma linha vertical de energia.
+B.EnergyPanel = function(ctx, x, side, _z, s, _yaw)
+	local top = wallHeight(ctx, x)
+	piece(ctx, Vector3.new(6 * s, top * 0.7, 0.6), at(x, top * 0.4, side * (ctx.Half - 0.3)), C.DeepBlue, M.Metal, false)
+	piece(ctx, Vector3.new(0.4, top * 0.4, 0.3), at(x, top * 0.4, side * (ctx.Half - 0.7)), C.Pulse, M.Neon, false)
+end
+
+-- Estrutura INTERROMPIDA: um trecho de parede cuja parte de cima se soltou
+-- e flutua, com a energia segurando o vão.
+B.BrokenWall = function(ctx, x, side, _z, s, _yaw)
+	local z = side * (ctx.Half - 2)
+	piece(ctx, Vector3.new(12 * s, 16, 3), at(x, 8, z), C.Graphite, M.Metal, true)
+	piece(ctx, Vector3.new(12 * s, 8, 3), at(x, 24.5, z) * CFrame.Angles(side * RAD(-5), 0, RAD(4)), C.Graphite, M.Metal, false, { Shadow = true })
+	piece(ctx, Vector3.new(11 * s, 0.4, 0.4), at(x, 18.2, z - side * 1.2), C.Pulse, M.Neon, false)
+end
+
+--[[
+	LANDMARK 9: ARCO FLUTUANTE — a base de um pilar continua no chão, mas os
+	blocos de cima e metade da verga se desprenderam e estão suspensos por
+	energia (feixes finos entre as peças), cada vez mais inclinados. Só
+	visual: nenhuma peça é plataforma, nada é alcançável, a avenida é livre.
+]]
+B.FloatingArch = function(ctx, x, side, z, s, yaw)
+	local stubH = 10 * s
+	piece(ctx, Vector3.new(7, stubH, 7), at(x, stubH / 2, side * z) * CFrame.Angles(0, RAD(yaw), 0), C.Graphite, M.Metal, true)
+	local y1 = stubH + 4
+	local c1h = 8 * s
+	local chunk1 = piece(ctx, Vector3.new(6.4, c1h, 6.4), at(x, y1 + c1h / 2, side * z) * CFrame.Angles(side * RAD(-6), RAD(yaw + 12), RAD(3)), C.DeepBlue, M.Metal, false, { Shadow = true })
+	local y2 = y1 + c1h + 3
+	local c2h = 6 * s
+	piece(ctx, Vector3.new(5.4, c2h, 5.4), at(x + 0.6, y2 + c2h / 2, side * (z + 0.5)) * CFrame.Angles(side * RAD(-14), RAD(yaw - 15), RAD(-6)), C.Graphite, M.Metal, false)
+	local y3 = y2 + c2h + 5
+	piece(ctx, Vector3.new(5, 4, 20), at(x - 1, y3 + 2, side * (z - 6)) * CFrame.Angles(side * RAD(8), RAD(yaw + 6), RAD(5)), C.DeepBlue, M.Metal, false, { Shadow = true })
+	for _, beam in { { stubH, y1 }, { y1 + c1h, y2 }, { y2 + c2h, y3 } } do
+		local gap = beam[2] - beam[1]
+		piece(ctx, Vector3.new(0.4, gap, 0.4), at(x, beam[1] + gap / 2, side * z), C.Pulse, M.Neon, false)
+	end
+	if ctx.Fx then
+		ambient(chunk1, ctx.Fx)
+	end
+end
+
+-- Fragmentos soltos pairando junto da parede (estáticos: a composição vende
+-- a gravidade estranha; nada se mexe, nada custa por quadro).
+B.FloatingShards = function(ctx, x, side, z, s, _yaw)
+	for index, spec in { { 0, 18, 0 }, { 5, 24, 3 }, { -4, 29, -2 } } do
+		local size = (3.2 - index * 0.5) * s
+		piece(ctx, Vector3.new(size, size * 1.4, size), at(x + spec[1], spec[2], side * (z + spec[3])) * CFrame.Angles(RAD(20 * index), RAD(35 * index), RAD(-15 * index)), if index == 2 then C.DeepBlue else C.Graphite, M.Metal, false)
+	end
+end
+
+-- Barreira 9: CONTENÇÃO DE ENERGIA — pilones escuros com anéis de energia
+-- nas bordas e a viga de contenção por cima com uma linha de energia.
+-- (Contido de propósito: a 10 é o grande momento.)
+B.EnergyContainment = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		local z = side * (half - 2)
+		piece(ctx, Vector3.new(4.4, 36, 4.4), at(x - 3, 18, z), C.Graphite, M.Metal, true)
+		for _, y in { 10, 24 } do
+			piece(ctx, Vector3.new(5.2, 0.5, 5.2), at(x - 3, y, z), C.Pulse, M.Neon, false)
+		end
+	end
+	piece(ctx, Vector3.new(6, 3, half * 2), at(segment.Barrier + 3, 32, 0), C.Graphite, M.Metal, false, { Shadow = true })
+	piece(ctx, Vector3.new(0.3, 0.5, 40), at(segment.Barrier - 0.15, 32, 0), C.Pulse, M.Neon, false)
+end
+
+-- Pré-10: energia CONVERGINDO para frente no fim do trecho (rente).
+B.ConvergenceLines = function(ctx, x, _side, _z, s, _yaw)
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(7 * s, 0.12, 0.4), at(x, 0.06, side * 11) * CFrame.Angles(0, RAD(-40 * side), 0), C.Pulse, M.Neon, false)
+	end
+end
+
+-- Pré-10: pilones enormes no fim do trecho, MAIS ALTOS que as paredes e
+-- abrindo para fora — a escala começa a mudar ("tem algo grande depois").
+B.OpeningPylon = function(ctx, x, side, _z, s, _yaw)
+	local h = 64 * s
+	local base = at(x, -0.5, side * (ctx.Half + 1)) * CFrame.Angles(side * RAD(5), 0, 0)
+	piece(ctx, Vector3.new(4, h, 4), base * CFrame.new(0, h / 2, 0), C.Graphite, M.Metal, true, { Shadow = true })
+	piece(ctx, Vector3.new(0.4, h * 0.45, 0.3), base * CFrame.new(0, h * 0.62, -side * 2.15), C.Pulse, M.Neon, false)
+end
+
 PowerPathDecor.Kinds = B
 
 -- X de uma entrada do Decor: fração da área (0–1), zona de decisão (1–2) ou a barreira.
@@ -593,7 +843,7 @@ end
 
 --[[
 	O cenário de um estágio (Model "Decor" dentro do PowerPath_<Id>). Estágios
-	sem Decor no tema não ganham nada (Fases D–E).
+	sem Decor no tema não ganham nada (Fase E: o Colosso).
 ]]
 function PowerPathDecor.Build(parent: Model, origin: Vector3, segment: CorridorLayout.Segment): Model?
 	local theme = CorridorThemes.For(segment.Id)

@@ -14,7 +14,7 @@
 	o que cada tema define aqui é MATERIAL e SILHUETA — a Fase A já não
 	diferencia estágio só por cor.
 
-	Fases (B: 1–3 e C: 4–6 feitas; D: 7–9, E: Colosso) preenchem `Props`,
+	Fases (B: 1–3, C: 4–6 e D: 7–9 feitas; E: Colosso) preenchem `Props`,
 	`Ambient` e os landmarks de cada tema; a estrutura não muda.
 ]]
 
@@ -285,26 +285,100 @@ local THEMES: { [string]: { [string]: any } } = {
 			{ Kind = "HeatFissure", At = 1.92, Side = -1, Z = 32, Yaw = 6 },
 		},
 	},
+	--[[
+		7 ROCHA VULCÂNICA — "entrei no endgame": basalto, rocha rachada em
+		camadas, fissuras quentes (algumas cruzam a faixa rente ao chão), um
+		respiro com fumaça controlada e brasas. Landmark: dois PAREDÕES de
+		basalto quebrados e inclinados, com pontas — o jogador fica pequeno.
+		A barreira é uma massa de rocha vulcânica. No fim, o primeiro cristal
+		vermelho rompendo o basalto. Ainda não é lava: é ROCHA.
+	]]
 	Volcanic = {
-		Floor = { Material = M.Basalt },
-		Lane = { Material = M.Basalt },
-		Wall = { Material = M.Basalt },
-		Trim = { Material = M.CrackedLava },
+		Floor = { Material = M.Basalt, Color = Color3.fromRGB(48, 40, 38) },
+		Lane = { Material = M.Basalt, Color = Color3.fromRGB(78, 68, 64) },
+		Wall = { Material = M.Rock, Color = Color3.fromRGB(56, 46, 42) },
+		Trim = { Material = M.CrackedLava, Color = Color3.fromRGB(120, 48, 26) },
 		Profile = { 44, 38, 50, 46 },
+		PlateShade = 0.84,
+		PlateLength = 16,
+		Decor = {
+			-- Ancestral → vulcânico: o calor do fim do 6 continua e cresce.
+			{ Kind = "HeatFissure", At = 0.05, Side = -1, Z = 28, Yaw = 12 },
+			{ Kind = "LavaCrack", At = 0.14, Side = 1, Z = 14, Yaw = 20 },
+			{ Kind = "BasaltColumns", At = 0.3, Side = -1 },
+			{ Kind = "VolcanicVent", At = 0.36, Side = 1, Z = 38, Fx = "Smoke" },
+			{ Kind = "VolcanicCliff", At = 0.5, Side = -1, Z = 32, Yaw = 6, Landmark = true },
+			{ Kind = "VolcanicCliff", At = 0.62, Side = 1, Z = 33, Scale = 0.8, Yaw = -8, Landmark = true },
+			{ Kind = "LavaCrack", At = 0.72, Side = -1, Z = 22, Yaw = -10 },
+			{ Kind = "EmberVent", At = 0.78, Side = -1, Z = 42, Fx = "Embers" },
+			-- Vulcânico → magma: as fissuras crescem e cruzam a faixa.
+			{ Kind = "LavaCrack", At = 0.86, Side = 1, Z = 10, Scale = 1.2, Yaw = -18 },
+			{ Kind = "VolcanicGate", At = "Barrier" },
+			{ Kind = "MagmaShard", At = 1.08, Side = 1, Z = 38 },
+		},
 	},
+	--[[
+		8 MAGMA CRISTALIZADO — a energia térmica saiu do controle: rocha NEGRA,
+		CRISTAIS VERMELHOS com núcleo laranja rompendo o chão, magma correndo
+		entre eles e vazando das paredes, faíscas. Não é "vulcânico 2": o 7 é
+		rocha, o 8 é magma + cristal. No fim, os cristais escurecem e o veio
+		vira outra energia (fria) — o calor virando energia pura.
+	]]
 	Magma = {
-		Floor = { Material = M.CrackedLava },
-		Lane = { Material = M.Basalt },
-		Wall = { Material = M.Basalt },
-		Trim = { Material = M.CrackedLava },
+		Floor = { Material = M.Basalt, Color = Color3.fromRGB(32, 28, 28) },
+		Lane = { Material = M.Slate, Color = Color3.fromRGB(70, 58, 56) },
+		Wall = { Material = M.Basalt, Color = Color3.fromRGB(38, 32, 32) },
+		Trim = { Material = M.CrackedLava, Color = Color3.fromRGB(190, 70, 30) },
 		Profile = { 46, 52, 48, 46 },
+		PlateShade = 0.82,
+		Decor = {
+			{ Kind = "LavaCrack", At = 0.1, Side = -1, Z = 20, Scale = 1.2, Yaw = 18 },
+			{ Kind = "MagmaShard", At = 0.14, Side = 1, Z = 36, Scale = 1.2 },
+			{ Kind = "WallMagma", At = 0.28, Side = -1 },
+			{ Kind = "MagmaFormation", At = 0.46, Side = 1, Z = 32, Landmark = true, Fx = "MagmaSparks" },
+			{ Kind = "MagmaFlow", At = 0.54, Side = 1, Z = 26, Yaw = 30 },
+			{ Kind = "MagmaFormation", At = 0.6, Side = -1, Z = 33, Scale = 0.8, Yaw = 12, Landmark = true },
+			{ Kind = "WallMagma", At = 0.74, Side = 1, Scale = 0.8 },
+			-- Magma → energia: o cristal escurece, a linha fria substitui a fissura.
+			{ Kind = "DarkCrystal", At = 0.84, Side = -1, Z = 35 },
+			{ Kind = "EnergyLine", At = 0.9, Side = 1, Z = 28, Yaw = -12 },
+			{ Kind = "MagmaSeal", At = "Barrier" },
+			{ Kind = "DarkCrystal", At = 1.08, Side = 1, Z = 40, Scale = 0.7 },
+		},
 	},
+	--[[
+		9 ENERGIA / CÓSMICO — fora do normal: a energia acumulada está
+		DISTORCENDO o próprio Caminho. Grafite, azul profundo, violeta; energia
+		violeta-branca só nas linhas. Piso escuro com circuitos que "cortam" a
+		faixa (só visual), painéis e uma parede cujo topo se soltou, e o
+		landmark: ARCOS FLUTUANTES — pedaços de estrutura suspensos por
+		energia. A barreira é uma contenção. Depois dela, pilones mais altos
+		que as paredes abrindo para fora e energia convergindo para frente:
+		tem algo ENORME depois (o 10 não é construído aqui).
+	]]
 	Tech = {
-		Floor = { Material = M.DiamondPlate },
-		Lane = { Material = M.Metal },
-		Wall = { Material = M.Metal },
-		Trim = { Material = M.Neon },
+		Floor = { Material = M.Slate, Color = Color3.fromRGB(32, 32, 42) },
+		Lane = { Material = M.DiamondPlate, Color = Color3.fromRGB(58, 60, 80) },
+		Wall = { Material = M.Metal, Color = Color3.fromRGB(40, 42, 60) },
+		Trim = { Material = M.Metal, Color = Color3.fromRGB(120, 110, 170) },
 		Profile = { 48, 44, 52, 50 },
+		PlateShade = 0.86,
+		Decor = {
+			{ Kind = "DarkCrystal", At = 0.05, Side = 1, Z = 36, Scale = 0.8 },
+			{ Kind = "EnergyCircuit", At = 0.12 },
+			{ Kind = "EnergyPanel", At = 0.24, Side = -1 },
+			{ Kind = "EnergyPanel", At = 0.24, Side = 1 },
+			{ Kind = "FloatingArch", At = 0.44, Side = -1, Z = 34, Landmark = true, Fx = "EnergyMotes" },
+			{ Kind = "FloatingArch", At = 0.56, Side = 1, Z = 35, Scale = 0.8, Yaw = 10, Landmark = true },
+			{ Kind = "FloatingShards", At = 0.64, Side = -1, Z = 38 },
+			{ Kind = "EnergyCircuit", At = 0.7 },
+			{ Kind = "BrokenWall", At = 0.78, Side = 1 },
+			{ Kind = "EnergyContainment", At = "Barrier" },
+			-- Pré-10 (só preparação; o Colosso é a Fase E).
+			{ Kind = "OpeningPylon", At = 1.9, Side = -1 },
+			{ Kind = "OpeningPylon", At = 1.9, Side = 1 },
+			{ Kind = "ConvergenceLines", At = 1.94 },
+		},
 	},
 	-- Colosso: paredes altas e piso de mármore; a Fase E monta o monumento
 	-- nos slots (a área é 1,6x mais larga e mais longa).

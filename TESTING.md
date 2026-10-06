@@ -419,3 +419,27 @@ SW.12. R15 normal, R15 com Avatar Joint Upgrade (AnimationConstraint) e R6: os t
 SW.13. Dois jogadores (Test > 2): o golpe do outro jogador por perto também sai no ritmo visual limitado (não a cada sinal).
 SW.14. Efeitos reduzidos: o golpe da espada e o corpo continuam; só arco/Corte somem (como antes).
 SW.15. Sem camera shake novo por golpe; o feedback de câmera continua o do CombatFx.
+
+### Caminho do Poder — Fase D: endgame 7–9 (PD) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+PD.1. 6 → 7: depois da Barreira 6, fissuras quentes e brasas continuam e crescem; a pedra ancestral dá lugar ao basalto — a sensação é de "descer" para uma região muito quente (o piso continua na mesma altura).
+PD.2. Estágio 7: basalto e rocha rachada em camadas, colunas de basalto na parede, fissuras quentes (uma cruza a faixa rente ao chão, sem colisão), respiro com um fio de fumaça e brasas. Landmark: dois PAREDÕES de basalto quebrados e inclinados com pontas — o jogador parece pequeno. Ainda NÃO é lava.
+PD.3. Barreira 7: massa de rocha vulcânica — blocos de basalto com pontas nas bordas, fissura quente na face interna, laje bruta por cima com uma veia de brasa.
+PD.4. 7 → 8: no fim do 7 as fissuras cruzam a faixa e o primeiro cristal vermelho rompe o basalto; no começo do 8, mais fissuras e cristais.
+PD.5. Estágio 8: rocha NEGRA, duas formações de CRISTAL DE MAGMA (vermelho profundo, núcleo laranja, rocha negra levantada na base) assimétricas, magma correndo entre elas e vazando das paredes, faíscas no cristal maior. Não pode parecer "vulcânico 2".
+PD.6. Barreira 8: pilares de cristal vermelho com núcleo laranja nas bordas e a laje de rocha negra com a veia de magma por cima.
+PD.7. 8 → 9: no fim do 8 o cristal escurece e o veio vira violeta; a linha de energia fria substitui a fissura térmica; no começo do 9, mais cristal escuro e o primeiro circuito.
+PD.8. Estágio 9: grafite, azul profundo e violeta; circuitos "cortando" a faixa (rente; o piso físico é contínuo), painéis com linha de energia, uma parede cujo topo se soltou e flutua, fragmentos pairando, e os dois ARCOS FLUTUANTES (blocos suspensos por feixes de energia). Nada é plataforma nem alcançável; nada se mexe (estático de propósito).
+PD.9. Barreira 9: contenção de energia — pilones escuros com anéis de energia e a viga de contenção por cima. Mais contida que um final: a 10 é o grande momento.
+PD.10. Pré-10: depois da Barreira 9, dois pilones bem mais altos que as paredes abrindo para fora e linhas de energia convergindo para frente. Olhando do meio do 9: Barreira 9 → além → "tem algo grande depois". Nada do Colosso construído.
+PD.11. Placa de HP nas barreiras 7–9: inteira e legível em todas as posições laterais (contra basalto, vermelho e violeta).
+PD.12. Sword Swing nas barreiras 7–9: personagem, espada e o golpe A/B/C continuam legíveis contra os fundos escuros (não pode sumir no preto do 8/9).
+PD.13. CutFx e impacto nas barreiras 7–9: não somem atrás de pilar/pilone, não se confundem com o Neon do cenário.
+PD.14. Pets: correr do 7 ao fim do 9 com 1, 3 e o máximo — ninguém prende (atenção a paredões, formações e arcos).
+PD.15. Dois jogadores: mesmo cenário; fumaça, brasas, faíscas e motes são locais (só perto).
+PD.16. Efeitos reduzidos: sem fumaça/brasas/faíscas/motes; landmarks, arquitetura, linhas de energia e barreiras continuam.
+PD.17. Celular: as 3 regiões reconhecíveis sem texto; a fumaça não pesa (1 respiro, 1,2 partícula/s); nada cobre CLIQUE/Auto.
+PD.18. FPS: comparar com a Fase C no meio de cada área 7–9 (+130 peças, 0 luzes novas, +4 emissores com LOD, 0 loops novos).
+PD.19. Iluminação: 7–9 são escuros de propósito, sem PointLight nova — conferir se o avatar, a faixa e os pads continuam visíveis na luz real (se escuro demais, clarear a COR das superfícies, não adicionar luz).
+PD.20. Pads 7–9: +N, x2 e Voltar legíveis contra o piso escuro e os circuitos; mesmos lugares, mesma lógica; passar reto continua.
+
+Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 10 (landmarks 1–9, molduras 1–9, transições 6→7, 7→8, 8→9 e pré-10, Neon só como acento, cenário fora da safe lane / frente da barreira / fileiras / pads / câmera, estágio 10 sem cenário, orçamento por fase e estágio, emissores ≤ 9 com um único controlador) e `python tools/render_power_path.py <json> <saida> <tag> D`.

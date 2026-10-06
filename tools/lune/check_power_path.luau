@@ -458,8 +458,8 @@ for name, n in lightKinds do
 end
 check(parts - decorParts <= 1250, string.format("9. orçamento da fundação (Fase A): %d peças fora do cenário — meta 1.100–1.250", parts - decorParts))
 -- Peças de cenário por fase (Fase B: 1–3; Fase C: 4–6).
-local phaseOf = { Wood = "B", Ruins = "B", Ice = "B", Crystal = "C", Gold = "C", Ancient = "C" }
-local decorPhase = { B = 0, C = 0 }
+local phaseOf = { Wood = "B", Ruins = "B", Ice = "B", Crystal = "C", Gold = "C", Ancient = "C", Volcanic = "D", Magma = "D", Tech = "D" }
+local decorPhase = { B = 0, C = 0, D = 0 }
 for _, d in path:GetDescendants() do
 	if d:IsA("BasePart") and d:GetAttribute("Decor") ~= nil then
 		local stage = d:FindFirstAncestorWhichIsA("Model")
@@ -470,13 +470,14 @@ for _, d in path:GetDescendants() do
 	end
 end
 check(decorPhase.B >= 80 and decorPhase.B <= 130, string.format("9. orçamento da Fase B (1–3): +%d peças de cenário (meta 80–110, teto 130)", decorPhase.B))
-check(decorPhase.C >= 90 and decorPhase.C <= 130 and parts <= 1400 and decorParts == decorPhase.B + decorPhase.C, string.format("9. orçamento da Fase C (4–6): +%d peças de cenário (meta 90–115, teto 130); corredor com %d peças (%d instâncias), final ≈ 1.600 (teto 1.700)", decorPhase.C, parts, instances))
-check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; Fases B e C não adicionam; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
+check(decorPhase.C >= 90 and decorPhase.C <= 130, string.format("9. orçamento da Fase C (4–6): +%d peças de cenário (meta 90–115, teto 130)", decorPhase.C))
+check(decorPhase.D >= 105 and decorPhase.D <= 150 and parts <= 1500 and decorParts == decorPhase.B + decorPhase.C + decorPhase.D, string.format("9. orçamento da Fase D (7–9): +%d peças de cenário (meta 105–135, teto 150); corredor com %d peças (%d instâncias) — abaixo de 1.500, reserva para o Colosso (final ≈ 1.600, teto 1.700)", decorPhase.D, parts, instances))
+check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; Fases B, C e D não adicionam; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
 -- Emissores: poucos, só onde o tema pede, desligados no servidor, com tag
 -- (o PowerPathEnvironmentController liga perto da câmera).
-local emitterStages = { Ice = 2, Crystal = 1, Ancient = 1 }
+local emitterStages = { Ice = 2, Crystal = 1, Ancient = 1, Volcanic = 2, Magma = 1, Tech = 1 }
 local emitterCount = {}
-local emittersOk = emitters <= 5
+local emittersOk = emitters <= 9
 for _, emitter in emitterList do
 	local owner = emitter.Parent
 	local stage = owner and owner:FindFirstAncestorWhichIsA("Model")
@@ -493,10 +494,10 @@ for id, max in emitterStages do
 		emittersOk = false
 	end
 end
-check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 5: gelo 2, cristal 1, brasas do fim do 6 1; desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
+check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 9: gelo 2, cristal 1, brasas do 6 1, fumaça+brasas do 7 2, faíscas do 8 1, motes do 9 1; desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
 
 -- ── 10. Fases B e C: cenário dos estágios 1–6 ───────────────────────────────
-local themed = { Wood = true, Ruins = true, Ice = true, Crystal = true, Gold = true, Ancient = true }
+local themed = { Wood = true, Ruins = true, Ice = true, Crystal = true, Gold = true, Ancient = true, Volcanic = true, Magma = true, Tech = true }
 local decorBy = {}
 for _, segment in segments do
 	local decor = stageModels[segment.Id]:FindFirstChild("Decor")
@@ -550,10 +551,12 @@ for _, segment in segments do
 end
 check(landmarkOk, string.format("10. landmark nos estágios 1–3 (peças marcadas Landmark, acima de y 24): floresta %d, ruínas %d, gelo %d peças de cenário", counts.Wood, counts.Ruins, counts.Ice))
 check(landmarkOk, string.format("10. landmark nos estágios 4–6 (peças marcadas Landmark, acima de y 24): cristal %d, ouro %d, ancestral %d peças de cenário", counts.Crystal, counts.Gold, counts.Ancient))
-check(onlyThemed, "10. estágios 7–10 sem cenário (Fases D–E); o 7 só tem o indício de calor no fim do 6")
+check(landmarkOk, string.format("10. landmark nos estágios 7–9 (peças marcadas Landmark, acima de y 24): vulcânico %d, magma %d, energia %d peças de cenário", counts.Volcanic, counts.Magma, counts.Tech))
+check(onlyThemed, "10. estágio 10 (Colosso) ainda sem cenário (Fase E); o 9 só PREPARA a chegada")
 check(counts.Wood >= 20 and counts.Wood <= 40 and counts.Ruins >= 25 and counts.Ruins <= 45 and counts.Ice >= 30 and counts.Ice <= 50 and counts.Wood < counts.Ice and counts.Ruins <= counts.Ice, string.format("10. orçamento por estágio (guia 25–35 / 30–40 / 35–45) e intensidade subindo até o gelo: %d / %d / %d", counts.Wood, counts.Ruins, counts.Ice))
 check(counts.Crystal >= 25 and counts.Crystal <= 45 and counts.Gold >= 25 and counts.Gold <= 45 and counts.Ancient >= 22 and counts.Ancient <= 45, string.format("10. orçamento por estágio da Fase C (guia 30–40 cada, sem landmark de 80 peças): %d / %d / %d", counts.Crystal, counts.Gold, counts.Ancient))
 -- Nenhum landmark gasta o orçamento sozinho.
+check(counts.Volcanic >= 25 and counts.Volcanic <= 50 and counts.Magma >= 30 and counts.Magma <= 50 and counts.Tech >= 35 and counts.Tech <= 55 and counts.Volcanic <= counts.Magma and counts.Magma <= counts.Tech, string.format("10. orçamento por estágio da Fase D (guia 30–40 / 35–45 / 40–50) e intensidade subindo 7 ≤ 8 ≤ 9: %d / %d / %d", counts.Volcanic, counts.Magma, counts.Tech))
 local heavy = {}
 for _, segment in segments do
 	local perKind = {}
@@ -647,7 +650,7 @@ check(#padHits == 0, "10. nada do cenário sobre os pads de vitória / Voltar " 
 check(#cameraHits == 0, "10. câmera chegando na barreira sem nada sobre a faixa (y 14–24, 40 studs antes) " .. table.concat(cameraHits, ", "))
 
 -- Molduras das barreiras e transições físicas.
-local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal", Crystal = "CrystalConduit", Gold = "TempleGate", Ancient = "AncientSeal" }
+local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal", Crystal = "CrystalConduit", Gold = "TempleGate", Ancient = "AncientSeal", Volcanic = "VolcanicGate", Magma = "MagmaSeal", Tech = "EnergyContainment" }
 local segmentById = {}
 for _, segment in segments do
 	segmentById[segment.Id] = segment
@@ -660,7 +663,7 @@ for id, kind in frames do
 		print("      sem moldura: " .. id)
 	end
 end
-check(framesOk, "10. barreiras 1–6 emolduradas pelo tema (raízes, umbral de ruína, selo de gelo, pilares de cristal, portão do templo, selo ancestral)")
+check(framesOk, "10. barreiras 1–9 emolduradas pelo tema (raízes, umbral, selo de gelo, pilares de cristal, portão do templo, selo ancestral, massa vulcânica, magma cristalizado, contenção de energia)")
 local w, r, i = segments[1], segments[2], segments[3]
 local thirdW, thirdR = (w.Barrier - w.AreaStart) / 3, (r.Barrier - r.AreaStart) / 3
 local t12 = kindsIn(decorBy.Wood, w.AreaStart + 2 * thirdW, w.End)
@@ -691,6 +694,24 @@ for _, d in decorBy.Ancient do
 	end
 end
 check((a3.HeatFissure or a3.EmberVent) and not a12.HeatFissure and not a12.EmberVent and not lava, "10. primeiro calor do 7 só no fim do 6 (fissuras e brasas, sem lava)")
+-- Fase D: 6→7, 7→8, 8→9 e 9→área do 10.
+local v1, v12, v3 = parts3("Volcanic")
+local m1, m12, m3 = parts3("Magma")
+local t1, t12, t3 = parts3("Tech")
+check(v1.HeatFissure and v12.VolcanicCliff and not v12.MagmaShard and not v12.MagmaFormation, "10. transição 6→7: o calor do 6 continua no começo do 7 e vira rocha vulcânica (paredões no meio, sem cristal vermelho)")
+check(v3.MagmaShard and m1.LavaCrack and m1.MagmaShard and not m3.MagmaShard and m12.MagmaFormation, "10. transição 7→8: fissuras crescem, o primeiro cristal vermelho rompe o basalto no fim do 7 e o magma domina o 8")
+check(m3.DarkCrystal and m3.EnergyLine and not m12.DarkCrystal and not m12.EnergyLine and t1.DarkCrystal and t1.EnergyCircuit, "10. transição 8→9: o cristal escurece e a linha de energia fria substitui a fissura térmica")
+local tTail = kindsIn(decorBy.Tech, segmentById.Tech.Barrier + segmentById.Tech.Depth, segmentById.Tech.End)
+local pylonsTall = true
+for _, d in decorBy.Tech do
+	if d:GetAttribute("Decor") == "OpeningPylon" and d.Material ~= Enum.Material.Neon then
+		local _, maxP = box(d)
+		if maxP.Y <= CorridorThemes.For("Tech").Profile[4] + 8 then
+			pylonsTall = false
+		end
+	end
+end
+check(tTail.OpeningPylon and tTail.ConvergenceLines and pylonsTall and #decorBy.Colossus == 0, "10. pré-10: depois da Barreira 9, pilones MAIS ALTOS que as paredes e energia convergindo para frente — e nada construído no 10")
 
 -- Cenário estático: sem script, sem prompt, sem luz.
 local staticOk = true
@@ -746,7 +767,7 @@ do
 	local source = require("@lune/fs").readFile(E.Root .. "/src/client/Controllers/PowerPathEnvironmentController.luau")
 	local _, loops = string.gsub(source, "while true do", "")
 	check(Env.Count() == emitters and emitters > 0 and eachOk and reducedOn == 0 and far == 0 and loops == 1 and not string.find(source, "RenderStepped", 1, true) and not string.find(source, "Heartbeat", 1, true) and not string.find(source, "Lighting", 1, true),
-		string.format("10. VFX ambiental LOCAL (gelo, cristal, brasas): cada um liga só perto (no máx. %d juntos), apaga com Efeitos reduzidos (%d) e longe (%d); 1 loop só, sem quadro a quadro, sem Lighting", maxOn, reducedOn, far))
+		string.format("10. VFX ambiental LOCAL (gelo, cristal, brasas, fumaça, faíscas, motes): cada um liga só perto (no máx. %d juntos), apaga com Efeitos reduzidos (%d) e longe (%d); 1 loop só, sem quadro a quadro, sem Lighting", maxOn, reducedOn, far))
 	-- Um sistema só: nenhum controlador de ambiente por estágio.
 	local fs = require("@lune/fs")
 	local envControllers = {}
