@@ -19,7 +19,7 @@ Saídas geradas vão para `build/`, que está no `.gitignore` — não versione 
 |---|---|
 | `python tools/audit.py` | Auditoria estática: remotes, APIs depreciadas, `print` solto, textos faltando/duplicados, limpeza por jogador |
 | `python tools/render_map.py --check` | Valida a planta pelos configs (áreas, pads, corredor em ordem, altura do paredão). Sem `--check` gera `build/mapa_planta.png` |
-| `python tools/simulate_economy.py --hours 2` | Simulação de economia por perfil de jogador |
+| `python tools/simulate_economy.py --hours 2` | Simulação de economia por perfil de jogador (legado; a auditoria canônica é `tools/lune/econ_audit.luau`) |
 | `python tools/check_world_layout.py` | Valida as zonas antigas (desligadas por `ZoneConfig.Build`) |
 | `python tools/build_place.py [--studio-mock]` | Gera `build/PowerClicker.rbxlx` sem Rojo |
 | `python tools/publish_place.py` | Publica via Open Cloud (chave em variável de ambiente; **nunca** no repositório) |
@@ -43,6 +43,8 @@ lune run tools/lune/check_fx.luau       # efeitos de combate: impacto, rachadura
 lune run tools/lune/check_polish.luau   # sem luz constante no personagem; pets menores em formação atrás
 lune run tools/lune/check_station.luau  # protótipo: estação de Melhorias como máquina (orçamento, posição, prompt, movimento)
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
+lune run tools/lune/check_econ_model.luau # fidelidade do simulador da auditoria de economia
+lune run tools/lune/econ_audit.luau     # auditoria da progressão 1→10 (Markdown; seções e runs=N, scenario=A|B|C)
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
 
