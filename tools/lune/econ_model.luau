@@ -1150,7 +1150,7 @@ return function(E)
 			newDay(st, activeToday)
 			local afk = (profile.AfkHoursPerDay or 0) * 3600
 			local t = 0
-			local afkDt = math.max(dt, 30)
+			local afkDt = math.max(dt, 120) -- AFK não tem decisão: passo largo (boss é contado pelo relógio)
 			while t < afk do
 				local step = math.min(afkDt, afk - t)
 				stepAfk(st, step)
