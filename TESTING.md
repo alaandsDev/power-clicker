@@ -467,3 +467,35 @@ PE.19. Iluminação: a única luz nova é a do selo (branco-dourada, alcance 48)
 PE.20. Vista completa: do portal olhando para trás e do alto até o lobby — "eu percorri tudo isso".
 
 Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 11 (transição 9→10, escala crescendo até o portão, passagem do Colosso livre, área de conclusão, portal menor que o Colosso e inerte — sem teleporte/prompt/remote/DataStore/Touched —, texto do portal) + seções 9–10 (orçamento, luzes, emissores, controlador único, safe lane, frente da barreira com a largura do Colosso, pads, rota de pets); `lune run tools/lune/check_corridor.luau` (barreira individual por jogador); `python tools/render_power_path.py <json> <saida> <tag> E`.
+
+### ⚡ Poder x ⚔ Dano (UX) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+UX.1. Topo: o pill do ⚡ PODER mostra o SALDO (número grande) e, na linha da legenda, à direita, "⚔ 318M" em vermelho-coral = o dano de UM golpe agora (Poder por clique × combo). Clicando, o ⚔ sobe com o combo (até 2x) e volta quando o combo acaba.
+UX.2. Clique: o número que sobe do botão é "⚡ +X" (Poder que entra no saldo); Auto Click: "⚡ +X (auto)". O dano aparece na barreira (número vermelho "-X" do CombatFx, não alterado).
+UX.3. Barreira: a placa continua com ❤ HP da fileira; a faixa do corredor mostra "Seu golpe: ⚔ 318M · ≈4 golpes · Prêmio 🏆 N" — "≈ golpes" é a conta da FILEIRA da placa (❤ 1B ÷ ⚔ 318M ≈ 4). O aviso "forte demais" continua olhando o estágio inteiro.
+UX.4. Melhorias (aba ⚡ Poder): o botão continua com o PREÇO (⚡ X) — essas melhorias GASTAM Poder; abaixo do nível aparece "⚔ 318M → 397M" (o golpe antes → depois de comprar o que o botão compra: 1x, 10x ou Máx). Aba 💎: Poder Eterno também mostra a prévia ⚔; pets/sorte/depósito não.
+UX.5. Painel Progresso (⚔ Caminho do Poder): "⚡ Poder X · ⚔ Seu golpe Y" e a decomposição: base por clique (com o Corte) · melhorias · permanente · renascimento · pets · aura · runas · passe · boost · overdrive · combo (só as que valem ≠ 1). HP das barreiras com ❤.
+UX.6. Celular: o ⚔ do pill legível sem cobrir o número do Poder; nada novo no topo além disso.
+UX.7. Conferir na barreira com combo cheio: o HP cai ≈ ⚔ por golpe (não o saldo de Poder).
+
+### Espada — golpe de corpo inteiro (SW2) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+No Output (Studio), cada golpe VISUAL escreve: "Swing A | Torso Δ X° | Hip/Root Δ X° | LeftArm Δ X° | Head Δ X° | Sword/Hand Δ X°" (medido nas PARTES, uma linha por golpe, nunca por hit).
+SW2.1. Parado + A: o quadril e o tronco carregam para a direita (giram e inclinam), depois soltam para a esquerda; o braço esquerdo abre; a espada termina o movimento (corpo → braço → espada).
+SW2.2. Parado + B: o espelho (não cópia): carrega à esquerda, solta à direita; braço esquerdo cruza.
+SW2.3. Parado + C: o corpo abre e o tronco se estende para trás na preparação; no impacto desce para frente com o quadril; ombros descem; braço esquerdo sobe e recolhe. Sem curvar demais.
+SW2.4. Segurar o ataque 10 s: ≈ 38 golpes visuais (3,8/s, igual ao aprovado), cada um com o corpo; hits/dano iguais.
+SW2.5. Andar atacando: as pernas continuam andando; o tronco/quadril giram por cima.
+SW2.6. Correr atacando: idem, sem travar a corrida.
+SW2.7. Pular atacando: o pulo continua; o golpe sai por cima.
+SW2.8. Câmera frontal: o tronco gira e o ombro esquerdo compensa.
+SW2.9. Câmera traseira (a do jogador): os ombros e a cabeça se deslocam claramente (antes: quase nada) — o personagem golpeia, não só o braço.
+SW2.10. Câmera lateral: o C inclina para frente/trás; o A/B mostram o giro do quadril.
+SW2.11. Braço esquerdo: contrapeso visível (abre/fecha/estabiliza), nunca colado no corpo.
+SW2.12. Tronco: perceptível sem a espada (cobrir a espada com a mão na tela e ainda ver o golpe).
+SW2.13. Cabeça: acompanha um pouco e continua olhando para frente (não gira 1:1 com o tronco).
+SW2.14. Entre golpes: postura de combate (quadril levemente virado, ombros assimétricos), sem voltar ao "braço reto".
+SW2.15. R15 normal: tudo acima.
+SW2.16. R15 com Avatar Joint Upgrade (AnimationConstraint): o mesmo (Root, Waist, Neck, ombros, cotovelos, punho).
+SW2.17. R6: ombros + RootJoint (o corpo inteiro gira um pouco, pernas juntas) + pescoço; não pode parecer "braço isolado".
+SW2.18. Respawn no meio do combo: corpo novo começa no A, postura limpa.
+SW2.19. Trocar de espada: combo volta ao A, corpo continua participando.
+SW2.20. Dois jogadores: o golpe do outro (perto) também tem o corpo, no mesmo ritmo limitado.

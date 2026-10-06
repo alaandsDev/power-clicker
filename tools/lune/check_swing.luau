@@ -676,7 +676,7 @@ do
 	check(pitch >= 70 and pitch <= 100, string.format("P1. espada baixa, perto da horizontal (inclinação %.0f°; 90 = horizontal, 180 = em pé)", pitch))
 	check(stance.Shoulder.Y <= 0 and stance.Shoulder.Z > 0, "P1. braço da espada aberto para fora: a espada não cruza o corpo")
 	check(stance.LShoulder.Z < 0 and stance.LShoulder ~= V3.zero, "P1. braço esquerdo levemente afastado")
-	check(stance.Waist.Y ~= 0 and math.abs(stance.Neck.Y + stance.Waist.Y) < 1e-6, "P1. tronco assimétrico, cabeça compensada (olhando para frente)")
+	check(stance.Waist.Y ~= 0 and stance.Root.Y ~= 0 and math.abs(stance.Neck.Y + stance.Waist.Y + stance.Root.Y) < 1e-6, "P1. quadril e tronco levemente virados (segurando a espada), ombros assimétricos, cabeça compensada (olhando para frente)")
 	-- Respiração: sutil e contínua.
 	local minW, maxW, maxShoulder, maxStep = math.huge, -math.huge, 0, 0
 	local last = fr(me.UpperTorso.Waist)
@@ -833,14 +833,36 @@ do
 	local rs, ls = r6motor("Right Shoulder", 1), r6motor("Left Shoulder", -1)
 	local neck = Instance.new("Motor6D")
 	neck.Name = "Neck"
-	neck.C0 = CF.new(0, 1, 0)
+	neck.Part0 = torso
+	neck.Part1 = part(r6, "Head")
+	neck.C0 = CF.new(0, 1, 0) * CF.Angles(math.rad(-90), 0, math.rad(180))
 	neck.Parent = torso
-	local rsBase, lsBase, neckBase = rs.C0, ls.C0, neck.C0
+	-- RootJoint do R6 (HumanoidRootPart → Torso), com o C0 girado de verdade.
+	local rootJoint = Instance.new("Motor6D")
+	rootJoint.Name = "RootJoint"
+	rootJoint.Part0 = r6.HumanoidRootPart
+	rootJoint.Part1 = torso
+	rootJoint.C0 = CF.Angles(math.rad(-90), 0, math.rad(180))
+	rootJoint.Parent = r6.HumanoidRootPart
+	local rsBase, lsBase, neckBase, rootBase = rs.C0, ls.C0, neck.C0, rootJoint.C0
 	newTool(4.2).Parent = r6
 	respawnAs(r6)
 	frames(1.5)
 	local r6rig = Swing.LocalRig()
-	check(r6rig and not r6rig.HasWrist and not same(fr(rs), rsBase) and not same(fr(ls), lsBase) and same(fr(neck), neckBase), "P11. R6: postura nos dois ombros (sem cotovelo/punho; pescoço fica com o Roblox)")
+	check(r6rig and not r6rig.HasWrist and r6rig.Joints.Root and r6rig.Joints.Neck and not same(fr(rs), rsBase) and not same(fr(ls), lsBase) and not same(fr(neck), neckBase) and not same(fr(rootJoint), rootBase),
+		"P11. R6: postura nos dois ombros + quadril (RootJoint) levemente virado e pescoço compensando (sem cotovelo/punho/cintura)")
+	-- R6 no golpe: sem cintura, o tronco vai pela raiz — o corpo NÃO fica parado.
+	do
+		local restRoot = fr(rootJoint)
+		Slash.Play()
+		local rootPeak = 0
+		for _ = 1, math.floor(SwordSwing.SWING_SECONDS * 60) do
+			frames(1 / 60)
+			rootPeak = math.max(rootPeak, angle(fr(rootJoint), restRoot))
+		end
+		frames(0.4)
+		check(rootPeak >= 8 and (fr(rootJoint).Position - rootBase.Position).Magnitude < 1e-6, string.format("K-R6. R6: o tronco participa do golpe pela RootJoint (%.0f°, só rotação)", rootPeak))
+	end
 	check(r6rig and SwordSwing.SwordPitch(r6rig.Rest) >= 80 and SwordSwing.SwordPitch(r6rig.Rest) <= 110 and (fr(rs).Position - rsBase.Position).Magnitude < 1e-6, string.format("P11. R6: espada baixa só pelo ombro (%.0f°), sem sair do lugar", if r6rig then SwordSwing.SwordPitch(r6rig.Rest) else 0))
 	Slash.Play()
 	frames(0.35)
@@ -1280,14 +1302,14 @@ do
 	local lines = {}
 	for _, v in { "A", "B", "C" } do
 		local b = body[v]
-		if not b or b.Torso < 8 or b.Torso > 20 or b.Left < 10 or b.Neck < 4 or b.Head < 2 or b.Head > 9 or b.Hand < 60 or b.Hand < b.Torso * 2 then
+		if not b or b.Torso < 12 or b.Torso > 30 or b.Left < 20 or b.Neck < 8 or b.Head < 2 or b.Head > 14 or b.Hand < 60 or b.Hand < b.Torso * 2 then
 			okBody = false
 		end
 		if b then
 			table.insert(lines, string.format("%s: mão %.0f°, tronco %.0f°, braço esq. %.0f°, cabeça %.0f° (no pescoço %.0f°)", v, b.Hand, b.Torso, b.Left, b.Head, b.Neck))
 		end
 	end
-	check(okBody, "H8. o corpo participa em A/B/C: tronco 8–20°, braço esquerdo ≥ 10°, cabeça segue só um pouco (2–9° em relação ao quadril); o braço continua o protagonista — " .. table.concat(lines, "; "))
+	check(okBody, "H8. o corpo participa em A/B/C: tronco 12–30° sobre o quadril, braço esquerdo ≥ 20° (contrapeso), cabeça segue só um pouco (2–14°); a espada continua o fim do movimento — " .. table.concat(lines, "; "))
 	-- Direção do tronco: A gira para a esquerda no corte, B para a direita; C desce para frente.
 	local function yawOf(cf)
 		local look = cf.LookVector
@@ -1299,16 +1321,30 @@ do
 	local a, b, c = body.A, body.B, body.C
 	check(a and b and c and yawOf(a.TorsoStrike) - yawOf(a.TorsoWindup) > 15 and yawOf(b.TorsoStrike) - yawOf(b.TorsoWindup) < -15 and pitchOf(c.TorsoStrike) < pitchOf(c.TorsoWindup) - 10,
 		string.format("H8. tronco acompanha o corte: A gira %.0f° (para a esquerda), B %.0f° (para a direita), C desce %.0f° para frente", yawOf(a.TorsoStrike) - yawOf(a.TorsoWindup), yawOf(b.TorsoStrike) - yawOf(b.TorsoWindup), pitchOf(c.TorsoWindup) - pitchOf(c.TorsoStrike)))
-	-- Pernas nunca: o rig não conhece quadril/joelho/raiz.
+	-- Pernas nunca: o rig não conhece quadril-coxa/joelho/tornozelo. A raiz
+	-- (Root) só GIRA o quadril um pouco; o HumanoidRootPart não se mexe.
 	local legs = false
 	for key, names in SwordSwing.JOINT_NAMES do
 		for _, name in names do
-			if string.find(name, "Hip", 1, true) or string.find(name, "Knee", 1, true) or string.find(name, "Root", 1, true) or string.find(name, "Ankle", 1, true) then
+			if string.find(name, "Hip", 1, true) or string.find(name, "Knee", 1, true) or string.find(name, "Ankle", 1, true) then
 				legs = true
 			end
 		end
 	end
-	check(not legs, "H10. pernas e raiz ficam com a locomoção do Roblox (idle/andar/correr/pular): o golpe só usa tronco, ombros, braços e pescoço")
+	local hrpBefore = localPlayer.Character.HumanoidRootPart.CFrame
+	Slash.Play()
+	local hipPeak, hrpMoved = 0, false
+	local hipRest = relTo("HumanoidRootPart", "LowerTorso")
+	for _ = 1, math.floor(SwordSwing.SWING_SECONDS * 60) do
+		frames(1 / 60)
+		hipPeak = math.max(hipPeak, angle(relTo("HumanoidRootPart", "LowerTorso"), hipRest))
+		if localPlayer.Character.HumanoidRootPart.CFrame ~= hrpBefore then
+			hrpMoved = true
+		end
+	end
+	frames(0.4)
+	check(not legs and hipPeak >= 4 and hipPeak <= 16 and not hrpMoved and (relTo("HumanoidRootPart", "LowerTorso").Position - hipRest.Position).Magnitude < 1e-3,
+		string.format("H10. o quadril participa (Root gira %.0f°, só rotação) e volta; HumanoidRootPart/hitbox parados; pernas (quadril-coxa, joelho) ficam com a locomoção", hipPeak))
 	-- H10: golpe andando: tronco e braço participam por cima do "carregar".
 	local rootH = localPlayer.Character.HumanoidRootPart
 	for _ = 1, 60 do
@@ -1331,6 +1367,68 @@ do
 
 	Swing.Swing = originalSwing
 	Combat.OnSwingImpact = originalImpactK
+end
+
+do
+	-- H12: o que a CÂMERA DE 3ª PESSOA (atrás) vê do corpo, sem a espada:
+	-- ombros, cabeça e mão esquerda se deslocam na tela; e a espada chega ao
+	-- máximo DEPOIS do corpo (cadeia cinética: corpo → braço → espada).
+	frames(1.5)
+	local rigH = Swing.LocalRig()
+	local function relTo(a, b)
+		local c = localPlayer.Character
+		return c[a].CFrame:ToObjectSpace(c[b].CFrame)
+	end
+	local me = localPlayer.Character
+	local hrp = me.HumanoidRootPart
+	local camPos = (hrp.CFrame * CF.new(0, 4, 12)).Position
+	local camLook = ((hrp.CFrame * CF.new(0, 0.5, -8)).Position - camPos).Unit
+	local camRight = camLook:Cross(V3.new(0, 1, 0)).Unit
+	local camUp = camRight:Cross(camLook)
+	local function screen(p)
+		local d = p - camPos
+		local z = d:Dot(camLook)
+		return V3.new(d:Dot(camRight) / z, d:Dot(camUp) / z, 0)
+	end
+	local function points()
+		return { (me.UpperTorso.CFrame * CF.new(1, 0.8, 0)).Position, (me.UpperTorso.CFrame * CF.new(-1, 0.8, 0)).Position, me.Head.CFrame.Position, me.LeftUpperArm.CFrame.Position }
+	end
+	local screenLines, screenOk, chainOk = {}, true, true
+	for _ = 1, 3 do
+		local rest = points()
+		local handRest = relTo("HumanoidRootPart", "RightHand")
+		local torsoRest = relTo("HumanoidRootPart", "UpperTorso")
+		Slash.Play()
+		local variant = rigH.Variant
+		local peaks = { 0, 0, 0, 0 }
+		local handPeak, handAt, torsoHalfAt, torsoPeakSeen = 0, 0, nil, 0
+		local t0s = now
+		while now - t0s < rigH.Duration do
+			frames(1 / 60)
+			local pts = points()
+			for k = 1, 4 do
+				peaks[k] = math.max(peaks[k], (screen(pts[k]) - screen(rest[k])).Magnitude * 1000)
+			end
+			local hand = angle(relTo("HumanoidRootPart", "RightHand"), handRest)
+			if hand > handPeak then
+				handPeak, handAt = hand, (now - t0s) / rigH.Duration
+			end
+			torsoPeakSeen = math.max(torsoPeakSeen, angle(relTo("HumanoidRootPart", "UpperTorso"), torsoRest))
+		end
+		local shoulders, head, left = math.max(peaks[1], peaks[2]), peaks[3], peaks[4]
+		-- (C é vertical: de trás lê-se sobretudo a cabeça/ombros descendo.)
+		local need = if variant == "C" then { 10, 8, 4 } else { 25, 10, 20 }
+		if shoulders < need[1] or head < need[2] or left < need[3] then
+			screenOk = false
+		end
+		if handAt < 0.3 then
+			chainOk = false
+		end
+		table.insert(screenLines, string.format("%s: ombros %.0f, cabeça %.0f, braço esq. %.0f (pico da espada em %.0f%%)", variant, shoulders, head, left, handAt * 100))
+		frames(0.4)
+	end
+	check(screenOk, "H12. visto da câmera de trás, o CORPO se move na tela (milésimos; A/B: ombros ≥ 25, cabeça ≥ 10, braço esq. ≥ 20; C: ombros ≥ 10, cabeça ≥ 8) — " .. table.concat(screenLines, "; "))
+	check(chainOk, "H12. cadeia cinética: a espada chega ao máximo DEPOIS do corpo (antes: em 11% do golpe, o braço saía sozinho)")
 end
 
 -- ── R. RUNTIME: a pose CHEGA às partes do personagem? ─────────────────────

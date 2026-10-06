@@ -36,6 +36,8 @@ local Theme = {
 		Text = Color3.fromRGB(255, 255, 255),
 		TextDim = Color3.fromRGB(180, 186, 215),
 		Power = Color3.fromRGB(255, 196, 45),
+		-- ⚔ Dano (estatística de combate, não moeda): vermelho-coral.
+		Damage = Color3.fromRGB(255, 112, 88),
 		Gems = Color3.fromRGB(80, 220, 255),
 		Good = Color3.fromRGB(70, 210, 110),
 		Bad = Color3.fromRGB(235, 80, 80),
@@ -89,6 +91,8 @@ local Theme = {
 		Shop = "🛒", -- TODO_ASSET
 		Season = "🎫", -- TODO_ASSET
 		Wins = "🏆", -- TODO_ASSET
+		Damage = "⚔", -- dano por golpe (estatística, não moeda)
+		Hp = "❤", -- vida da barreira
 		Swords = "🗡️", -- TODO_ASSET
 		Tower = "⚔️", -- TODO_ASSET (Caminho do Poder)
 		Auras = "✨", -- TODO_ASSET

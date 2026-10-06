@@ -101,6 +101,73 @@ local nextRebind = 0
 local preferred = "Transform"
 local verify: Verify = { Samples = 0, Reached = 0, Confirmed = {}, Failed = {}, Last = "-" }
 local debugState = { Stance = false, Armed = false, Minimal = false, NextPanel = 0 }
+--[[
+	Debug por GOLPE VISUAL (só com SwordDebug ligado, no Studio): quanto as
+	PARTES do corpo (não o Transform) se moveram no golpe anterior, medido no
+	PostSimulation. Uma linha por golpe, nunca por hit.
+]]
+type BodyRef = { Torso: CFrame?, Hip: CFrame?, Left: CFrame?, Head: CFrame?, Hand: CFrame? }
+local body = { Ref = nil :: BodyRef?, Peak = { Torso = 0, Hip = 0, Left = 0, Head = 0, Hand = 0 }, Variant = "-" }
+
+local function partOf(character: Model, names: { string }): BasePart?
+	for _, name in names do
+		local item = character:FindFirstChild(name)
+		if item and item:IsA("BasePart") then
+			return item
+		end
+	end
+	return nil
+end
+
+local function bodyFrames(character: Model): BodyRef?
+	local root = partOf(character, { "HumanoidRootPart" })
+	local torso = partOf(character, { "UpperTorso", "Torso" })
+	if not root or not torso then
+		return nil
+	end
+	local function rel(a: BasePart?, b: BasePart?): CFrame?
+		return if a and b then a.CFrame:ToObjectSpace(b.CFrame) else nil
+	end
+	return {
+		Torso = rel(root, torso),
+		Hip = rel(root, partOf(character, { "LowerTorso" })),
+		Left = rel(torso, partOf(character, { "LeftUpperArm", "Left Arm" })),
+		Head = rel(root, partOf(character, { "Head" })),
+		Hand = rel(root, partOf(character, { "RightHand", "Right Arm" })),
+	}
+end
+
+local function bodyLog(rig: SwordSwing.Rig)
+	if not SwordDebug.Enabled() then
+		return
+	end
+	if body.Ref then
+		local peak = body.Peak
+		SwordDebug.Log(string.format("Swing %s | Torso Δ %.0f° | Hip/Root Δ %.0f° | LeftArm Δ %.0f° | Head Δ %.0f° | Sword/Hand Δ %.0f°", body.Variant, peak.Torso, peak.Hip, peak.Left, peak.Head, peak.Hand))
+	end
+	body.Ref = bodyFrames(rig.Character)
+	body.Variant = rig.Variant
+	for key in body.Peak do
+		body.Peak[key] = 0
+	end
+end
+
+local function bodyMeasure(rig: SwordSwing.Rig)
+	local ref = body.Ref
+	if not ref or not rig.Active then
+		return
+	end
+	local now = bodyFrames(rig.Character)
+	if not now then
+		return
+	end
+	for key, value in now :: any do
+		local before = (ref :: any)[key]
+		if before and value then
+			body.Peak[key] = math.max(body.Peak[key], SwordSwing.Angle(before, value))
+		end
+	end
+end
 
 local function bladeOf(character: Model): Instance?
 	local tool = character:FindFirstChild("CutBlade")
@@ -216,6 +283,9 @@ function SwordSwingController.Verify()
 	local rig = localRig
 	if not rig then
 		return
+	end
+	if SwordDebug.Enabled() then
+		bodyMeasure(rig)
 	end
 	local size, toPosed, toPlain = SwordSwing.Measure(rig)
 	if not size or not toPosed or not toPlain or size < VERIFY_MIN_DEGREES then
@@ -373,6 +443,7 @@ local function refreshLocal(rig: SwordSwing.Rig): SwordSwing.Rig?
 end
 
 local function swingStarted(rig: SwordSwing.Rig, swordId: any, chained: boolean)
+	bodyLog(rig)
 	SwordDebug.Log(string.format("COMBO = %s%s | GameplayHits %d | VisualSwings %d%s", rig.Variant, if chained then " (encadeado)" else "", rig.Hits, rig.Swings, if rig.Minimal then " (teste mínimo: braço sobe e volta)" else ""))
 	setTrail(rig.Character, swordId, true)
 	SwordTrail.Emphasis(rig.Character, SwordSwing.IsFinisher(rig.Variant))

@@ -162,11 +162,14 @@ local function refresh()
 	panel.Visible = true
 
 	-- Nome e HP estão na placa da barreira; aqui, só o que a completa.
-	local perClick = GameStateController.GetPowerInfo().PerClick
+	-- ⚔ o dano REAL do próximo golpe (Poder por clique × combo), não o saldo
+	-- de Poder: é o mesmo número que o servidor tira da fileira.
+	local perClick = GameStateController.GetHitDamage()
 	statusLabel.Text = Text.Get("corridor.hit", {
-		icon = Theme.Icons.Power,
+		icon = Theme.Icons.Damage,
 		power = NumberFormat.Short(perClick),
 	})
+	Build.paint(statusLabel, "TextColor3", Theme.Colors.Damage)
 	--[[
 		Quantos golpes faltam para o estágio inteiro (fileiras de pé) com o
 		golpe atual. Acima de WEAK_HITS (~1 minuto segurando o clique), avisa
@@ -179,6 +182,10 @@ local function refresh()
 		remaining += math.max(otherHp, 0)
 	end
 	local hits = if perClick > 0 then math.ceil(remaining / perClick) else math.huge
+	-- "≈N golpes" é a conta da FILEIRA da placa de HP (❤ 1B ÷ ⚔ 318M ≈ 4);
+	-- o aviso de "forte demais" continua olhando o estágio inteiro.
+	local rowHp = math.max(WallController.RowState(row) or 0, 0)
+	local rowHits = if perClick > 0 then math.max(math.ceil(rowHp / perClick), 1) else math.huge
 	if hits > WEAK_HITS then
 		rewardLabel.Text = Text.Get("corridor.weak")
 		Build.paint(rewardLabel, "TextColor3", Theme.Colors.Bad)
@@ -186,7 +193,7 @@ local function refresh()
 	end
 	Build.paint(rewardLabel, "TextColor3", Theme.Colors.Power)
 	-- O painel completo abre no clique; aqui fica só o essencial.
-	rewardLabel.Text = Text.Get("corridor.hits", { hits = NumberFormat.Short(hits) }) .. "  ·  " .. Text.Get("corridor.reward", {
+	rewardLabel.Text = Text.Get("corridor.hits", { hits = NumberFormat.Short(rowHits) }) .. "  ·  " .. Text.Get("corridor.reward", {
 		wins = NumberFormat.Short(math.max(table.unpack(stage.Pads))),
 		icon = Theme.Icons.Wins,
 	})

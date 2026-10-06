@@ -47,6 +47,7 @@ export type Pose = {
 	Neck: Vector3,
 	LShoulder: Vector3,
 	LElbow: Vector3,
+	Root: Vector3, -- quadril (LowerTorso/Torso sobre a raiz): só rotação, nunca posição
 }
 export type Variant = "A" | "B" | "C" | "T" -- T = teste mínimo (SwordDebug)
 
@@ -75,14 +76,14 @@ SwordSwing.MINIMAL_SECONDS = 0.2
 SwordSwing.MINIMAL_DEGREES = 110
 -- Fração do golpe em que a lâmina passa pelo meio do corte (o impacto): é
 -- aqui que o corte (CutFx) e o arco do golpe que COMEÇA aparecem.
-SwordSwing.IMPACT = 0.37
+SwordSwing.IMPACT = 0.42
 -- Sem golpe por tanto tempo, o combo visual recomeça no A.
 SwordSwing.COMBO_RESET = 1.2
 local ORDER: { Variant } = { "A", "B", "C" }
 
 local ZERO = Vector3.zero
-local KEYS = { "Shoulder", "Elbow", "Wrist", "Waist", "Neck", "LShoulder", "LElbow" }
-local NEUTRAL: Pose = { Shoulder = ZERO, Elbow = ZERO, Wrist = ZERO, Waist = ZERO, Neck = ZERO, LShoulder = ZERO, LElbow = ZERO }
+local KEYS = { "Shoulder", "Elbow", "Wrist", "Waist", "Neck", "LShoulder", "LElbow", "Root" }
+local NEUTRAL: Pose = { Shoulder = ZERO, Elbow = ZERO, Wrist = ZERO, Waist = ZERO, Neck = ZERO, LShoulder = ZERO, LElbow = ZERO, Root = ZERO }
 
 --[[
 	Ângulos no espaço do tronco (graus). Ombro: +X leva a mão para FRENTE/cima,
@@ -94,62 +95,84 @@ local NEUTRAL: Pose = { Shoulder = ZERO, Elbow = ZERO, Wrist = ZERO, Waist = ZER
 	Articulação que o golpe não cita fica na postura do momento.
 ]]
 --[[
-	O CORPO INTEIRO participa (sutil): o tronco gira ~10–16° acompanhando o
-	corte (cintura = tronco de cima; quadril e pernas ficam com a locomoção),
-	o pescoço devolve ~2/3 desse giro (a cabeça segue o golpe só um pouco e
-	continua focada no alvo), o ombro esquerdo compensa o direito e o braço
-	esquerdo equilibra (abre no A, cruza no B, recolhe no C).
+	GOLPE DE CORPO INTEIRO. Medido com a câmera de 3ª pessoa (atrás do
+	personagem): girar o tronco em volta do eixo VERTICAL quase não aparece
+	de trás (os ombros andavam ~7 px), o pescoço devolvia 2/3 do giro e o
+	quadril não participava — só o braço/espada (165–177°) era visto. Agora:
+	  · quadril (Root) gira e inclina um pouco: o peso vai para o golpe;
+	  · tronco (Waist) gira E INCLINA de lado (A/B) ou para trás/frente (C) —
+	    a inclinação é o que se lê de trás;
+	  · o pescoço devolve só parte do giro: a cabeça segue um pouco e
+	    continua olhando o alvo;
+	  · o braço esquerdo é contrapeso (abre no A, cruza no B, sobe/recolhe no C).
+	Espelhos A/B não são cópias exatas. Ângulos em graus, no espaço da junta
+	(X: +para trás/cima; Y: +gira para a esquerda; Z: +topo inclina para a
+	esquerda, visto de trás).
 ]]
 local SHAPES: { [Variant]: { Windup: { [string]: Vector3 }, Strike: { [string]: Vector3 } } } = {
-	-- A: diagonal de cima/direita para baixo/esquerda. O tronco carrega para a
-	-- direita e solta para a esquerda; o braço esquerdo abre para equilibrar.
+	-- A: diagonal de cima/direita para baixo/esquerda: o corpo carrega para a
+	-- direita (quadril e tronco giram e inclinam para lá) e solta para a esquerda.
 	A = {
 		Windup = {
-			Shoulder = Vector3.new(55, -30, -25), Elbow = Vector3.new(25, 0, 0), Wrist = Vector3.new(15, 0, 0),
-			Waist = Vector3.new(3, -16, 0), Neck = Vector3.new(-2, 11, 0),
-			LShoulder = Vector3.new(16, 0, -8), LElbow = Vector3.new(30, 0, 0),
+			Shoulder = Vector3.new(55, -30, -25), Elbow = Vector3.new(30, 0, 0), Wrist = Vector3.new(20, 0, 0),
+			Root = Vector3.new(0, -8, -2), Waist = Vector3.new(4, -16, -7), Neck = Vector3.new(-2, 14, 4),
+			LShoulder = Vector3.new(24, 0, -12), LElbow = Vector3.new(36, 0, 0),
 		},
 		Strike = {
 			Shoulder = Vector3.new(-35, 40, 20), Elbow = Vector3.new(5, 0, 0), Wrist = Vector3.new(-40, 0, 0),
-			Waist = Vector3.new(-5, 10, 0), Neck = Vector3.new(3, -7, 0),
-			LShoulder = Vector3.new(-18, 0, -28), LElbow = Vector3.new(14, 0, 0),
+			Root = Vector3.new(0, 9, 3), Waist = Vector3.new(-6, 14, 9), Neck = Vector3.new(4, -14, -6),
+			LShoulder = Vector3.new(-26, 0, -36), LElbow = Vector3.new(14, 0, 0),
 		},
 	},
-	-- B: diagonal de cima/esquerda para baixo/direita (o espelho do A).
+	-- B: diagonal de cima/esquerda para baixo/direita (espelho, não cópia).
 	B = {
 		Windup = {
-			Shoulder = Vector3.new(50, 30, 25), Elbow = Vector3.new(30, 0, 0), Wrist = Vector3.new(15, 0, 0),
-			Waist = Vector3.new(3, 8, 0), Neck = Vector3.new(-2, -5, 0),
-			LShoulder = Vector3.new(-12, 0, -26), LElbow = Vector3.new(16, 0, 0),
+			Shoulder = Vector3.new(50, 30, 25), Elbow = Vector3.new(32, 0, 0), Wrist = Vector3.new(18, 0, 0),
+			Root = Vector3.new(0, 7, 2), Waist = Vector3.new(4, 12, 6), Neck = Vector3.new(-2, -11, -4),
+			LShoulder = Vector3.new(-18, 0, -34), LElbow = Vector3.new(18, 0, 0),
 		},
 		Strike = {
 			Shoulder = Vector3.new(-35, -35, -20), Elbow = Vector3.new(5, 0, 0), Wrist = Vector3.new(-40, 0, 0),
-			Waist = Vector3.new(-5, -18, 0), Neck = Vector3.new(3, 13, 0),
-			LShoulder = Vector3.new(18, 0, -8), LElbow = Vector3.new(32, 0, 0),
+			Root = Vector3.new(0, -9, -3), Waist = Vector3.new(-6, -17, -9), Neck = Vector3.new(4, 16, 6),
+			LShoulder = Vector3.new(28, 0, -8), LElbow = Vector3.new(40, 0, 0),
 		},
 	},
-	-- C: de cima para baixo, o fecho do combo: o tronco sobe e recua na
-	-- preparação e desce para frente junto com a lâmina; o braço esquerdo
-	-- sobe e depois recolhe (estabiliza).
+	-- C: de cima para baixo, o fecho: o corpo abre e o tronco se estende para
+	-- trás na preparação; no impacto desce para frente (quadril junto), os
+	-- ombros descem e o braço esquerdo recolhe e estabiliza.
 	C = {
 		Windup = {
 			Shoulder = Vector3.new(85, 0, 5), Elbow = Vector3.new(40, 0, 0), Wrist = Vector3.new(25, 0, 0),
-			Waist = Vector3.new(9, -4, 0), Neck = Vector3.new(-6, 3, 0),
-			LShoulder = Vector3.new(26, 0, -14), LElbow = Vector3.new(36, 0, 0),
+			Root = Vector3.new(4, 0, 0), Waist = Vector3.new(14, -3, 0), Neck = Vector3.new(-10, 2, 0),
+			LShoulder = Vector3.new(34, 0, -18), LElbow = Vector3.new(44, 0, 0),
 		},
 		Strike = {
 			-- punho -40: a lâmina termina à frente, na horizontal (a do Colosso não chega ao chão)
 			Shoulder = Vector3.new(-50, 5, 5), Elbow = Vector3.new(0, 0, 0), Wrist = Vector3.new(-40, 0, 0),
-			Waist = Vector3.new(-11, 2, 0), Neck = Vector3.new(7, -1, 0),
-			LShoulder = Vector3.new(-10, 0, -6), LElbow = Vector3.new(45, 0, 0),
+			Root = Vector3.new(-6, 0, 0), Waist = Vector3.new(-18, 2, 0), Neck = Vector3.new(13, -1, 0),
+			LShoulder = Vector3.new(-14, 0, -8), LElbow = Vector3.new(55, 0, 0),
 		},
 	},
 }
 
--- Quanto do tempo vai em cada fase (preparação curta e legível, corte
--- rápido, recuperação que dá peso).
-local WINDUP_END = 0.18
-local STRIKE_END = 0.55
+--[[
+	CADEIA CINÉTICA: dentro da preparação e do corte cada junta anda na sua
+	própria janela — o quadril e o tronco SAEM PRIMEIRO, o ombro no meio, o
+	cotovelo e o punho (a espada) por último. Fração da janela: positivo =
+	adianta (termina antes), negativo = atrasa (começa depois). Todas chegam
+	juntas ao fim de cada fase (sem salto entre fases).
+]]
+local CHAIN: { [string]: number } = {
+	Root = 0.32, Waist = 0.22, Neck = 0.22, LShoulder = 0.15, LElbow = 0.08,
+	Shoulder = 0, Elbow = -0.12, Wrist = -0.22,
+}
+SwordSwing.CHAIN = CHAIN
+
+-- Quanto do tempo vai em cada fase (0,30 s no total, o ritmo aprovado):
+-- preparação maior para o corpo carregar (0,072 s), corte rápido que
+-- acelera e desacelera (0,102 s) e recuperação que dá peso.
+local WINDUP_END = 0.24
+local STRIKE_END = 0.58
 SwordSwing.WINDUP_END = WINDUP_END
 SwordSwing.STRIKE_END = STRIKE_END
 
@@ -157,6 +180,23 @@ local function lerpPose(a: Pose, b: Pose, t: number): Pose
 	local out = {}
 	for _, key in KEYS do
 		out[key] = (a :: any)[key]:Lerp((b :: any)[key], t)
+	end
+	return out :: any
+end
+
+-- Interpolação com a cadeia cinética (cada junta na sua janela da fase).
+local function chainLerp(a: Pose, b: Pose, u: number, ease: (number) -> number): Pose
+	local out = {}
+	for _, key in KEYS do
+		local lead = CHAIN[key] or 0
+		local from, to = 0, 1
+		if lead > 0 then
+			to = 1 - lead
+		elseif lead < 0 then
+			from = -lead
+		end
+		local t = math.clamp((u - from) / (to - from), 0, 1)
+		out[key] = (a :: any)[key]:Lerp((b :: any)[key], ease(t))
 	end
 	return out :: any
 end
@@ -204,7 +244,8 @@ SwordSwing.STANCE = {
 	Elbow = 15,
 	LShoulder = Vector3.new(4, 0, -10), -- braço esquerdo levemente afastado
 	LElbow = Vector3.new(14, 0, 0),
-	Waist = Vector3.new(-3, -6, 0), -- leve inclinação à frente, lado da espada um pouco atrás
+	Waist = Vector3.new(-3, -6, 2), -- leve inclinação à frente, lado da espada um pouco atrás, ombros assimétricos
+	Root = Vector3.new(0, -4, 0), -- quadril um pouco virado: o peso já está "de lado", segurando a espada
 }
 -- Andando/correndo/pulando: a espada um pouco mais alta, longe das pernas.
 SwordSwing.CARRY = {
@@ -257,9 +298,11 @@ function SwordSwing.Stance(bladeLength: number, hasElbow: boolean, hasWrist: boo
 		Elbow = elbow,
 		Wrist = wrist,
 		Waist = spec.Waist,
-		Neck = Vector3.new(0, -spec.Waist.Y, 0), -- a cabeça continua olhando para frente
+		-- A cabeça continua olhando para frente (desfaz o giro do quadril + tronco).
+		Neck = Vector3.new(0, -(spec.Waist.Y + spec.Root.Y), -spec.Waist.Z),
 		LShoulder = spec.LShoulder,
 		LElbow = spec.LElbow,
+		Root = spec.Root,
 	}
 end
 
@@ -267,7 +310,7 @@ end
 -- locomoção do Roblox.
 function SwordSwing.Carry(bladeLength: number, hasElbow: boolean, hasWrist: boolean): Pose
 	local shoulder, elbow, wrist = hold(SwordSwing.CARRY, bladeLength, hasElbow, hasWrist)
-	return { Shoulder = shoulder, Elbow = elbow, Wrist = wrist, Waist = ZERO, Neck = ZERO, LShoulder = ZERO, LElbow = ZERO }
+	return { Shoulder = shoulder, Elbow = elbow, Wrist = wrist, Waist = ZERO, Neck = ZERO, LShoulder = ZERO, LElbow = ZERO, Root = ZERO }
 end
 
 -- A respiração somada à postura no instante `time` (amount 0..1).
@@ -286,6 +329,7 @@ function SwordSwing.Breathe(pose: Pose, time: number, amount: number): Pose
 		Neck = pose.Neck + Vector3.new(-breath * BREATH_WAIST, 0, -shift * SHIFT_WAIST),
 		LShoulder = pose.LShoulder + Vector3.new(lifted * BREATH_LEFT, 0, 0),
 		LElbow = pose.LElbow,
+		Root = pose.Root,
 	}
 end
 
@@ -326,11 +370,11 @@ function SwordSwing.Pose(variant: Variant, t: number, from: Pose?, rest: Pose?):
 	local shape = SHAPES[variant]
 	local windup = fill(shape.Windup, home)
 	if t < WINDUP_END then
-		return lerpPose(start, windup, easeOut(t / WINDUP_END))
+		return chainLerp(start, windup, t / WINDUP_END, easeOut)
 	end
 	local strike = fill(shape.Strike, home)
 	if t < STRIKE_END then
-		return lerpPose(windup, strike, easeStrike((t - WINDUP_END) / (STRIKE_END - WINDUP_END)))
+		return chainLerp(windup, strike, (t - WINDUP_END) / (STRIKE_END - WINDUP_END), easeStrike)
 	end
 	return lerpPose(strike, home, easeInOut((t - STRIKE_END) / (1 - STRIKE_END)))
 end
@@ -426,6 +470,10 @@ local JOINTS: { [string]: { string } } = {
 	Neck = { "Neck" },
 	LShoulder = { "LeftShoulder", "Left Shoulder" },
 	LElbow = { "LeftElbow" },
+	-- Quadril: R15 "Root" (LowerTorso sobre a raiz) / R6 "RootJoint" (Torso).
+	-- Só rotação somada por cima da locomoção: a posição do HumanoidRootPart,
+	-- a hitbox e o movimento do jogador não mudam.
+	Root = { "Root", "RootJoint" },
 }
 SwordSwing.JOINT_NAMES = JOINTS
 
@@ -486,9 +534,6 @@ local function findJoints(character: Model): { [string]: Joint }
 		if joint then
 			joints[key] = joint
 		end
-	end
-	if not joints.Waist then
-		joints.Neck = nil -- R6: o pescoço fica com o Roblox
 	end
 	return joints
 end
@@ -661,12 +706,20 @@ local function alive(rig: Rig, joint: Joint): boolean
 	return p0 ~= nil and p1 ~= nil and p0.Parent ~= nil and p1.Parent ~= nil
 end
 
+-- R6 não tem cintura: o tronco do golpe vai pela raiz (um pouco menos,
+-- porque ali gira o corpo inteiro, pernas junto).
+local R6_WAIST_ON_ROOT = 0.35
+
 local function apply(rig: Rig, pose: Pose)
 	rig.Current = pose
 	local applied = false
 	local own = rig.Own
+	local noWaist = rig.Joints.Waist == nil
 	for key, joint in rig.Joints do
 		local degrees = (pose :: any)[key] :: Vector3
+		if key == "Root" and noWaist then
+			degrees += pose.Waist * R6_WAIST_ON_ROOT
+		end
 		if posing(joint, degrees, own) then
 			applied = true
 		end

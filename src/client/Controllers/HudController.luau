@@ -58,6 +58,10 @@ local function levelBottom(): number
 end
 
 local lastPower = -1
+-- ⚔ dano por golpe, secundário, dentro do pill do Poder (mesma linha da
+-- legenda "PODER", à direita): estatística, não moeda.
+local hitLabel: TextLabel? = nil
+local hitRecheck = false
 local lastGems = -1
 local lastWins = -1
 
@@ -120,7 +124,24 @@ local function pop(label: TextLabel)
 	TweenService:Create(scale, Theme.Tween.Normal, { Scale = 1 }):Play()
 end
 
+local function refreshHit()
+	local label = hitLabel
+	if not label then
+		return
+	end
+	label.Text = Theme.Icons.Damage .. " " .. NumberFormat.Short(GameStateController.GetHitDamage())
+	-- O combo decai sozinho quando o jogador para: reconfere uma vez depois.
+	if GameStateController.GetCombo() > 0 and not hitRecheck then
+		hitRecheck = true
+		task.delay(1, function()
+			hitRecheck = false
+			refreshHit()
+		end)
+	end
+end
+
 local function refresh()
+	refreshHit()
 	local currencies = DataController.Get("Currencies")
 	local stats = DataController.Get("Stats")
 	if not currencies or not stats then
@@ -251,6 +272,22 @@ function HudController.Init()
 		Parent = topBar,
 	})
 	powerLabel, powerIcon = pill(topBar, "Power", Theme.Icons.Power, Theme.Colors.Power, Text.Get("hud.captionPower"), 1)
+	do
+		-- ⚔ 318M: o quanto UM golpe tira da barreira (= Poder ganho por clique ×
+		-- combo). Na linha da legenda, à direita, menor que o saldo de Poder.
+		local textX = (hud.PillSize.Y - hud.PillIcon) + hud.PillIcon
+		hitLabel = Build.label({
+			Name = "HitDamage",
+			Text = Theme.Icons.Damage .. " ...",
+			Font = Theme.FontDisplay,
+			TextSize = 13,
+			TextColor3 = Theme.Colors.Damage,
+			Position = UDim2.fromOffset(textX, 6),
+			Size = UDim2.new(1, -textX - 12, 0, 15),
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Parent = powerLabel.Parent,
+		})
+	end
 	gemsLabel = pill(topBar, "Gems", Theme.Icons.Gems, Theme.Colors.Gems, Text.Get("hud.captionGems"), 2)
 	winsLabel = pill(topBar, "Wins", Theme.Icons.Wins, Theme.Colors.Power, Text.Get("hud.captionWins"), 3)
 
@@ -381,6 +418,8 @@ function HudController.Init()
 	end)
 	-- O overdrive conta segundos: a linha de status precisa acompanhar.
 	GameStateController.OverdriveChanged:Connect(refresh)
+	-- O golpe muda com melhorias, pets, renascimento, overdrive (PowerInfo).
+	GameStateController.PowerInfoChanged:Connect(refreshHit)
 end
 
 return HudController

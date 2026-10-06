@@ -225,7 +225,9 @@ local function click(at: Vector2?)
 	local overdrive = GameStateController.IsOverdriveActive()
 	local color = if overdrive then Theme.Colors.OverdriveTop else (Theme.Colors.ComboTiers[tier + 1] or Theme.Colors.Power)
 	if (not settings or settings.ShowFloatingNumbers ~= false) and not reducedEffects() then
-		showFloat("+" .. NumberFormat.Short(predicted), if tier == 0 and not overdrive then Theme.Colors.Power else color, tier, at)
+		-- É PODER que entra no saldo (⚡ +X), não dano: o dano aparece na
+		-- barreira (número vermelho do CombatFx) e no ⚔ do topo.
+		showFloat(Theme.Icons.Power .. " +" .. NumberFormat.Short(predicted), if tier == 0 and not overdrive then Theme.Colors.Power else color, tier, at)
 	end
 	Anim.Squash(button)
 	pulseRing()

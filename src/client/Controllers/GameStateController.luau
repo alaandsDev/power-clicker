@@ -12,6 +12,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Signal = require(Shared:WaitForChild("Utils"):WaitForChild("Signal"))
 local Formulas = Shared:WaitForChild("Formulas")
 local ComboLogic = require(Formulas:WaitForChild("ComboLogic"))
+local HitDisplay = require(Formulas:WaitForChild("HitDisplay"))
 
 local ClientNet = require(script.Parent.Parent.Net.ClientNet)
 
@@ -54,6 +55,12 @@ end
 
 function GameStateController.GetCombo(): number
 	return ComboLogic.Current(comboStacks, comboAt, os.clock())
+end
+
+-- ⚔ Dano do PRÓXIMO golpe (Poder por clique × combo atual): o mesmo número
+-- que o servidor tira da barreira (HitDisplay explica a fórmula).
+function GameStateController.GetHitDamage(): number
+	return HitDisplay.Damage(powerInfo.PerClick, GameStateController.GetCombo())
 end
 
 -- Local prediction for a click the client just sent. Returns predicted stacks.

@@ -12,6 +12,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
 local EconomyFormulas = require(Shared:WaitForChild("Formulas"):WaitForChild("EconomyFormulas"))
 local UpgradeConfig = require(Shared:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
+local HitDisplay = require(Shared:WaitForChild("Formulas"):WaitForChild("HitDisplay"))
 local Text = require(Shared:WaitForChild("Localization"))
 
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -24,6 +25,7 @@ local MenuController = require(script.Parent.MenuController)
 local DataController = require(script.Parent.DataController)
 local SoundController = require(script.Parent.SoundController)
 local NotificationController = require(script.Parent.NotificationController)
+local GameStateController = require(script.Parent.GameStateController)
 
 type UpgradeData = Types.UpgradeData
 type Row = {
@@ -94,6 +96,16 @@ local function refresh()
 		local shownLevels = if bulkAmount <= 0 then affordableLevels else wanted
 		local shownCost = if bulkAmount <= 0 then affordableCost else total
 		local affordable = affordableLevels >= shownLevels and shownLevels > 0
+		-- O que a melhoria faz no GOLPE (⚔ antes → depois), pela fórmula real.
+		local info = GameStateController.GetPowerInfo()
+		local after = HitDisplay.PreviewUpgrade(info, row.Upgrade, math.max(shownLevels, 1), row.Group == "Permanent")
+		if after then
+			row.Level.Text ..= "   " .. Text.Get("upgrades.hitPreview", {
+				icon = Theme.Icons.Damage,
+				from = NumberFormat.Short(info.PerClick),
+				to = NumberFormat.Short(after),
+			})
+		end
 		row.Buy.Text = if shownLevels > 1
 			then Text.Get("upgrades.buyMany", { count = shownLevels, icon = iconFor(row.Upgrade.Currency), cost = NumberFormat.Short(shownCost) })
 			else iconFor(row.Upgrade.Currency) .. " " .. NumberFormat.Short(if shownLevels == 0 then EconomyFormulas.UpgradeCost(row.Upgrade, level) else shownCost)
@@ -288,6 +300,8 @@ function UpgradeController.Init()
 			refresh()
 		end
 	end)
+	-- A prévia ⚔ depende do golpe atual (pets, renascimento, overdrive...).
+	GameStateController.PowerInfoChanged:Connect(refresh)
 	UIController.PanelChanged:Connect(function(panelName: string?)
 		if panelName == PANEL then
 			refresh()

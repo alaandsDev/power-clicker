@@ -387,7 +387,7 @@ end
 local function hit(damage)
 	Slash.Play()
 	serverHit(damage)
-	frames(0.12)
+	frames(0.15) -- passa do impacto do golpe (SwordSwing.IMPACT × 0,30 s)
 end
 local function goTo(stageId)
 	local list = rows[stageId]
@@ -408,7 +408,7 @@ Slash.Play()
 local rig = Swing.LocalRig()
 check(rig and rig.Active, "1. ESPADA: o hit dispara o golpe do personagem")
 serverHit(perClick)
-frames(0.12)
+frames(0.15) -- passa do impacto do golpe (SwordSwing.IMPACT × 0,30 s)
 check(#cutPlays >= 1 and #impacts == 1, "1. CORTE e IMPACTO aparecem para o hit")
 check(math.abs(cutPlays[#cutPlays].At - impacts[1].At) < 1e-9, "1. corte e impacto no MESMO instante")
 local impactDelay = rig.Duration * SwordSwing.IMPACT

@@ -18,6 +18,7 @@
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
 local WallConfig = require(Shared:WaitForChild("Config"):WaitForChild("WallConfig"))
+local HitDisplay = require(Shared:WaitForChild("Formulas"):WaitForChild("HitDisplay"))
 local Text = require(Shared:WaitForChild("Localization"))
 
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -25,6 +26,7 @@ local Build = require(script.Parent.Parent.UI.Build)
 local UIController = require(script.Parent.UIController)
 local MenuController = require(script.Parent.MenuController)
 local DataController = require(script.Parent.DataController)
+local GameStateController = require(script.Parent.GameStateController)
 
 type Row = {
 	Stage: WallConfig.WallStage,
@@ -41,7 +43,42 @@ local TowerController = {}
 
 local rows: { Row } = {}
 local summaryLabel: TextLabel
+local attackLabel: TextLabel
+local breakdownLabel: TextLabel
 local menuButton: TextButton
+
+-- Camadas do PowerInfo que valem mostrar (≠ 1), na ordem da fórmula.
+local LAYERS = { "Upgrade", "Permanent", "Rebirth", "Pet", "Aura", "Rune", "World", "Zone", "Event", "Social", "GamePass", "TemporaryBoost", "Overdrive" }
+
+--[[
+	"Seu ataque": a decomposição COMPLETA do golpe, só aqui (o HUD mostra só
+	⚡ saldo e ⚔ golpe). ⚔ golpe = ⚡ por clique (base × camadas) × combo.
+]]
+local function refreshAttack()
+	if not attackLabel then
+		return
+	end
+	local info = GameStateController.GetPowerInfo()
+	local currencies = DataController.Get("Currencies") or {}
+	attackLabel.Text = Text.Get("tower.attack", {
+		powerIcon = Theme.Icons.Power,
+		power = NumberFormat.Short(currencies.Power or 0),
+		hitIcon = Theme.Icons.Damage,
+		hit = NumberFormat.Short(GameStateController.GetHitDamage()),
+	})
+	local parts = { Text.Get("tower.layer.Base", { value = NumberFormat.Short(info.Base or info.PerClick) }) }
+	for _, layer in LAYERS do
+		local value = (info.Layers or {})[layer]
+		if type(value) == "number" and math.abs(value - 1) > 1e-6 then
+			table.insert(parts, Text.Get("tower.layer." .. layer, { value = NumberFormat.Short(value) }))
+		end
+	end
+	local combo = HitDisplay.Damage(1, GameStateController.GetCombo())
+	if combo > 1 then
+		table.insert(parts, Text.Get("tower.layer.Combo", { value = NumberFormat.Short(combo) }))
+	end
+	breakdownLabel.Text = table.concat(parts, "  ·  ")
+end
 
 local function refresh()
 	local tower = DataController.Get("Tower")
@@ -75,6 +112,7 @@ local function refresh()
 		done = tostring(highest),
 		total = tostring(#WallConfig.Stages),
 	})
+	refreshAttack()
 	-- Sem badge: "ainda falta barreira" é o estado normal do jogo, não um
 	-- aviso. A faixa contextual no Caminho já mostra onde o jogador está.
 end
@@ -171,12 +209,37 @@ function TowerController.Init()
 		Parent = content,
 	})
 
+	attackLabel = Build.label({
+		Name = "Attack",
+		Text = "",
+		Font = Theme.FontDisplay,
+		TextSize = 18,
+		Position = UDim2.fromOffset(4, 30),
+		Size = UDim2.new(1, -8, 0, 24),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 22,
+		Parent = content,
+	})
+	breakdownLabel = Build.label({
+		Name = "AttackBreakdown",
+		Text = "",
+		TextSize = 14,
+		TextColor3 = Theme.Colors.TextDim,
+		Position = UDim2.fromOffset(4, 54),
+		Size = UDim2.new(1, -8, 0, 32),
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		ZIndex = 22,
+		Parent = content,
+	})
+
 	local list: ScrollingFrame = Build.new("ScrollingFrame", {
 		Name = "List",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(0, 36),
-		Size = UDim2.new(1, 0, 1, -36),
+		Position = UDim2.fromOffset(0, 92),
+		Size = UDim2.new(1, 0, 1, -92),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
 		ScrollBarThickness = 8,
@@ -196,8 +259,11 @@ function TowerController.Init()
 	DataController.Changed:Connect(function(key: string)
 		if key == "Tower" then
 			refresh()
+		elseif key == "Currencies" and UIController.GetOpenPanel() == PANEL then
+			refreshAttack()
 		end
 	end)
+	GameStateController.PowerInfoChanged:Connect(refreshAttack)
 	refresh()
 end
 
