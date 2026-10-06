@@ -82,6 +82,15 @@ local C = {
 	Void = Color3.fromRGB(44, 30, 64),
 	DeepBlue = Color3.fromRGB(38, 42, 82),
 	Pulse = Color3.fromRGB(186, 140, 255),
+	-- Colosso (10): pedra monumental escura + marfim mineral pesado, ouro
+	-- antigo só em faixas finas, energia branco-dourada (a assinatura do fim).
+	Monument = Color3.fromRGB(62, 62, 70),
+	MonumentDark = Color3.fromRGB(44, 44, 52),
+	Ivory = Color3.fromRGB(210, 202, 182),
+	OldGold = Color3.fromRGB(178, 138, 60),
+	Supreme = Color3.fromRGB(255, 236, 190),
+	-- Portal do futuro: energia violeta profunda (ecoa o 9, sem ser ele).
+	Future = Color3.fromRGB(150, 110, 255),
 }
 
 type Ctx = {
@@ -326,6 +335,10 @@ local PRESETS: { [string]: Preset } = {
 	Smoke = { Rate = 1.2, Life = NumberRange.new(4, 6), Speed = NumberRange.new(0.8, 1.6), Spread = 12, Size = 3, Grow = 7, Fade = 0.8, Color = Color3.fromRGB(58, 50, 48), Light = 0, Accel = Vector3.new(0, 0.4, 0), Texture = "rbxasset://textures/particles/smoke_main.dds" },
 	-- Faíscas de magma subindo do cristal maior (8).
 	MagmaSparks = { Rate = 5, Life = NumberRange.new(1.2, 2), Speed = NumberRange.new(1.5, 3), Spread = 30, Size = 0.3, Color = Color3.fromRGB(255, 120, 40), Light = 1, Accel = Vector3.new(0, 1.2, 0) },
+	-- Motes branco-dourados subindo devagar do selo do Colosso (10).
+	SealMotes = { Rate = 3, Life = NumberRange.new(3, 4.5), Speed = NumberRange.new(0.4, 1), Spread = 40, Size = 0.4, Color = Color3.fromRGB(255, 232, 180), Light = 0.9 },
+	-- Motes violeta em volta do portal do futuro (inerte).
+	PortalMotes = { Rate = 4, Life = NumberRange.new(2.5, 4), Speed = NumberRange.new(0.2, 0.7), Spread = 180, Size = 0.4, Color = Color3.fromRGB(190, 160, 255), Light = 0.9 },
 	-- Motes de energia pairando em volta do arco flutuante (9): devagar, em todas as direções.
 	EnergyMotes = { Rate = 4, Life = NumberRange.new(3, 4.5), Speed = NumberRange.new(0.2, 0.6), Spread = 180, Size = 0.35, Color = Color3.fromRGB(200, 170, 255), Light = 0.9 },
 }
@@ -826,6 +839,177 @@ B.OpeningPylon = function(ctx, x, side, _z, s, _yaw)
 	piece(ctx, Vector3.new(0.4, h * 0.45, 0.3), base * CFrame.new(0, h * 0.62, -side * 2.15), C.Pulse, M.Neon, false)
 end
 
+-- ── 10 Colosso (o DESTINO) ──────────────────────────────────────────────────
+--[[
+	O 10 não é "o 9 + um tema": é o fim do corredor. Poucas formas GRANDES,
+	espaço negativo e uma escala que cresce até a barreira: soleira que abre
+	o corredor → contrafortes → massas escalonadas → obeliscos → paredes que
+	sobem → o PORTÃO DO COLOSSO (duas torres, verga colossal e o selo). Tudo
+	ao REDOR do volume lógico da barreira (as fileiras não mudam).
+]]
+
+-- Transição 9 → 10: o corredor de 86 studs ABRE para os 138 do Colosso —
+-- dois blocos escalonados fecham o canto e mostram que o espaço cresceu.
+B.ColossusThreshold = function(ctx, x, _side, _z, s, _yaw)
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(8, 50 * s, 30), at(x, 25 * s - 0.5, side * 62), C.Monument, M.Slate, true, { Shadow = true })
+		piece(ctx, Vector3.new(6, 12 * s, 20), at(x + 1, 50 * s + 6 * s - 0.5, side * 66), C.Ivory, M.Marble, false, { Shadow = true })
+	end
+end
+
+-- Linha de ouro no piso (rente), diagonal, conduzindo para a faixa.
+B.GoldInlay = function(ctx, x, side, z, s, yaw)
+	piece(ctx, Vector3.new(40 * s, 0.1, 0.8), at(x, 0.05, side * z) * CFrame.Angles(0, RAD(yaw * side), 0), C.OldGold, M.Metal, false)
+end
+
+-- Contraforte monumental na parede: massa de pedra + topo em rampa.
+B.Buttress = function(ctx, x, side, _z, s, _yaw)
+	local h = 40 * s
+	local z = side * (ctx.Half - 4)
+	piece(ctx, Vector3.new(12 * s, h, 8), at(x, h / 2 - 0.5, z), C.MonumentDark, M.Slate, true, { Shadow = true })
+	piece(ctx, Vector3.new(12 * s, 12 * s, 8), at(x, h + 6 * s - 0.5, z) * CFrame.Angles(0, if side > 0 then math.pi else 0, 0), C.Ivory, M.Marble, false, { Wedge = true })
+end
+
+-- Massa escalonada (três degraus de marfim sobre pedra) com uma faixa de ouro.
+B.StepMass = function(ctx, x, side, _z, s, _yaw)
+	local tiers = { { 26, 20, 12 }, { 20, 16, 9 }, { 13, 12, 6 } }
+	local y = -0.5
+	for index, t in tiers do
+		local len, h, depth = t[1] * s, t[2] * s, t[3]
+		piece(ctx, Vector3.new(len, h, depth), at(x, y + h / 2, side * (ctx.Half - depth / 2)), if index == 1 then C.MonumentDark else C.Ivory, if index == 1 then M.Slate else M.Marble, true, { Shadow = true })
+		y += h
+	end
+	piece(ctx, Vector3.new(26.4 * s, 1.2, 12.4), at(x, 20 * s - 0.5, side * (ctx.Half - 6)), C.OldGold, M.Metal, false)
+end
+
+-- Obelisco de marfim com pirâmide de ouro: vertical, conduz o olho para cima.
+B.Obelisk = function(ctx, x, side, z, s, _yaw)
+	local h = 56 * s
+	piece(ctx, Vector3.new(6, h, 6), at(x, h / 2 - 0.5, side * z), C.Ivory, M.Marble, true, { Shadow = true })
+	piece(ctx, Vector3.new(6, 6 * s, 6), at(x, h + 3 * s - 0.5, side * z), C.OldGold, M.Metal, false, { Wedge = true })
+end
+
+-- A parede SOBE perto do portão (um bloco escalonado por cima da parede).
+B.WallRise = function(ctx, x, side, _z, s, _yaw)
+	local top = wallHeight(ctx, x)
+	local h = 20 * s
+	piece(ctx, Vector3.new(50, h, 7), at(x, top + 1 + h / 2, side * (ctx.Half + 4.5)), C.Monument, M.Slate, true, { Shadow = true })
+end
+
+--[[
+	O SELO DO COLOSSO: um símbolo próprio do Caminho do Poder — anel (discos
+	escuro/marfim/escuro), um losango de ouro e a LÂMINA de energia no meio
+	(a espada que trouxe o jogador até aqui). `vertical` = na verga.
+]]
+local function sigil(ctx: Ctx, cf: CFrame, s: number, vertical: boolean): BasePart
+	local disc = if vertical then CFrame.identity else VERTICAL
+	local step = if vertical then function(i: number) return CFrame.new(-i * 0.12, 0, 0) end else function(i: number) return CFrame.new(i * 0.03, 0, 0) end
+	piece(ctx, Vector3.new(0.1, 26 * s, 26 * s), cf * disc * step(0), C.MonumentDark, M.Slate, false, { Shape = Enum.PartType.Cylinder })
+	piece(ctx, Vector3.new(0.1, 21 * s, 21 * s), cf * disc * step(1), C.Ivory, M.Marble, false, { Shape = Enum.PartType.Cylinder })
+	piece(ctx, Vector3.new(0.1, 17 * s, 17 * s), cf * disc * step(2), C.MonumentDark, M.Slate, false, { Shape = Enum.PartType.Cylinder })
+	local diamond = if vertical then CFrame.new(-0.4, 0, 0) * CFrame.Angles(math.rad(45), 0, 0) else CFrame.new(0, 0.12, 0) * CFrame.Angles(0, math.rad(45), 0)
+	piece(ctx, if vertical then Vector3.new(0.2, 9 * s, 9 * s) else Vector3.new(9 * s, 0.1, 9 * s), cf * diamond, C.OldGold, M.Metal, false)
+	return piece(ctx, if vertical then Vector3.new(0.3, 15 * s, 0.5) else Vector3.new(15 * s, 0.14, 0.5), cf * (if vertical then CFrame.new(-0.6, 0, 0) else CFrame.new(0, 0.15, 0)), C.Supreme, M.Neon, false)
+end
+
+-- O selo no piso da faixa (rente: topo < 0,3).
+B.ColossusSigil = function(ctx, x, _side, _z, s, _yaw)
+	sigil(ctx, at(x, 0.05, 0), s, false)
+end
+
+-- Energia branco-dourada correndo no piso para o selo (rente).
+B.SealLines = function(ctx, x, _side, _z, s, _yaw)
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(34 * s, 0.12, 0.4), at(x, 0.06, side * 24) * CFrame.Angles(0, RAD(-10 * side), 0), C.Supreme, M.Neon, false)
+	end
+end
+
+--[[
+	LANDMARK 10 / BARREIRA 10: o PORTÃO DO COLOSSO — duas torres enormes
+	(passando de 90 studs) nas bordas, recuadas em cima e com uma faixa de
+	ouro, energia na face interna; a verga colossal por cima das fileiras
+	com a coroa escalonada e o SELO vertical (com a única luz nova do fim).
+	A barreira fica SELADA dentro da arquitetura; a frente dela (placa de HP,
+	golpe, Corte, rachaduras) continua livre.
+]]
+B.ColossusGate = function(ctx, x, _side, _z, _s, _yaw)
+	local segment, half = ctx.Segment, ctx.Half
+	for _, side in { -1, 1 } do
+		local z = side * (half + 2.1)
+		piece(ctx, Vector3.new(16, 84, 13.6), at(x - 8, 41.5, z), C.MonumentDark, M.Slate, true, { Shadow = true })
+		piece(ctx, Vector3.new(14, 30, 10), at(x - 6, 98.5, side * (half + 3.8)), C.Ivory, M.Marble, false, { Shadow = true })
+		piece(ctx, Vector3.new(16.4, 2, 13.8), at(x - 8, 62, z), C.OldGold, M.Metal, false)
+		piece(ctx, Vector3.new(0.5, 48, 0.3), at(x - 4, 26, side * (half - 4.75)), C.Supreme, M.Neon, false)
+	end
+	-- Verga colossal + coroa (acima das fileiras e do arco; nada abaixo de y 60).
+	piece(ctx, Vector3.new(24, 18, half * 2 + 16), at(segment.Barrier, 71, 0), C.Monument, M.Slate, false, { Shadow = true })
+	piece(ctx, Vector3.new(24.4, 1.4, half * 2 + 16.4), at(segment.Barrier, 62.6, 0), C.OldGold, M.Metal, false)
+	piece(ctx, Vector3.new(18, 22, 54), at(segment.Barrier + 2, 91, 0), C.Ivory, M.Marble, false, { Shadow = true })
+	local core = sigil(ctx, at(segment.Barrier - 12.1, 71, 0), 0.62, true)
+	local light = Instance.new("PointLight")
+	light.Color = C.Supreme
+	light.Range = 48
+	light.Brightness = 1.2
+	light.Shadows = false
+	light.Parent = core
+	if ctx.Fx then
+		ambient(core, ctx.Fx)
+	end
+end
+
+-- Atrás das fileiras: o "outro lado" do portão (atravessar o Colosso).
+B.ColossusRear = function(ctx, x, _side, _z, s, _yaw)
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(12, 48 * s, 13.6), at(x, 24 * s - 0.5, side * (ctx.Half + 2.1)), C.MonumentDark, M.Slate, true, { Shadow = true })
+	end
+end
+
+-- Zona de decisão final: duas linhas de ouro rentes ao longo da moldura.
+B.DecisionGold = function(ctx, x, _side, _z, _s, _yaw)
+	local segment = ctx.Segment
+	local length = (segment.ReturnX - segment.PadsX) + 30
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(length, 0.1, 0.8), at((segment.PadsX + segment.ReturnX) / 2, 0.05, side * (ctx.Half - 4)), C.OldGold, M.Metal, false)
+	end
+	local _ = x
+end
+
+-- ── Final atual (praça depois do Colosso) ───────────────────────────────────
+
+-- Estela calma no caminho do portal: marfim com topo de ouro.
+B.CalmStele = function(ctx, x, side, z, s, _yaw)
+	piece(ctx, Vector3.new(3, 9 * s, 3), at(x, 4.5 * s - 0.5, side * z), C.Ivory, M.Marble, true)
+	piece(ctx, Vector3.new(3.4, 0.6, 3.4), at(x, 9 * s - 0.2, side * z), C.OldGold, M.Metal, false)
+end
+
+-- Círculo no piso diante do portal (rente): o "fim do Caminho" atual.
+B.PortalGlyph = function(ctx, x, _side, _z, s, _yaw)
+	piece(ctx, Vector3.new(0.08, 30 * s, 30 * s), at(x, 0.04, 0) * VERTICAL, C.MonumentDark, M.Slate, false, { Shape = Enum.PartType.Cylinder })
+	piece(ctx, Vector3.new(0.12, 25 * s, 25 * s), at(x, 0.06, 0) * VERTICAL, C.Ivory, M.Marble, false, { Shape = Enum.PartType.Cylinder })
+	piece(ctx, Vector3.new(0.16, 22 * s, 22 * s), at(x, 0.08, 0) * VERTICAL, C.Monument, M.Slate, false, { Shape = Enum.PartType.Cylinder })
+end
+
+--[[
+	PORTAL DO FUTURO (moldura): estrutura antiga — dois pilares com base, a
+	verga — e fragmentos soltos com energia violeta (o 9 ecoando: "o caminho
+	continua além"). MENOR que o Portão do Colosso de propósito: o Colosso é
+	o clímax, o portal é o mistério. Inerte: sem toque, sem prompt.
+]]
+B.FuturePortal = function(ctx, x, _side, _z, s, _yaw)
+	for _, side in { -1, 1 } do
+		piece(ctx, Vector3.new(6, 44 * s, 6), at(x, 22 * s - 0.5, side * 25), C.MonumentDark, M.Slate, true, { Shadow = true })
+		piece(ctx, Vector3.new(7, 3, 8), at(x, 1, side * 25), C.Ivory, M.Marble, true)
+		piece(ctx, Vector3.new(0.4, 30 * s, 0.3), at(x - 3.1, 22 * s, side * 22.6), C.Future, M.Neon, false)
+	end
+	local lintel = piece(ctx, Vector3.new(7, 6, 60), at(x, 44 * s + 2.5, 0), C.Monument, M.Slate, false, { Shadow = true })
+	for index, spec in { { -32, 34 }, { 33, 39 }, { -33, 45 } } do
+		piece(ctx, Vector3.new(3, 4, 3), at(x - 1, spec[2], spec[1]) * CFrame.Angles(RAD(20 * index), RAD(30 * index), RAD(-12 * index)), C.MonumentDark, M.Slate, false)
+	end
+	if ctx.Fx then
+		ambient(lintel, ctx.Fx)
+	end
+end
+
 PowerPathDecor.Kinds = B
 
 -- X de uma entrada do Decor: fração da área (0–1), zona de decisão (1–2) ou a barreira.
@@ -872,6 +1056,45 @@ function PowerPathDecor.Build(parent: Model, origin: Vector3, segment: CorridorL
 		builder(ctx, PowerPathDecor.XFor(segment, entry.At), entry.Side or 1, entry.Z or 34, entry.Scale or 1, entry.Yaw or 0)
 	end
 	model:SetAttribute("StageId", segment.Id)
+	model.Parent = parent
+	return model
+end
+
+--[[
+	O cenário da praça final (Model "Decor" dentro do PowerPath_Final): a
+	área de conclusão e a moldura do portal (CorridorThemes.Final). `At` é a
+	fração da praça (0 = depois dos pads do Colosso, 1 = o fundo).
+]]
+function PowerPathDecor.BuildFinal(parent: Model, origin: Vector3): Model?
+	local final = CorridorThemes.Final
+	if #final.Decor == 0 then
+		return nil
+	end
+	local segments = CorridorLayout.Segments()
+	local last = segments[#segments]
+	local start = CorridorLayout.FinalStart()
+	local model = Instance.new("Model")
+	model.Name = "Decor"
+	local ctx: Ctx = {
+		Model = model,
+		Origin = origin,
+		Segment = last,
+		Theme = CorridorThemes.For(last.Id),
+		NextTheme = CorridorThemes.For(last.Id),
+		Half = last.Width / 2,
+		Kind = "",
+		Landmark = false,
+		Fx = nil,
+	}
+	for _, entry in final.Decor do
+		local builder = B[entry.Kind]
+		assert(builder, "PowerPathDecor: Kind desconhecido " .. entry.Kind)
+		ctx.Kind = entry.Kind
+		ctx.Landmark = entry.Landmark == true
+		ctx.Fx = entry.Fx
+		builder(ctx, start + (entry.At :: number) * CorridorLayout.FINAL_PLAZA, entry.Side or 1, entry.Z or 34, entry.Scale or 1, entry.Yaw or 0)
+	end
+	model:SetAttribute("StageId", "Final")
 	model.Parent = parent
 	return model
 end

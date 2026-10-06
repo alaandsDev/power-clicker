@@ -443,3 +443,27 @@ PD.19. Iluminação: 7–9 são escuros de propósito, sem PointLight nova — c
 PD.20. Pads 7–9: +N, x2 e Voltar legíveis contra o piso escuro e os circuitos; mesmos lugares, mesma lógica; passar reto continua.
 
 Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 10 (landmarks 1–9, molduras 1–9, transições 6→7, 7→8, 8→9 e pré-10, Neon só como acento, cenário fora da safe lane / frente da barreira / fileiras / pads / câmera, estágio 10 sem cenário, orçamento por fase e estágio, emissores ≤ 9 com um único controlador) e `python tools/render_power_path.py <json> <saida> <tag> D`.
+
+### Caminho do Poder — Fase E: Colosso + final + portal (PE) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+PE.1. Reveal 9 → 10: quebrar a Barreira 9 e andar: os pilones do 9 abrem, a soleira escalonada fecha o canto e o corredor de 86 vira o espaço de 138 studs; o Portão do Colosso (torres de ~114 studs, verga e selo) aparece ao fundo. Parar e olhar: a escala tem de dizer "você chegou" sem texto.
+PE.2. Escala do 10: contrafortes → massas escalonadas → obeliscos → paredes que sobem perto do portão; muito espaço vazio no meio. Não pode parecer "templo dourado maior" (o 5): pedra escura + marfim + ouro só em faixas.
+PE.3. Câmera normal andando até a barreira: a aproximação vende o tamanho (vê a estrutura → entende o tamanho → vê a barreira → chega no combate); nada cobre a barreira.
+PE.4. Placa de HP no Colosso: inteira e legível em toda a largura (o centro vai até ±58,8; as torres começam em |z| 64) contra a barreira branca (Neon) e as torres escuras.
+PE.5. Sword Swing A/B/C diante do Colosso: personagem e espada legíveis contra a barreira branca e o chão escuro.
+PE.6. CutFx e impacto no Colosso: visíveis; não somem atrás de torre nem se confundem com o selo branco-dourado.
+PE.7. Rachaduras 75% / 50% / 25% / 10% (CombatFx atual, NÃO alterado): legíveis na face; nada do cenário na frente da face.
+PE.8. Quebra da última fileira: avaliar se o CombatFx atual tem peso suficiente nessa composição (se parecer fraco, microfase separada — não mexido aqui). Depois de quebrar, a passagem pelo portão fica livre e revela a zona final e o portal.
+PE.9. Pads do Colosso: +N, x2 e Voltar nos mesmos lugares, mesma lógica; as linhas de ouro rentes ao longo da moldura não confundem; passar reto continua.
+PE.10. Área pós-Colosso: o outro lado do portão (torres traseiras), a zona de decisão e a praça calma (duas estelas, círculo no piso) — a tensão cai.
+PE.11. Portal do futuro: moldura antiga (pilares, verga), interior violeta "instável/bloqueado" (ForceField, não Neon), fragmentos soltos, "EM BREVE" + "O caminho continua..." legíveis de ~100 studs. Menor e menos chamativo que o Portão do Colosso.
+PE.12. Portal REALMENTE inerte: encostar, pular nele, clicar, segurar E — nada acontece (sem teleporte, prompt, recompensa, mudança no save, remote).
+PE.13. Pets: atravessar o 10 e a praça até o portal com 1, 3 e o máximo — ninguém prende (atenção a torres, obeliscos, estelas e pilares do portal).
+PE.14. Dois jogadores: A quebrou a Barreira 10, B não. A vê a passagem, a zona final e o portal; B vê o Colosso intacto e selado; A passa, B não (arquitetura individual — check_corridor).
+PE.15. Efeitos reduzidos: sem motes no selo nem no portal; estrutura, silhueta, placa, barreira, texto do portal e a luz do selo continuam.
+PE.16. Celular: a estrutura enorme não pesa (peças grandes, sem transparências empilhadas); texto do portal legível.
+PE.17. FPS: comparar com a Fase D no meio do 10 e na praça (+74 peças, −4 cristais Neon, +1 PointLight, +2 emissores com LOD, 0 loops novos).
+PE.18. Contraste: barreira branca (Neon) contra pedra escura — conferir se não ofusca o avatar em 3ª pessoa.
+PE.19. Iluminação: a única luz nova é a do selo (branco-dourada, alcance 48); conferir hierarquia (o selo chama o olho para cima) sem estourar a face da barreira.
+PE.20. Vista completa: do portal olhando para trás e do alto até o lobby — "eu percorri tudo isso".
+
+Coberto fora do Studio: `lune run tools/lune/check_power_path.luau` seção 11 (transição 9→10, escala crescendo até o portão, passagem do Colosso livre, área de conclusão, portal menor que o Colosso e inerte — sem teleporte/prompt/remote/DataStore/Touched —, texto do portal) + seções 9–10 (orçamento, luzes, emissores, controlador único, safe lane, frente da barreira com a largura do Colosso, pads, rota de pets); `lune run tools/lune/check_corridor.luau` (barreira individual por jogador); `python tools/render_power_path.py <json> <saida> <tag> E`.

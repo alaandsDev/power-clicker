@@ -498,7 +498,8 @@ return {
 	["cut.Cut7.name"] = "Corte 7",
 	["cut.Cut8.name"] = "Corte 8",
 	-- Torre (Fase B)
-	["wall.portalSoon"] = "🚪 Novo mundo — em breve",
+	["wall.portalSoon"] = "EM BREVE",
+	["wall.portalContinues"] = "O caminho continua...",
 	["wall.firstClear"] = "Estágio {order} conquistado! +{gems} gemas",
 	["wall.Ruins.name"] = "Pedra Reforçada",
 	["wall.Ice.name"] = "Gelo Eterno",

@@ -229,6 +229,8 @@ function PowerPath.BuildFinal(parent: Instance, origin: Vector3): Model
 		Area = true,
 	}, theme, theme)
 	part(model, "PathThreshold", Vector3.new(1.6, 0.14, CorridorThemes.Rules.LaneHalf * 2 + 2), CFrame.new(origin + Vector3.new(start + 0.8, 0.07, 0)), theme.Trim.Color :: Color3, theme.Trim.Material, false)
+	-- Área de conclusão e moldura do portal (Fase E).
+	PowerPathDecor.BuildFinal(model, origin)
 	model:SetAttribute("StageId", "Final")
 	model:SetAttribute("AreaStart", start)
 	model:SetAttribute("End", start + length)

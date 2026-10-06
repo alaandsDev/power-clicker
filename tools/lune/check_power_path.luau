@@ -1,5 +1,5 @@
 --[[
-	check_power_path.luau — Caminho do Poder: fundação (Fase A), temas 1–3 (Fase B) e 4–6 (Fase C).
+	check_power_path.luau — Caminho do Poder completo: fundação (A), temas 1–3 (B), 4–6 (C), 7–9 (D) e Colosso + final + portal (E).
 
 		lune run tools/lune/check_power_path.luau [raiz]
 
@@ -24,7 +24,10 @@
 	     transições físicas (1→2 … 6→calor do 7), cenário fora da safe lane /
 	     da frente da barreira / das fileiras / dos pads / da câmera, Neon só
 	     como acento, orçamento por estágio, emissores locais com um único
-	     controlador.
+	     controlador;
+	 11. Fase E: transição 9→10, escala crescendo até o Portão do Colosso,
+	     passagem livre, área de conclusão, portal menor que o Colosso e
+	     inerte (sem teleporte/prompt/remote/Touched), texto do portal.
 
 	REQUER VALIDAÇÃO NO ROBLOX STUDIO: escala, materiais, luz e leitura em
 	3ª pessoa; pets de verdade seguindo o jogador.
@@ -207,6 +210,7 @@ for _, segment in segments do
 			local minP, maxP = box(d)
 			if minP.X < segment.AreaStart - 0.2 or maxP.X > segment.End + 0.2 or math.max(math.abs(minP.Z), math.abs(maxP.Z)) > half + layout.SideThickness + 1.01 then
 				table.insert(outside, segment.Id .. ":" .. d.Name)
+				print(string.format("      fora: %s x %.1f..%.1f z %.1f..%.1f", d.Name, minP.X, maxP.X, minP.Z, maxP.Z))
 			end
 		end
 	end
@@ -458,8 +462,8 @@ for name, n in lightKinds do
 end
 check(parts - decorParts <= 1250, string.format("9. orçamento da fundação (Fase A): %d peças fora do cenário — meta 1.100–1.250", parts - decorParts))
 -- Peças de cenário por fase (Fase B: 1–3; Fase C: 4–6).
-local phaseOf = { Wood = "B", Ruins = "B", Ice = "B", Crystal = "C", Gold = "C", Ancient = "C", Volcanic = "D", Magma = "D", Tech = "D" }
-local decorPhase = { B = 0, C = 0, D = 0 }
+local phaseOf = { Wood = "B", Ruins = "B", Ice = "B", Crystal = "C", Gold = "C", Ancient = "C", Volcanic = "D", Magma = "D", Tech = "D", Colossus = "E", Final = "E" }
+local decorPhase = { B = 0, C = 0, D = 0, E = 0 }
 for _, d in path:GetDescendants() do
 	if d:IsA("BasePart") and d:GetAttribute("Decor") ~= nil then
 		local stage = d:FindFirstAncestorWhichIsA("Model")
@@ -471,13 +475,14 @@ for _, d in path:GetDescendants() do
 end
 check(decorPhase.B >= 80 and decorPhase.B <= 130, string.format("9. orçamento da Fase B (1–3): +%d peças de cenário (meta 80–110, teto 130)", decorPhase.B))
 check(decorPhase.C >= 90 and decorPhase.C <= 130, string.format("9. orçamento da Fase C (4–6): +%d peças de cenário (meta 90–115, teto 130)", decorPhase.C))
-check(decorPhase.D >= 105 and decorPhase.D <= 150 and parts <= 1500 and decorParts == decorPhase.B + decorPhase.C + decorPhase.D, string.format("9. orçamento da Fase D (7–9): +%d peças de cenário (meta 105–135, teto 150); corredor com %d peças (%d instâncias) — abaixo de 1.500, reserva para o Colosso (final ≈ 1.600, teto 1.700)", decorPhase.D, parts, instances))
-check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; Fases B, C e D não adicionam; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
+check(decorPhase.D >= 105 and decorPhase.D <= 150, string.format("9. orçamento da Fase D (7–9): +%d peças de cenário (meta 105–135, teto 150)", decorPhase.D))
+check(decorPhase.E >= 50 and decorPhase.E <= 200 and parts <= 1700 and decorParts == decorPhase.B + decorPhase.C + decorPhase.D + decorPhase.E, string.format("9. orçamento da Fase E (Colosso + final): +%d peças de cenário (teto 200); corredor COMPLETO com %d peças (%d instâncias) — teto 1.700", decorPhase.E, parts, instances))
+check(lights <= 16, string.format("9. PointLights no corredor: %d (eram 103; B–D não adicionam; E só a do selo do Colosso; meta final ≤ 40) — %s", lights, table.concat(kinds, ", ")))
 -- Emissores: poucos, só onde o tema pede, desligados no servidor, com tag
 -- (o PowerPathEnvironmentController liga perto da câmera).
-local emitterStages = { Ice = 2, Crystal = 1, Ancient = 1, Volcanic = 2, Magma = 1, Tech = 1 }
+local emitterStages = { Ice = 2, Crystal = 1, Ancient = 1, Volcanic = 2, Magma = 1, Tech = 1, Colossus = 1, Final = 1 }
 local emitterCount = {}
-local emittersOk = emitters <= 9
+local emittersOk = emitters <= 11
 for _, emitter in emitterList do
 	local owner = emitter.Parent
 	local stage = owner and owner:FindFirstAncestorWhichIsA("Model")
@@ -494,10 +499,10 @@ for id, max in emitterStages do
 		emittersOk = false
 	end
 end
-check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 9: gelo 2, cristal 1, brasas do 6 1, fumaça+brasas do 7 2, faíscas do 8 1, motes do 9 1; desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
+check(emittersOk, string.format("9. ParticleEmitters fixos: %d (≤ 11: gelo 2, cristal 1, brasas do 6 1, fumaça+brasas do 7 2, faíscas do 8 1, motes do 9 1, selo do Colosso 1, portal 1; desligados no servidor, tag PowerPathAmbient, taxa baixa)", emitters))
 
 -- ── 10. Fases B e C: cenário dos estágios 1–6 ───────────────────────────────
-local themed = { Wood = true, Ruins = true, Ice = true, Crystal = true, Gold = true, Ancient = true, Volcanic = true, Magma = true, Tech = true }
+local themed = { Wood = true, Ruins = true, Ice = true, Crystal = true, Gold = true, Ancient = true, Volcanic = true, Magma = true, Tech = true, Colossus = true }
 local decorBy = {}
 for _, segment in segments do
 	local decor = stageModels[segment.Id]:FindFirstChild("Decor")
@@ -552,7 +557,7 @@ end
 check(landmarkOk, string.format("10. landmark nos estágios 1–3 (peças marcadas Landmark, acima de y 24): floresta %d, ruínas %d, gelo %d peças de cenário", counts.Wood, counts.Ruins, counts.Ice))
 check(landmarkOk, string.format("10. landmark nos estágios 4–6 (peças marcadas Landmark, acima de y 24): cristal %d, ouro %d, ancestral %d peças de cenário", counts.Crystal, counts.Gold, counts.Ancient))
 check(landmarkOk, string.format("10. landmark nos estágios 7–9 (peças marcadas Landmark, acima de y 24): vulcânico %d, magma %d, energia %d peças de cenário", counts.Volcanic, counts.Magma, counts.Tech))
-check(onlyThemed, "10. estágio 10 (Colosso) ainda sem cenário (Fase E); o 9 só PREPARA a chegada")
+check(onlyThemed and counts.Colossus > 0, string.format("10. Caminho completo: os 10 estágios com cenário (Colosso %d peças)", counts.Colossus))
 check(counts.Wood >= 20 and counts.Wood <= 40 and counts.Ruins >= 25 and counts.Ruins <= 45 and counts.Ice >= 30 and counts.Ice <= 50 and counts.Wood < counts.Ice and counts.Ruins <= counts.Ice, string.format("10. orçamento por estágio (guia 25–35 / 30–40 / 35–45) e intensidade subindo até o gelo: %d / %d / %d", counts.Wood, counts.Ruins, counts.Ice))
 check(counts.Crystal >= 25 and counts.Crystal <= 45 and counts.Gold >= 25 and counts.Gold <= 45 and counts.Ancient >= 22 and counts.Ancient <= 45, string.format("10. orçamento por estágio da Fase C (guia 30–40 cada, sem landmark de 80 peças): %d / %d / %d", counts.Crystal, counts.Gold, counts.Ancient))
 -- Nenhum landmark gasta o orçamento sozinho.
@@ -617,7 +622,9 @@ for _, segment in segments do
 			table.insert(laneHits, label)
 		end
 		-- Frente da barreira: placa de HP (x = face - 1,5; |z| ≤ 33 + 5) e o golpe.
-		if overlaps(minP, maxP, V3.new(segment.Barrier - 12, 0.3, -38), V3.new(segment.Barrier, 14, 38)) then
+		-- (|z| até a borda da placa: centro limitado a ±(meia largura - 10), placa de 10.)
+		local plateZ = half - 5
+		if overlaps(minP, maxP, V3.new(segment.Barrier - 12, 0.3, -plateZ), V3.new(segment.Barrier, 14, plateZ)) then
 			table.insert(frontHits, label)
 		end
 		-- Dentro das fileiras (a moldura fica nas bordas ou acima de y 30,5).
@@ -644,13 +651,13 @@ for _, segment in segments do
 	end
 end
 check(#laneHits == 0, "10. cenário fora da safe lane (±18 até y 14) " .. table.concat(laneHits, ", "))
-check(#frontHits == 0, "10. frente da barreira livre (placa de HP, espada, CutFx: x ∈ [B-12, B], |z| < 38) " .. table.concat(frontHits, ", "))
+check(#frontHits == 0, "10. frente da barreira livre (placa de HP, espada, CutFx: x ∈ [B-12, B], |z| até a borda da placa — 38 nos estágios 1–9, 63,8 no Colosso) " .. table.concat(frontHits, ", "))
 check(#rowHits == 0, "10. nada do cenário dentro das fileiras (molduras nas bordas ou acima da barreira) " .. table.concat(rowHits, ", "))
 check(#padHits == 0, "10. nada do cenário sobre os pads de vitória / Voltar " .. table.concat(padHits, ", "))
 check(#cameraHits == 0, "10. câmera chegando na barreira sem nada sobre a faixa (y 14–24, 40 studs antes) " .. table.concat(cameraHits, ", "))
 
 -- Molduras das barreiras e transições físicas.
-local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal", Crystal = "CrystalConduit", Gold = "TempleGate", Ancient = "AncientSeal", Volcanic = "VolcanicGate", Magma = "MagmaSeal", Tech = "EnergyContainment" }
+local frames = { Wood = "BarrierRoots", Ruins = "RuinGate", Ice = "IceSeal", Crystal = "CrystalConduit", Gold = "TempleGate", Ancient = "AncientSeal", Volcanic = "VolcanicGate", Magma = "MagmaSeal", Tech = "EnergyContainment", Colossus = "ColossusGate" }
 local segmentById = {}
 for _, segment in segments do
 	segmentById[segment.Id] = segment
@@ -663,7 +670,7 @@ for id, kind in frames do
 		print("      sem moldura: " .. id)
 	end
 end
-check(framesOk, "10. barreiras 1–9 emolduradas pelo tema (raízes, umbral, selo de gelo, pilares de cristal, portão do templo, selo ancestral, massa vulcânica, magma cristalizado, contenção de energia)")
+check(framesOk, "10. barreiras 1–10 emolduradas pelo tema (raízes, umbral, selo de gelo, pilares de cristal, portão do templo, selo ancestral, massa vulcânica, magma cristalizado, contenção de energia, PORTÃO DO COLOSSO)")
 local w, r, i = segments[1], segments[2], segments[3]
 local thirdW, thirdR = (w.Barrier - w.AreaStart) / 3, (r.Barrier - r.AreaStart) / 3
 local t12 = kindsIn(decorBy.Wood, w.AreaStart + 2 * thirdW, w.End)
@@ -711,18 +718,114 @@ for _, d in decorBy.Tech do
 		end
 	end
 end
-check(tTail.OpeningPylon and tTail.ConvergenceLines and pylonsTall and #decorBy.Colossus == 0, "10. pré-10: depois da Barreira 9, pilones MAIS ALTOS que as paredes e energia convergindo para frente — e nada construído no 10")
+check(tTail.OpeningPylon and tTail.ConvergenceLines and pylonsTall, "10. pré-10: depois da Barreira 9, pilones MAIS ALTOS que as paredes e energia convergindo para frente")
+
+-- ── 11. Fase E: Colosso, final e portal ─────────────────────────────────────
+local col = segmentById.Colossus
+local c1x, c12x, c3x = parts3("Colossus")
+check(c1x.ColossusThreshold, "11. transição 9→10: a soleira escalonada abre o corredor (86 → 138 studs) logo na entrada do 10")
+-- Escala crescendo até o portão: o mais alto de cada terço e o do portão.
+local function tallest(list, fromX, toX)
+	local top = 0
+	for _, d in list do
+		local x = d.CFrame.Position.X
+		if x >= fromX and x < toX then
+			local _, maxP = box(d)
+			top = math.max(top, maxP.Y)
+		end
+	end
+	return top
+end
+local thirdC = (col.Barrier - col.AreaStart) / 3
+local h1 = tallest(decorBy.Colossus, col.AreaStart + 10, col.AreaStart + thirdC)
+local h2 = tallest(decorBy.Colossus, col.AreaStart + thirdC, col.AreaStart + 2 * thirdC)
+local hGate = tallest(decorBy.Colossus, col.Barrier - 20, col.Barrier + col.Depth)
+local corridorTop = 0
+for id, list in decorBy do
+	if id ~= "Colossus" then
+		corridorTop = math.max(corridorTop, tallest(list, -math.huge, math.huge))
+	end
+end
+check(h1 < h2 and h2 < hGate and hGate >= 90 and hGate > corridorTop + 20, string.format("11. a escala CRESCE até o Portão do Colosso (terço 1 até y %.0f → terço 2 %.0f → portão %.0f; o mais alto de 1–9 chega a %.0f)", h1, h2, hGate, corridorTop))
+-- O portão emoldura sem tocar no volume lógico: nada abaixo da verga na
+-- passagem (|z| < 64, x ∈ [B, B+Depth]) — quem quebrou vê a passagem.
+local passageHits = {}
+for _, d in decorBy.Colossus do
+	local minP, maxP = box(d)
+	if overlaps(minP, maxP, V3.new(col.Barrier, -0.5, -(col.Width / 2 - 4.7)), V3.new(col.Barrier + col.Depth, 60, col.Width / 2 - 4.7)) then
+		table.insert(passageHits, d.Name)
+	end
+end
+check(#passageHits == 0, "11. passagem do Colosso livre: a arquitetura fica nas bordas e acima de y 60 (fileiras, colisão e abertura individual intocadas) " .. table.concat(passageHits, ", "))
+-- Final: área de conclusão + moldura do portal, dentro da praça.
+local finalDecor = {}
+local finalModel = path:FindFirstChild("PowerPath_Final")
+local fd = finalModel and finalModel:FindFirstChild("Decor")
+if fd then
+	for _, d in fd:GetDescendants() do
+		if d:IsA("BasePart") then
+			table.insert(finalDecor, d)
+		end
+	end
+end
+local finalOk, portalTop = #finalDecor > 0, 0
+for _, d in finalDecor do
+	local minP, maxP = box(d)
+	if minP.X < finalStart - 0.2 or maxP.X > finalEnd + 0.2 or math.max(math.abs(minP.Z), math.abs(maxP.Z)) > col.Width / 2 + layout.SideThickness + 1.01 or d.CanTouch then
+		finalOk = false
+		print("      final fora: " .. d.Name)
+	end
+	if d:GetAttribute("Decor") == "FuturePortal" then
+		portalTop = math.max(portalTop, maxP.Y)
+	end
+end
+local finalKinds = kindsIn(finalDecor, finalStart, finalEnd)
+check(finalOk and finalKinds.FuturePortal and finalKinds.PortalGlyph and finalKinds.CalmStele, string.format("11. área de conclusão e moldura do portal dentro da praça final (%d peças), sem toque", #finalDecor))
+check(portal and portalTop > 0 and portalTop < hGate * 0.6 and portal.Size.Y < 40, string.format("11. o portal é o MISTÉRIO, não o clímax: moldura até y %.0f contra %.0f do Portão do Colosso", portalTop, hGate))
+check(portal and portal.CanTouch == false and portal.CanCollide == false and portal.Material ~= Enum.Material.Neon, "11. portal do futuro inerte: sem toque, sem colisão, interior bloqueado (não é Neon/passagem)")
+local fsrc = require("@lune/fs")
+local inertOk = true
+for _, file in { "src/server/World/PowerPathDecor.luau", "src/server/World/PowerPath.luau" } do
+	local source = fsrc.readFile(E.Root .. "/" .. file)
+	for _, word in { "TeleportService", "TeleportAsync", "ProximityPrompt", "ClickDetector", "RemoteEvent", "RemoteFunction", "DataStore", ":FireServer", ":FireClient" } do
+		if string.find(source, word, 1, true) then
+			inertOk = false
+			print("      " .. file .. " usa " .. word)
+		end
+	end
+end
+local portalSource = fsrc.readFile(E.Root .. "/src/server/World/WorldBuilder.luau")
+local portalBlock = string.match(portalSource, "O portal: disco virado.-\n		end\n")
+local blockClean = portalBlock ~= nil
+for _, word in { "Touched", ":Connect", "Teleport", "ProximityPrompt", "ClickDetector", "Remote", "DataStore", "SetAttribute" } do
+	if portalBlock and string.find(portalBlock, word, 1, true) then
+		blockClean = false
+		print("      portal usa " .. word)
+	end
+end
+check(inertOk and blockClean, "11. portal sem gameplay escondido: nenhum teleporte, prompt, remote, DataStore nem Touched no cenário/portal (teaser visual)")
+local pt = fsrc.readFile(E.Root .. "/src/shared/Localization/Strings/ptBR.luau")
+check(string.find(pt, '["wall.portalSoon"] = "EM BREVE"', 1, true) ~= nil and string.find(pt, '["wall.portalContinues"] = "O caminho continua..."', 1, true) ~= nil, "11. texto do portal: \"EM BREVE\" + \"O caminho continua...\" (curto, PT-BR)")
 
 -- Cenário estático: sem script, sem prompt, sem luz.
 local staticOk = true
 for _, list in decorBy do
 	for _, d in list do
-		if not d.Anchored or d.CanTouch or d:FindFirstChildWhichIsA("Light") or d:FindFirstChildWhichIsA("BaseScript") or d:FindFirstChildWhichIsA("ProximityPrompt") then
+		local lit = d:FindFirstChildWhichIsA("Light") ~= nil and d:GetAttribute("Decor") ~= "ColossusGate"
+		if not d.Anchored or d.CanTouch or lit or d:FindFirstChildWhichIsA("BaseScript") or d:FindFirstChildWhichIsA("ProximityPrompt") then
 			staticOk = false
 		end
 	end
 end
-check(staticOk, "10. cenário estático: ancorado, sem toque, sem luz, sem script (nenhum loop novo)")
+local decorLights = 0
+for _, list in decorBy do
+	for _, d in list do
+		if d:FindFirstChildWhichIsA("Light") then
+			decorLights += 1
+		end
+	end
+end
+check(staticOk and decorLights == 1, string.format("10. cenário estático: ancorado, sem toque, sem script (nenhum loop novo); luz só no selo do Colosso (%d)", decorLights))
 
 -- O controlador dos emissores: liga só perto da câmera e sem "Efeitos reduzidos".
 do

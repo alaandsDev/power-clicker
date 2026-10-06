@@ -27,6 +27,14 @@ Câmeras (todas derivadas do CorridorLayout, a mesma conta do WorldBuilder):
   8→9 e 9→área do 10; entrada / câmera normal / landmark / barreira /
   lateral / aérea de cada estágio; o 9 olhando para o 10; folhas 7/8/9 e
   1→9 SEM TEXTO; vista longa 6→9 e a aérea completa lobby → área do 10.
+
+  Com o 4º argumento "E": a Fase E (Colosso + final + portal) — o 9 olhando
+  para frente, transição/reveal 9→10, entrada, câmera normal, distância
+  média, perto da Barreira 10, lateral, câmera baixa, aérea, escala humana
+  (um boneco de 5 studs), ANTES/DEPOIS da quebra (fileiras do 10 tiradas
+  do render = o que vê quem já quebrou), zona de decisão, portal de frente,
+  de lado e olhando para trás, folha 1→10 SEM TEXTO, aérea completa
+  lobby → portal e a vista do final para o lobby (todas abertas).
 """
 import os
 import sys
@@ -225,6 +233,99 @@ def phase_d(parts, out, tag):
     img.save(f"{out}/d64_aerea_completa.png")
 
 
+
+def _dummy(x, z, face_yaw=0.0):
+    """Boneco de escala (~5,2 studs, como um avatar R15 padrão)."""
+    c = [0.95, 0.75, 0.3]
+    blocks = [((0, 0.9, 0), (1.6, 1.8, 0.9)), ((0, 2.7, 0), (2.0, 1.9, 1.0)), ((0, 4.3, 0), (1.2, 1.2, 1.2)),
+              ((-1.5, 2.6, 0), (0.8, 1.9, 0.8)), ((1.5, 2.6, 0), (0.8, 1.9, 0.8))]
+    out = []
+    for (dx, y, dz), size in blocks:
+        out.append({"c": c, "l": False, "m": "SmoothPlastic", "n": "ScaleDummy", "p": [x + dx, y, z + dz], "r": [1, 0, 0, 0, 1, 0, 0, 0, 1], "s": "Block", "t": 0, "z": list(size)})
+    return out
+
+
+def _opened(parts, indices):
+    """Tira as fileiras (e detalhes) das barreiras `indices`: o que vê quem já quebrou."""
+    boxes = []
+    for i in indices:
+        seg = SEG[i]
+        half = (WIDTH * (FINAL if i == len(SEG) - 1 else 1)) / 2
+        boxes.append((seg["wall"] - 1.6, seg["wall"] + seg["depth"] + 1.6, half + 0.01, seg["h"] + 0.01))
+    out = []
+    for part in parts:
+        x, y, z = part["p"]
+        name = str(part.get("n", ""))
+        inside = any(x0 <= x <= x1 and abs(z) <= zh and 0 <= y <= yh for x0, x1, zh, yh in boxes)
+        if (name.startswith("Wall_") or (inside and not name.startswith("Path") and not name.startswith("Arch"))):
+            continue
+        out.append(part)
+    return out
+
+
+def phase_e(parts, out, tag):
+    """Câmeras da Fase E (Colosso, final e portal), relativas ao CorridorLayout."""
+    A = [s["start"] for s in SEG]
+    B = [s["wall"] for s in SEG]
+    D = [s["depth"] for s in SEG]
+    END = [s["end"] for s in SEG]
+    ac, bc, dc, ec = A[9], B[9], D[9], END[9]
+    fin = ec + 120
+    rows_end = bc + dc
+    open10 = _opened(parts, [9])
+    open_all = _opened(parts, range(10))
+
+    def shot(name, eye, target, title, fov=70, text=True, src=None):
+        R.render(src if src is not None else parts, R.Cam(eye, target, fov=fov), f"{out}/{name}.png", f"{tag} - {title}", show_text=text)
+
+    shot("e00_estagio9_olhando_para_frente", [A[8] + 60, 10, 0], [ac + 60, 18, 0], "9 energia olhando para frente", fov=66)
+    shot("e01_transicao_9_10_antes", [B[8] + D[8] + 4, 12, -22], [ac + 40, 16, 4], "transicao 9-10: depois da Barreira 9")
+    shot("e02_transicao_9_10_meio", [END[8] - 22, 10, -8], [bc, 34, 0], "transicao 9-10: no limiar")
+    shot("e03_reveal_do_colosso", [ac + 4, 8, -6], [bc, 40, 0], "reveal: o Colosso ao fundo", fov=70)
+    shot("e04_entrada_10", [ac + 12, 9, 12], [bc, 30, -8], "10 colosso: entrada")
+    shot("e05_camera_normal_aproximando", [ac + 80, 9, 4], [bc, 22, 0], "10 colosso: camera normal aproximando")
+    shot("e06_distancia_media", [bc - 90, 14, -22], [bc, 44, 0], "10 colosso: distancia media")
+    shot("e07_perto_da_barreira_10", [bc - 34, 9, -10], [bc, 20, 4], "10 colosso: perto da Barreira 10", fov=72)
+    shot("e08_lateral", [ac + 90, 120, -300], [ac + 160, 34, 0], "10 colosso: lateral (silhueta)", fov=62, text=False)
+    shot("e09_camera_baixa_olhando_para_cima", [bc - 30, 2, 8], [bc, 78, 0], "10 colosso: camera baixa olhando para cima", fov=78)
+    span = fin + 20 - ac
+    R.render(parts, None, f"{out}/e10_aerea.png", f"{tag} - 10 colosso + final + portal: aerea", show_text=False, ortho=((ac + fin) / 2, 0, W / span))
+    human = parts + _dummy(bc - 40, -2)
+    shot("e11_escala_humana", [bc - 84, 3, -6], [bc - 10, 24, 0], "escala humana: avatar (5 studs) diante do Colosso", fov=72, src=human)
+    shot("e12_antes_da_quebra", [bc - 40, 12, -14], [ec + 60, 16, 0], "Barreira 10 intacta (selada)")
+    shot("e13_depois_da_quebra", [bc - 40, 12, -14], [ec + 60, 16, 0], "depois da quebra: zona final e portal", src=open10)
+    shot("e20_chegando_depois_do_colosso", [rows_end + 4, 10, -18], [fin, 20, 0], "depois do Colosso: area de conclusao", src=open10)
+    shot("e21_zona_de_decisao", [rows_end + 6, 18, 34], [bc + dc + 34, 0, -10], "zona de decisao final (pads)", src=open10)
+    shot("e22_portal_de_frente", [fin - 62, 12, 0], [fin - 4, 22, 0], "portal: de frente", src=open10)
+    shot("e23_portal_lateral", [fin - 40, 14, -52], [fin - 4, 22, 0], "portal: lateral", src=open10)
+    shot("e24_do_portal_olhando_para_tras", [fin - 14, 14, 0], [ac, 22, 0], "do portal olhando para tras", src=open10)
+    # Folha 1 → 10, mesma câmera relativa (2 linhas de 5).
+    panels = []
+    for i in range(10):
+        R.render(parts, R.Cam([A[i] + 20, 9, -10], [A[i] + 110, 10 + (14 if i == 9 else 0), 6], fov=70), f"{out}/_cmp.png", None, show_text=False)
+        panels.append(Image.open(f"{out}/_cmp.png").resize((512, 288)))
+    os.remove(f"{out}/_cmp.png")
+    sheet = Image.new("RGB", (516 * 5 - 4, 292 * 2 - 4), (255, 255, 255))
+    for k, im in enumerate(panels):
+        sheet.paste(im, ((k % 5) * 516, (k // 5) * 292))
+    sheet.save(f"{out}/e30_comparacao_1_a_10_sem_texto.png")
+    # Aérea completa: lobby → 1 … 10 → portal, em 3 faixas.
+    lo, hi = -40, fin + 30
+    span = (hi - lo) / 3
+    strips = []
+    for k in range(3):
+        cx = lo + span * (k + 0.5)
+        R.render(parts, None, f"{out}/_strip.png", None, show_text=False, ortho=(cx, 0, W / span))
+        strips.append(Image.open(f"{out}/_strip.png").crop((0, H // 2 - 110, W, H // 2 + 110)))
+    os.remove(f"{out}/_strip.png")
+    img = Image.new("RGB", (W, 26 + 220 * 3), (0, 0, 0))
+    for k, strip in enumerate(strips):
+        img.paste(strip, (0, 26 + 220 * k))
+    ImageDraw.Draw(img).text((10, 5), f"{tag} - aerea completa: lobby -> 1 ... 10 -> portal (3 faixas)", fill=(255, 255, 255))
+    img.save(f"{out}/e31_aerea_completa.png")
+    shot("e32_do_final_para_o_lobby", [fin - 24, 72, 0], [0, 0, 0], "do final olhando para o lobby (todas as barreiras abertas)", fov=55, text=False, src=open_all)
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "build", "map_parts.json")
@@ -240,6 +341,9 @@ def main():
         return
     if len(sys.argv) > 4 and sys.argv[4] == "D":
         phase_d(parts, out, tag)
+        return
+    if len(sys.argv) > 4 and sys.argv[4] == "E":
+        phase_e(parts, out, tag)
         return
 
     def shot(name, cam, title, text=True):

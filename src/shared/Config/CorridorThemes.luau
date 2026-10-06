@@ -14,7 +14,7 @@
 	o que cada tema define aqui é MATERIAL e SILHUETA — a Fase A já não
 	diferencia estágio só por cor.
 
-	Fases (B: 1–3, C: 4–6 e D: 7–9 feitas; E: Colosso) preenchem `Props`,
+	Fases (B: 1–3, C: 4–6, D: 7–9 e E: Colosso + final) preenchem `Props`,
 	`Ambient` e os landmarks de cada tema; a estrutura não muda.
 ]]
 
@@ -380,15 +380,61 @@ local THEMES: { [string]: { [string]: any } } = {
 			{ Kind = "ConvergenceLines", At = 1.94 },
 		},
 	},
-	-- Colosso: paredes altas e piso de mármore; a Fase E monta o monumento
-	-- nos slots (a área é 1,6x mais larga e mais longa).
+	--[[
+		10 COLOSSO — o DESTINO, não "o 9 + um tema". Depois da instabilidade
+		do 9, poder absoluto: pedra monumental escura, marfim mineral pesado,
+		ouro antigo só em faixas finas e energia branco-dourada. A faixa chega
+		ao ápice (placas longas de marfim). O corredor abre (soleira
+		escalonada), a escala cresce (contrafortes → massas escalonadas →
+		obeliscos → paredes que sobem) e tudo conduz ao PORTÃO DO COLOSSO,
+		com o selo do Caminho do Poder. Espaço negativo de propósito.
+	]]
 	Colossus = {
-		Floor = { Material = M.Marble },
-		Lane = { Material = M.Marble },
-		Wall = { Material = M.Marble },
-		Trim = { Material = M.Metal },
+		Floor = { Material = M.Slate, Color = Color3.fromRGB(66, 66, 74) },
+		Lane = { Material = M.Marble, Color = Color3.fromRGB(206, 198, 178) },
+		Wall = { Material = M.Slate, Color = Color3.fromRGB(72, 72, 80) },
+		Trim = { Material = M.Marble, Color = Color3.fromRGB(222, 214, 194) },
 		Profile = { 54, 60, 64, 58 },
+		PlateShade = 0.9,
+		PlateLength = 22,
+		Decor = {
+			{ Kind = "ColossusThreshold", At = 0.03 },
+			{ Kind = "GoldInlay", At = 0.12, Side = -1, Z = 28, Yaw = 22 },
+			{ Kind = "GoldInlay", At = 0.12, Side = 1, Z = 28, Yaw = 22 },
+			{ Kind = "Buttress", At = 0.26, Side = -1, Scale = 0.8 },
+			{ Kind = "Buttress", At = 0.26, Side = 1, Scale = 0.8 },
+			{ Kind = "StepMass", At = 0.46, Side = -1 },
+			{ Kind = "StepMass", At = 0.46, Side = 1 },
+			{ Kind = "ColossusSigil", At = 0.6 },
+			{ Kind = "WallRise", At = 0.62, Side = -1, Scale = 0.5 },
+			{ Kind = "WallRise", At = 0.62, Side = 1, Scale = 0.5 },
+			{ Kind = "Obelisk", At = 0.7, Side = -1, Z = 52 },
+			{ Kind = "Obelisk", At = 0.7, Side = 1, Z = 52 },
+			{ Kind = "SealLines", At = 0.84 },
+			{ Kind = "Buttress", At = 0.86, Side = -1 },
+			{ Kind = "Buttress", At = 0.86, Side = 1 },
+			{ Kind = "WallRise", At = 0.88, Side = -1 },
+			{ Kind = "WallRise", At = 0.88, Side = 1 },
+			{ Kind = "ColossusGate", At = "Barrier", Landmark = true, Fx = "SealMotes" },
+			-- Atravessar o Colosso: o outro lado do portão e a zona de decisão final.
+			{ Kind = "ColossusRear", At = 1.12 },
+			{ Kind = "DecisionGold", At = 1.5 },
+		},
 	},
+}
+
+--[[
+	O FINAL ATUAL (praça depois do Colosso, até o portal). Mesma estrutura de
+	Decor; `At` = fração da praça (CorridorLayout.FINAL_PLAZA). A tensão cai:
+	pouca coisa, calma, o olho vai para o portal "em breve" (inerte).
+]]
+CorridorThemes.Final = {
+	Decor = {
+		{ Kind = "CalmStele", At = 0.4, Side = -1, Z = 40 },
+		{ Kind = "CalmStele", At = 0.4, Side = 1, Z = 40 },
+		{ Kind = "PortalGlyph", At = 0.86 },
+		{ Kind = "FuturePortal", At = 0.967, Landmark = true, Fx = "PortalMotes" },
+	} :: { Decor },
 }
 
 local function shade(color: Color3, factor: number): Color3

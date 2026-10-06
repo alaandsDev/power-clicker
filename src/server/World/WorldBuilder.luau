@@ -37,6 +37,7 @@ local CutLogic = require(Shared.Formulas.CutLogic)
 local ZoneRules = require(Shared.Formulas.ZoneRules)
 local WorldRules = require(Shared.Formulas.WorldRules)
 local WinPadRules = require(Shared.Formulas.WinPadRules)
+local CorridorThemes = require(Shared.Config.CorridorThemes)
 local CorridorLayout = require(Shared.Formulas.CorridorLayout)
 local NumberFormat = require(Shared.Utils.NumberFormat)
 local Text = require(Shared.Localization)
@@ -1650,14 +1651,17 @@ local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 			barrierDetails(part, stage, layout.RowThickness)
 		end
 
-		-- Arco emoldurando a barreira: o portão que marca o checkpoint.
+		-- Arco emoldurando a barreira: o portão que marca o checkpoint. No
+		-- Colosso o arco fica no marfim do tema (o Accent rosa continua nos
+		-- pads; uma laje rosa por cima do Portão do Colosso brigava com ele).
 		local archX = areaEnd + blockDepth / 2
+		local archColor = if isFinal then CorridorThemes.For(stage.Id).Trim.Color :: Color3 else stage.Accent
 		for _, side in { -1, 1 } do
 			block(
 				model,
 				CFrame.new(origin + Vector3.new(archX, (height + layout.ArchExtra) / 2, side * (half + layout.ArchThickness / 2))),
 				Vector3.new(blockDepth + 6, height + layout.ArchExtra, layout.ArchThickness),
-				shade(stage.Accent, 0.8),
+				shade(archColor, 0.8),
 				Enum.Material.Marble,
 				false
 			)
@@ -1666,12 +1670,12 @@ local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 			model,
 			CFrame.new(origin + Vector3.new(archX, height + layout.ArchExtra, 0)),
 			Vector3.new(blockDepth + 6, layout.ArchThickness, width + layout.ArchThickness * 2),
-			shade(stage.Accent, 0.9),
+			shade(archColor, 0.9),
 			Enum.Material.Marble,
 			false
 		)
 		lintel.Name = "Arch_" .. stage.Id
-		light(lintel, stage.Accent, 30, 1.4)
+		light(lintel, archColor, 30, 1.4)
 
 		-- Pads de vitória logo depois da barreira, já na entrada da próxima área.
 		local padX = segment.PadsX
@@ -1729,7 +1733,8 @@ local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 				encostado nele, como se tivesse sido escavado na montanha. É uma
 				parede de verdade, não uma cerca, e não fica na frente do portal.
 			]]
-			local portalColor = Color3.fromRGB(190, 120, 255)
+			-- Energia do portal do futuro: violeta profundo (ecoa o 9, menor que o Colosso).
+			local portalColor = Color3.fromRGB(150, 110, 255)
 			local backX = cursor + plazaLength
 			local rockColor = shade(stage.Color, 0.32)
 			-- {deslocamento Z (fração da largura), largura, altura, recuo}
@@ -1760,21 +1765,8 @@ local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 				shade(rockColor, 0.8),
 				Enum.Material.Basalt
 			)
-			-- Cristais nos cantos do maciço (sem colisão: o maciço já segura).
-			for _, side in { -1, 1 } do
-				for index, size in { 16, 24 } do
-					local crystal = block(
-						model,
-						CFrame.new(origin + Vector3.new(backX - 4 - index * 6, size / 2, side * (half - 6 - index * 5)))
-							* CFrame.Angles(0, math.rad(25 * side), math.rad(10 * side)),
-						Vector3.new(4, size, 4),
-						stage.Accent,
-						Enum.Material.Neon,
-						false
-					)
-					crystal.Transparency = 0.15
-				end
-			end
+			-- (Fase E: os cristais Neon dos cantos saíram — a moldura do portal e a
+			-- área de conclusão agora são o cenário do PowerPath_Final.)
 
 			-- O portal: disco virado para o jogador, com moldura de pedra.
 			local portalX = backX - 4
@@ -1785,10 +1777,12 @@ local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 				Size = Vector3.new(1.5, 34, 34),
 				CFrame = CFrame.new(portalCenter),
 				Color = portalColor,
-				Material = Enum.Material.Neon,
+				-- Interior instável e BLOQUEADO (não é passagem): ForceField, não Neon.
+				Material = Enum.Material.ForceField,
 				CanCollide = false,
-				Transparency = 0.35,
+				Transparency = 0.15,
 			})
+			portal.CanTouch = false
 			-- Moldura: oito pedras em anel (barato e lê como um portal).
 			for segment = 0, 7 do
 				local angle = segment * math.pi / 4
@@ -1798,13 +1792,15 @@ local function buildCorridor(world: Model, origin: Vector3, palette: Palette)
 					CFrame.new(portalCenter + Vector3.new(0.5, math.sin(angle) * 19, math.cos(angle) * 19))
 						* CFrame.Angles(-angle - math.pi / 2, 0, 0),
 					Vector3.new(4, 5, 15),
-					shade(stage.Accent, 0.55),
-					Enum.Material.Marble,
+					Color3.fromRGB(52, 50, 60),
+					Enum.Material.Slate,
 					false
 				)
 			end
 			light(portal, portalColor, 60, 3)
-			billboard(portal, Text.GetFor(nil, "wall.portalSoon"), Color3.fromRGB(210, 160, 255), 24)
+			-- "EM BREVE" e uma linha curta: existe mais, mas ainda não.
+			billboard(portal, Text.GetFor(nil, "wall.portalSoon"), Color3.fromRGB(226, 210, 255), 31, 180, 1.2)
+			billboard(portal, Text.GetFor(nil, "wall.portalContinues"), Color3.fromRGB(200, 180, 240), 26.5, 180, 0.75)
 		end
 	end
 end

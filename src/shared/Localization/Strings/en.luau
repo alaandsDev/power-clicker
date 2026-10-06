@@ -486,7 +486,8 @@ return {
 	["cut.Cut7.name"] = "Cut 7",
 	["cut.Cut8.name"] = "Cut 8",
 	-- The tower (Fase B)
-	["wall.portalSoon"] = "🚪 New world — coming soon",
+	["wall.portalSoon"] = "COMING SOON",
+	["wall.portalContinues"] = "The path continues...",
 	["wall.firstClear"] = "Stage {order} cleared! +{gems} gems",
 	["wall.Ruins.name"] = "Reinforced Stone",
 	["wall.Ice.name"] = "Eternal Ice",
