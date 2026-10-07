@@ -90,8 +90,16 @@ Scenarios.C2 = {
 		Summary = "busca a partir de curva antiga no início: base 2M, crescimento 6; HP 5 ×1,5, 6 ×1,5, 7 ×3, 8 ×5, 9 ×6, 10 ×80; fileiras 5/7/6/10; Místico 350, Caminho 800; boss 3 min só participantes.",
 		Params = { Base = 2e6, Early = 4, Knee = 0, Growth = 6, Hp5 = 1.5, Hp6 = 1.5, Hp7 = 3, Hp8 = 5, Hp9 = 6, Hp10 = 80, Rows7 = 5, Rows8 = 7, Rows9 = 6, Rows10 = 10, Mystic = 350, Tower = 800, Boss = 180 },
 	},
+	["C2-D"] = {
+		Summary = "C2-B com o Colosso mais baixo (×40): o \"pronto\" (luta ≤ 3 min) vem para ~D30; base 1M, crescimento 6; HP 5 ×1,5, 6 ×2,5, 7 ×4, 8 ×10, 9 ×12, 10 ×40; fileiras 5/6/8/10; Místico 300, Caminho 800; boss 5 min só participantes.",
+		Params = { Base = 1e6, Early = 4, Knee = 0, Growth = 6, Hp5 = 1.5, Hp6 = 2.5, Hp7 = 4, Hp8 = 10, Hp9 = 12, Hp10 = 40, Rows7 = 5, Rows8 = 6, Rows9 = 8, Rows10 = 10, Mystic = 300, Tower = 800, Boss = 300 },
+	},
+	["C2-E"] = {
+		Summary = "C2-D com crescimento 5,5 e estágios 8/9 mais baixos (×8): mesma estreia do renascimento, casual sem ficar semanas parado; base 1M, crescimento 5,5; HP 5 ×1,5, 6 ×2,5, 7 ×4, 8 ×8, 9 ×8, 10 ×40; fileiras 5/6/8/10; Místico 300, Caminho 800; boss 5 min só participantes.",
+		Params = { Base = 1e6, Early = 4, Knee = 0, Growth = 5.5, Hp5 = 1.5, Hp6 = 2.5, Hp7 = 4, Hp8 = 8, Hp9 = 8, Hp10 = 40, Rows7 = 5, Rows8 = 6, Rows9 = 8, Rows10 = 10, Mystic = 300, Tower = 800, Boss = 300 },
+	},
 }
-Scenarios.C2Order = { "C2-A", "C2-B", "C2-C" }
-Scenarios.C2Pick = "C2-A" -- definido após o Monte Carlo de 500
+Scenarios.C2Order = { "C2-A", "C2-B", "C2-C", "C2-D", "C2-E" }
+Scenarios.C2Pick = "C2-E" -- escolhido após o Monte Carlo de 500 (ver relatório C2)
 
 return Scenarios

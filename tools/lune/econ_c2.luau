@@ -14,12 +14,14 @@ local process = require("@lune/process")
 local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 
-local root, mode, config, runs, out, dir = nil, nil, nil, 500, nil, nil
+local root, mode, config, runs, out, dir, only = nil, nil, nil, 500, nil, nil, nil
 for _, arg in process.args do
 	if string.sub(arg, 1, 5) == "runs=" then
 		runs = tonumber(string.sub(arg, 6)) or runs
 	elseif string.sub(arg, 1, 4) == "out=" then
 		out = string.sub(arg, 5)
+	elseif string.sub(arg, 1, 5) == "only=" then
+		only = string.sub(arg, 6)
 	elseif string.sub(arg, 1, 4) == "dir=" then
 		dir = string.sub(arg, 5)
 	elseif string.find(arg, "/") then
@@ -189,7 +191,7 @@ if mode == "extras" then
 		{ "reset após 60 s sem golpe", { Mode = "reset", After = 60 } },
 		{ "lenta após 30 s (1%/s)", { Mode = "slow", After = 30, Rate = 0.01 } },
 	}
-	for _, regen in regens do
+	for _, regen in if only == nil or only == "regen" then regens else {} do
 		local o = table.clone(base)
 		o.Regen = regen[2]
 		for _, who in { { "Ativo", {} }, { "Ativo que raspa", { ChipsBeyondPatience = true } } } do
@@ -230,7 +232,10 @@ if mode == "extras" then
 		{ "Colosso 10 fileiras", { Rows10 = 10 } },
 		{ "Colosso 12 fileiras (mesmo HP total)", { Rows10 = 12 } },
 	}
-	for _, v in variants do
+	for index, v in variants do
+		if only ~= nil and not (only == "sens1" and index % 2 == 1) and not (only == "sens2" and index % 2 == 0) then
+			continue
+		end
 		local params = table.clone(p)
 		for k, value in v[2] do
 			params[k] = value
@@ -304,7 +309,7 @@ if mode == "extras" then
 		{ Name = "VETERANO FORTE (R20)", R = 20, Pets = { 35, 12, 12, 6, 6, 6 }, Cut = "Cut8", Wins = 18603, Cleared = 10, Power = 5e14 },
 		{ Name = "ENDGAME (R27, pets do Colosso)", R = 27, Pets = { 90, 45, 30, 30, 15, 15 }, Cut = "Cut8", Wins = 18603, Cleared = 10, Power = 1e18, Aura = 4, Runes = { [4] = 3 } },
 	}
-	for _, save in saves do
+	for _, save in if only == nil or only == "saves" then saves else {} do
 		local entry = { Name = save.Name, Rules = {} }
 		local function init(st)
 			st.Rebirths = save.R
@@ -532,6 +537,23 @@ end
 
 -- Extras
 local extras = load("extras")
+if not extras then
+	-- partes separadas (only=regen|sens1|sens2|saves)
+	local merged = { Regen = {}, Sensitivity = {}, Saves = {} }
+	local found = false
+	for _, part in { "regen", "sens1", "sens2", "saves" } do
+		local d = load("extras_" .. part)
+		if d then
+			found = true
+			for _, k in { "Regen", "Sensitivity", "Saves" } do
+				for _, item in d[k] or {} do
+					table.insert(merged[k], item)
+				end
+			end
+		end
+	end
+	extras = if found then merged else nil
+end
 if extras then
 	section("Regeneração (" .. pickId .. ", Ativo)")
 	header({ "Regra", "Jogador", "Stage 9", "mata Colosso", "golpes/fileira ao matar", "luta ao matar" })
