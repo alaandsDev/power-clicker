@@ -529,9 +529,25 @@ return function(E)
 	end
 
 	-- ── Compras ─────────────────────────────────────────────────────────────
+	-- st.CostFn (opcional): regra de custo por jogador (compatibilidade de
+	-- saves antigos). Sem ela, o EconomyFormulas real (com os overrides).
 	local function rebirthCost(st): number
+		if st.CostFn then
+			return st.CostFn(st.Rebirths)
+		end
+		--[[
+			Curva em duas fases (só cenário): Base × Inicial^min(r, K) ×
+			Crescimento^max(r − K, 0). Os primeiros K renascimentos apresentam o
+			sistema; depois a curva abre.
+		]]
+		local curve = st.Overrides.RebirthCurve
+		if curve then
+			local r = st.Rebirths
+			return math.ceil(curve.Base * curve.Early ^ math.min(r, curve.Knee) * curve.Growth ^ math.max(r - curve.Knee, 0))
+		end
 		return F.Economy.RebirthCost(st.Rebirths)
 	end
+	Model.RebirthCostOf = rebirthCost
 
 	local function buyCuts(st)
 		for index = #CUTS, st.CutIndex + 1, -1 do
@@ -702,7 +718,10 @@ return function(E)
 			checkAchievements(st)
 			-- Ir ao altar (na praça) fecha as barreiras atrás: a corrida recomeça.
 			if st.Activity and st.Activity.Stage > 0 then
-				st.Activity.Overhead = Model.Overhead(st, st.Activity.Stage)
+				local gap = Model.Overhead(st, st.Activity.Stage)
+				st.Activity.Overhead = gap
+				-- Regeneração (cenário): a ida ao altar é tempo sem bater na fileira.
+				st.Activity.Progress = Model.Regen(st, st.Activity.Stage, st.Activity.Progress, gap)
 			end
 		end
 	end
@@ -748,6 +767,24 @@ return function(E)
 	end
 
 	Model.WallHitsPerSecond = wallHitsPerSecond
+
+	--[[
+		Regeneração da barreira (só cenário; o jogo NÃO tem):
+			Regen = { Mode = "none" | "reset" | "slow", After = s, Rate = fração/s }
+		"reset": depois de `After` s sem golpe a barreira volta inteira.
+		"slow":  depois de `After` s sem golpe, volta `Rate` do HP total por s.
+		Nunca regenera com golpes contínuos (só conta o tempo SEM golpe).
+	]]
+	function Model.Regen(st, order: number, progress: number, idleSeconds: number): number
+		local regen = st.Overrides.Regen
+		if not regen or regen.Mode == "none" or idleSeconds <= (regen.After or 0) then
+			return progress
+		end
+		if regen.Mode == "reset" then
+			return 0
+		end
+		return math.max(progress - (regen.Rate or 0.01) * (idleSeconds - (regen.After or 0)), 0)
+	end
 	Model.StageOf = stageOf
 
 	-- Ida da praça até a barreira N + quebrar de novo as N-1 anteriores.
@@ -837,6 +874,15 @@ return function(E)
 			-- 1ª conquista: pega o pad x2 (valor cheio) — a corrida termina.
 			st.Wins += F.WinPad.Payout(stage, #stage.Pads, 1)
 			mark(st, "clear:" .. order)
+			if order < #STAGES then
+				local hit = Model.Hit(st)
+				st.Milestones["clear:" .. order].NextPerRow = math.ceil(stageOf(st, order + 1).Hp / math.max(hit, 1e-9))
+				st.Milestones["clear:" .. order].NextFight = Model.HitsFor(st, order + 1, hit) / math.max(wallHitsPerSecond(st, hit), 1e-9)
+			else
+				local hit = Model.Hit(st)
+				st.Milestones["clear:" .. order].PerRow = math.ceil(stageOf(st, order).Hp / math.max(hit, 1e-9))
+				st.Milestones["clear:" .. order].Fight = Model.HitsFor(st, order, hit) / math.max(wallHitsPerSecond(st, hit), 1e-9)
+			end
 			st.Dirty = true
 		else
 			st.Wins += Model.RepeatWins(st, order)
@@ -943,6 +989,26 @@ return function(E)
 		end
 
 		advanceWall(st, dt, session.Length - session.Elapsed)
+
+		-- Prontidão da barreira da vez: quando a luta (só esta barreira) cabe
+		-- em 30 / 10 / 3 min. Checado a cada minuto ativo.
+		st.ReadyClock = (st.ReadyClock or 0) + dt
+		if st.ReadyClock >= 60 and not st.Milestones["ready180:" .. #STAGES] then
+			st.ReadyClock = 0
+			-- o Colosso continua sendo medido depois de vencido (quem é paciente
+			-- vence com luta longa antes de ficar "pronto").
+			local order = math.min(st.Highest + 1, #STAGES)
+			local hit = Model.Hit(st)
+			local fight = Model.HitsFor(st, order, hit) / math.max(wallHitsPerSecond(st, hit), 1e-9)
+			for _, limit in { 1800, 600, 180 } do
+				local key = string.format("ready%d:%d", limit, order)
+				if fight <= limit and not st.Milestones[key] then
+					mark(st, key)
+					st.Milestones[key].Fight = fight
+					st.Milestones[key].PerRow = math.ceil(stageOf(st, order).Hp / math.max(hit, 1e-9))
+				end
+			end
+		end
 	end
 
 	function Model.TrainingRate(st): number
@@ -1040,6 +1106,11 @@ return function(E)
 			FrontierHitsPerRow = math.ceil(stage.Hp / math.max(hit, 1e-9)),
 			FrontierSeconds = Model.ClearSeconds(st, frontier),
 			TrainingShare = st.Income.Training / math.max(st.TotalPower, 1),
+			ClickStrength = st.Temp.ClickStrength,
+			PowerBoost = st.Temp.PowerBoost,
+			GemPower = st.Perm.GemPower,
+			NextRebirthCost = rebirthCost(st),
+			Frontier = if st.Highest < #STAGES then st.Highest + 1 else nil,
 			Income = table.clone(st.Income),
 		}
 	end
@@ -1062,6 +1133,7 @@ return function(E)
 			BossBoostParticipantsOnly  só quem bateu no boss ganha o Power2x
 			EggPrice {[EggId]=preço}
 			StageHp {[n]=×}, StageRows {[n]=rows}
+			RebirthCurve { Base, Early, Knee, Growth }  curva de custo em duas fases
 	]]
 	local function applyOverrides(overrides)
 		local saved = {
@@ -1105,6 +1177,9 @@ return function(E)
 		local activeMarks = opts.ActiveMarks or {}
 		local calendarMarks = opts.CalendarMarks or {}
 		local nextActive, nextCalendar = 1, 1
+		if opts.Init then
+			opts.Init(st) -- save sintético: R, pets, corte, vitórias, barreiras...
+		end
 		st.Dirty = true
 		Model.PerClick(st)
 
@@ -1143,7 +1218,7 @@ return function(E)
 					snapshots()
 				end
 				checkAchievements(st)
-				if opts.StopWhen == "Colossus" and st.Cleared[#STAGES] then
+				if opts.StopWhen == "Colossus" and st.Cleared[#STAGES] and (st.Milestones["ready180:" .. #STAGES] or opts.StopAtKill) then
 					return st
 				end
 			end

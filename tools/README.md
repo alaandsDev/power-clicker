@@ -46,6 +46,8 @@ lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 lune run tools/lune/check_zones.luau    # zonas dormentes (Build = false) não dão bônus pela posição
 lune run tools/lune/check_econ_model.luau # fidelidade do simulador da auditoria de economia
 lune run tools/lune/econ_audit.luau     # auditoria da progressão 1→10 (Markdown; seções e runs=N, scenario=A|B|C)
+lune run tools/lune/econ_search.luau    # busca automática de parâmetros do cenário C2 (start=C|TwoA|TwoB|TwoC seeds=N evals=N)
+lune run tools/lune/econ_c2.luau        # rodada C2: compute <config> / extras / report (JSON em out=, dir=)
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png
 ```
 
