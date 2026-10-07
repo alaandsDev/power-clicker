@@ -552,3 +552,55 @@ DataStore de produção.
     servidor (intencional), progresso salvo (Cleared/Highest) fica.
 15. C2.15 Celular: placa do altar (custos longos como 7,56T), placa de HP do
     Colosso e notificação do boss legíveis.
+
+### UX de progressão — Renascer disponível e estado do Colosso (UX2) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+
+Só informação: nenhuma regra, custo, HP ou recompensa muda (C2-E fechado).
+Automático: `lune run tools/lune/check_progression_ux.luau` (custo da tela =
+servidor, aviso sem spam, painel/selo reais, altar real, placa + faixa reais com
+dois jogadores, celular, Efeitos reduzidos, placa fora da HUD). Saves migrados:
+save v8 de teste no DataStore do Studio, NUNCA o de produção. Para ajustar dano
+no Studio use as melhorias/treino normais (ou um save de teste já forte).
+
+1. UX2.1 R0 sem Power: botão Renascer sem selo; painel "Renascimento: R0 → R1",
+   "Custo: ⚡ 1M", "⚡ Faltam 1M"; altar normal (sem etiqueta).
+2. UX2.2 Atingir EXATAMENTE o custo (⚡ 1M): o painel muda para
+   "✓ RENASCER DISPONÍVEL" na hora (sem abrir/fechar).
+3. UX2.3 Selo "!" aparece no botão Renascer (e no "Mais", se estiver lá) e o
+   aviso "♻ RENASCER DISPONÍVEL! Fique mais forte permanentemente." aparece
+   UMA vez. Continuar clicando não repete; gastar Power e voltar em < 2 min não
+   repete (só o selo).
+4. UX2.4 Estação: o altar deste jogador acende de leve (núcleo mais intenso e
+   pulsando mais rápido, poucas partículas a mais) e a etiqueta pequena
+   "♻ RENASCER DISPONÍVEL" aparece entre o pilar e o cristal. Outro jogador
+   sem Power suficiente vê o altar normal.
+5. UX2.5 Abrir a tela de Renascer (botão ou prompt do altar).
+6. UX2.6 Tela: "Renascimento: R atual → R+1" e "Custo: ⚡ X".
+7. UX2.7 Tela: "Poder permanente: ×A → ×B" (×1 → ×1,75 no R0; ×1,75 → ×3,06 no R1).
+8. UX2.8 Realizar o Rebirth: flash, Power zera, R sobe.
+9. UX2.9 Depois: selo some, etiqueta do altar some, altar volta ao normal,
+   tela mostra o próximo custo e "⚡ Faltam …".
+10. UX2.10 Save R7 migrado: "R7 → R8", custo ⚡ 687,2M (âncora), ×50,27 → ×87,96;
+    o selo só aparece com Power ≥ 687,2M e o servidor aceita no mesmo ponto.
+11. UX2.11 Save R15 migrado: "R15 → R16", custo ⚡ 7,56T; mesmo comportamento.
+12. UX2.12 Entrar no Colosso muito fraco: a placa mantém "10 · Colosso",
+    ❤ HP atual/total e as 10 fileiras, com a linha discreta abaixo.
+13. UX2.13 EXTREMO: "🔴 DESAFIO EXTREMO ≈N golpes/fileira" na placa e
+    "⚔ X · ≈N golpes · 🔴 DESAFIO EXTREMO" na faixa (sem o "Forte demais").
+    Nenhum aviso ao entrar.
+14. UX2.14 Aumentar o dano até ≈ 300 golpes/fileira ou menos: "🟠 PREPARANDO"
+    + aviso "⚔ COLOSSO Sua força agora está em PREPARAÇÃO." uma vez.
+15. UX2.15 Aumentar até ≈ 100 ou menos: "🟢 PRONTO" + aviso "⚔ COLOSSO VOCÊ
+    ESTÁ PRONTO! Seu dano atual torna o Colosso uma luta viável." uma vez.
+    O combo subindo/descendo no limite não repete aviso.
+16. UX2.16 "≈ golpes" correto: ❤ HP da fileira da frente ÷ ⚔ golpe (o mesmo
+    número na placa e na faixa).
+17. UX2.17 Quebrar uma fileira: a placa passa para a próxima; o ≈N volta ao da
+    fileira cheia; o estado não muda no meio da fileira.
+18. UX2.18 Dois jogadores no MESMO Colosso: A forte vê 🟢 PRONTO, B fraco vê
+    🔴 DESAFIO EXTREMO ao mesmo tempo; o aviso de um não aparece para o outro.
+19. UX2.19 Efeitos reduzidos: altar sem partículas extras e etiqueta parada
+    (o aviso e o selo continuam); a linha do Colosso continua.
+20. UX2.20 Celular/tablet: placa do Colosso com "🔴 EXTREMO ≈10,5K/fileira"
+    legível, sem encostar na coluna do topo da HUD nem na cabeça (câmera
+    próxima, padrão e distante); faixa curta; emoji 🔴🟠🟢 renderizam.

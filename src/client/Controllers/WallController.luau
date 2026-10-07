@@ -23,6 +23,13 @@
 	câmera normal de 3ª pessoa sempre enxerga o HP. Só a barreira à frente
 	do jogador (até 70 studs) mostra a placa; as outras ficam desligadas.
 
+	Colosso: a placa dele ganha UMA linha a mais, discreta, com o estado do
+	jogador ("🔴 DESAFIO EXTREMO ≈10,5K golpes/fileira"; curta no
+	celular), calculado em ProgressionUx com o HP da fileira e o MESMO ⚔ da
+	HUD (GameStateController.GetHitDamage). É só informação: não muda HP, não
+	bloqueia nada. Subir de estado mostra um aviso curto, uma vez por estado
+	por sessão. Cada cliente calcula o seu (o dano é de cada jogador).
+
 	Nada aqui decide nada: HP, abertura, janela e vitórias são do WallService,
 	que também confere a posição de quem tenta atravessar sem ter quebrado.
 ]]
@@ -36,6 +43,8 @@ local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFo
 local Signal = require(Shared:WaitForChild("Utils"):WaitForChild("Signal"))
 local WallConfig = require(Shared:WaitForChild("Config"):WaitForChild("WallConfig"))
 local WinPadRules = require(Shared:WaitForChild("Formulas"):WaitForChild("WinPadRules"))
+local ProgressionUx = require(Shared:WaitForChild("Formulas"):WaitForChild("ProgressionUx"))
+local HitDisplay = require(Shared:WaitForChild("Formulas"):WaitForChild("HitDisplay"))
 local Text = require(Shared:WaitForChild("Localization"))
 
 local SwordConfig = require(Shared:WaitForChild("Config"):WaitForChild("SwordConfig"))
@@ -48,6 +57,8 @@ local SoundController = require(script.Parent.SoundController)
 local NotificationController = require(script.Parent.NotificationController)
 local HudController = require(script.Parent.HudController)
 local DataController = require(script.Parent.DataController)
+local GameStateController = require(script.Parent.GameStateController)
+local UIController = require(script.Parent.UIController)
 
 type Sign = {
 	Gui: BillboardGui,
@@ -62,6 +73,9 @@ type Sign = {
 	TrailFrom: number,
 	TrailAt: number,
 	Row: BasePart?,
+	-- Só a placa do Colosso: a linha do estado do jogador.
+	Readiness: TextLabel?,
+	ReadinessText: string?,
 }
 
 -- Placa de HP: tamanho em studs (encolhe com a distância como as outras
@@ -82,6 +96,22 @@ local PLATE_FLOOR_HEIGHT = 7.5
 local PLATE_FRONT = 1.5
 local PLATE_EDGE_MARGIN = 10
 local PLATE_MAX_DISTANCE = 70
+--[[
+	Colosso: a linha do estado acrescenta só isto à altura da placa
+	(studs/pixels) e as linhas de dentro ficam um pouco mais baixas. Medido
+	(check_progression_ux): na câmera próxima do celular a placa normal já
+	sobra só ~10 px entre a coluna do topo da HUD e a cabeça; +0,2 stud e
+	+2 px cabem, +0,25 já encosta.
+]]
+local READINESS_HEIGHT = 0.2
+local READINESS_PIXELS = 2
+-- Posição/altura (escala da placa) de nome, barra, fileiras e linha do estado.
+local LAYOUT = {
+	Normal = { Name = { 0.04, 0.34 }, Bar = { 0.42, 0.36 }, Pips = { 0.83, 0.1 } },
+	Colossus = { Name = { 0.03, 0.27 }, Bar = { 0.33, 0.28 }, Pips = { 0.645, 0.065 }, Line = { 0.735, 0.235 } },
+}
+-- Abaixo desta largura de tela o texto do estado usa a forma curta.
+local COMPACT_VIEWPORT = 900
 -- Feedback: rastro do HP perdido, HP baixo e crítico.
 local TRAIL_SECONDS = 0.25
 local LOW_FRACTION = 0.25
@@ -128,6 +158,7 @@ local lastHitAt: { [BasePart]: number } = {}
 local banner: TextLabel
 local bannerStamp = 0
 local objectiveChip: TextLabel
+local colossusNotice = ProgressionUx.NewColossusNotice()
 -- Pads de vitória (placa reescrita com o valor deste jogador) e, por estágio,
 -- até quando vale a "primeira conquista" que acabou de acontecer.
 local winPads: { BasePart } = {}
@@ -291,9 +322,11 @@ end
 
 local function createSign(stageId: string, row: BasePart): Sign
 	local stage = stageOfId(stageId)
+	local colossus = stageId == ProgressionUx.Colossus.StageId
+	local extra = if colossus then READINESS_HEIGHT else 0
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "WallSign"
-	gui.Size = UDim2.new(PLATE_WIDTH, PLATE_MIN_PIXELS.X, PLATE_HEIGHT, PLATE_MIN_PIXELS.Y)
+	gui.Size = UDim2.new(PLATE_WIDTH, PLATE_MIN_PIXELS.X, PLATE_HEIGHT + extra, PLATE_MIN_PIXELS.Y + (if colossus then READINESS_PIXELS else 0))
 	gui.MaxDistance = PLATE_MAX_DISTANCE
 	-- Só a placa da barreira à frente fica ligada (refresh), então ela pode
 	-- ficar por cima de tudo sem aparecer através das outras barreiras.
@@ -308,6 +341,7 @@ local function createSign(stageId: string, row: BasePart): Sign
 	back.BackgroundColor3 = Color3.fromRGB(14, 16, 26)
 	back.BackgroundTransparency = 0.35
 	back.Size = UDim2.fromScale(1, 1)
+	local layout = if colossus then LAYOUT.Colossus else LAYOUT.Normal
 	back.Parent = gui
 	local backCorner = Instance.new("UICorner")
 	backCorner.CornerRadius = UDim.new(0.22, 0)
@@ -325,16 +359,16 @@ local function createSign(stageId: string, row: BasePart): Sign
 	name.TextScaled = true
 	name.TextColor3 = Color3.new(1, 1, 1)
 	name.TextStrokeTransparency = 0.3
-	name.Position = UDim2.fromScale(0.05, 0.04)
-	name.Size = UDim2.fromScale(0.9, 0.34)
+	name.Position = UDim2.fromScale(0.05, layout.Name[1])
+	name.Size = UDim2.fromScale(0.9, layout.Name[2])
 	name.Parent = back
 
 	local bar = Instance.new("Frame")
 	bar.Name = "Bar"
 	bar.BackgroundColor3 = Color3.fromRGB(28, 30, 44)
 	bar.BorderSizePixel = 0
-	bar.Position = UDim2.fromScale(0.05, 0.42)
-	bar.Size = UDim2.fromScale(0.9, 0.36)
+	bar.Position = UDim2.fromScale(0.05, layout.Bar[1])
+	bar.Size = UDim2.fromScale(0.9, layout.Bar[2])
 	bar.ClipsDescendants = true
 	bar.Parent = back
 	local corner = Instance.new("UICorner")
@@ -380,14 +414,30 @@ local function createSign(stageId: string, row: BasePart): Sign
 			pip.Name = "Row" .. index
 			pip.BackgroundColor3 = Color3.new(1, 1, 1)
 			pip.BorderSizePixel = 0
-			pip.Position = UDim2.fromScale(0.5 - total / 2 + (index - 1) * (pipWidth + gap), 0.83)
-			pip.Size = UDim2.fromScale(pipWidth, 0.1)
+			pip.Position = UDim2.fromScale(0.5 - total / 2 + (index - 1) * (pipWidth + gap), layout.Pips[1])
+			pip.Size = UDim2.fromScale(pipWidth, layout.Pips[2])
 			pip.Parent = back
 			local pipCorner = Instance.new("UICorner")
 			pipCorner.CornerRadius = UDim.new(0.5, 0)
 			pipCorner.Parent = pip
 			table.insert(pips, pip)
 		end
+	end
+
+	local readiness: TextLabel? = nil
+	if colossus then
+		local line = Instance.new("TextLabel")
+		line.Name = "Readiness"
+		line.BackgroundTransparency = 1
+		line.Font = Theme.FontDisplay
+		line.TextScaled = true
+		line.TextColor3 = COLOR_CRITICAL
+		line.TextStrokeTransparency = 0.3
+		line.Text = ""
+		line.Position = UDim2.fromScale(0.08, LAYOUT.Colossus.Line[1])
+		line.Size = UDim2.fromScale(0.84, LAYOUT.Colossus.Line[2])
+		line.Parent = back
+		readiness = line
 	end
 
 	return {
@@ -402,12 +452,102 @@ local function createSign(stageId: string, row: BasePart): Sign
 		TrailFrom = 1,
 		TrailAt = -math.huge,
 		Row = nil,
+		Readiness = readiness,
+		ReadinessText = nil,
 	}
 end
 
 local function reducedEffects(): boolean
 	local settings = DataController.Get("Settings")
 	return type(settings) == "table" and settings.ReducedEffects == true
+end
+
+export type ColossusReadout = {
+	Level: ProgressionUx.ColossusLevel,
+	StateHits: number, -- golpes para uma fileira CHEIA (define o estado)
+	Hits: number, -- golpes para a fileira da frente (o "≈ N" mostrado)
+	Damage: number,
+	RowHp: number,
+	RowMaxHp: number,
+	Row: number,
+}
+
+--[[
+	Estado do Colosso PARA ESTE JOGADOR: fileira da frente (de pé) e o ⚔ dano
+	atual (o mesmo da HUD). nil se não há fileira do Colosso de pé por aqui.
+	A faixa do corredor (CorridorHudController) lê daqui, então placa e faixa
+	nunca mostram números diferentes.
+]]
+function WallController.ColossusReadout(): ColossusReadout?
+	local stageId = ProgressionUx.Colossus.StageId
+	local rows = rowsByStage[stageId]
+	local stage = stageOfId(stageId)
+	if not rows or not stage then
+		return nil
+	end
+	for index = 1, stage.Rows do
+		local row = rows[index]
+		if row and row.Parent then
+			local hp, maxHp, broken = WallController.RowState(row)
+			if not broken then
+				local damage = GameStateController.GetHitDamage()
+				local level, stateHits = ProgressionUx.ColossusState(maxHp, damage)
+				return {
+					Level = level,
+					StateHits = stateHits,
+					Hits = HitDisplay.HitsFor(hp, damage),
+					Damage = damage,
+					RowHp = hp,
+					RowMaxHp = maxHp,
+					Row = index,
+				}
+			end
+		end
+	end
+	return nil
+end
+
+-- Celular ou tela estreita: textos curtos.
+function WallController.CompactLabels(): boolean
+	if UIController.IsTouch() then
+		return true
+	end
+	local camera = Workspace.CurrentCamera
+	return camera ~= nil and camera.ViewportSize.X > 0 and camera.ViewportSize.X < COMPACT_VIEWPORT
+end
+
+local READINESS_COLORS: { [string]: Color3 } = {
+	Extreme = COLOR_CRITICAL,
+	Preparing = COLOR_LOW,
+	Ready = COLOR_OK,
+}
+
+-- A linha do estado na placa do Colosso + o aviso ao subir de estado.
+local function drawReadiness(sign: Sign)
+	local line = sign.Readiness
+	if not line then
+		return
+	end
+	local readout = WallController.ColossusReadout()
+	if not readout then
+		line.Visible = false
+		return
+	end
+	line.Visible = true
+	local compact = WallController.CompactLabels()
+	local text = Text.Get(if compact then "colossus.lineShort" else "colossus.line", {
+		state = Text.Get(ProgressionUx.ColossusLabelKey(readout.Level, compact)),
+		hits = if readout.Hits == math.huge then "—" else NumberFormat.Short(readout.Hits),
+	})
+	if text ~= sign.ReadinessText then
+		sign.ReadinessText = text
+		line.Text = text
+		line.TextColor3 = READINESS_COLORS[readout.Level] or COLOR_CRITICAL
+	end
+	local crossed = colossusNotice:Update(readout.Level, readout.StateHits)
+	if crossed then
+		NotificationController.Show(Text.Get("colossus.notice." .. crossed), if crossed == "Ready" then "Good" else "Info")
+	end
 end
 
 -- Desenha a placa com o HP da fileira da frente DESTE jogador.
@@ -449,6 +589,7 @@ local function drawSign(sign: Sign, stageId: string, front: BasePart, index: num
 	for pipIndex, pip in sign.Pips do
 		pip.BackgroundTransparency = if pipIndex < index then 0.8 elseif pipIndex == index then 0 else 0.35
 	end
+	drawReadiness(sign)
 	sign.Gui.Enabled = true
 end
 

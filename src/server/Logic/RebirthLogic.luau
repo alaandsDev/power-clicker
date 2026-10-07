@@ -25,25 +25,18 @@ export type RebirthResult = { Rebirths: number, Gems: number }
 
 local RebirthLogic = {}
 
+-- Leitura saneada do Stats: a mesma função que o cliente usa (EconomyFormulas).
 function RebirthLogic.GetRebirths(data: PlayerData): number
-	local rebirths = data.Stats.Rebirths
-	if type(rebirths) ~= "number" or rebirths ~= rebirths or rebirths < 0 then
-		return 0
-	end
-	return math.floor(rebirths)
+	return EconomyFormulas.RebirthsOf(data.Stats)
 end
 
 -- Âncora do C2-E (Stats.RebirthAnchor); 0 para saves novos ou inválidos.
 function RebirthLogic.GetAnchor(data: PlayerData): number
-	local anchor = (data.Stats :: any).RebirthAnchor
-	if type(anchor) ~= "number" or anchor ~= anchor or anchor < 0 then
-		return 0
-	end
-	return math.floor(anchor)
+	return EconomyFormulas.RebirthAnchorOf(data.Stats)
 end
 
 function RebirthLogic.GetCost(data: PlayerData): number
-	return EconomyFormulas.RebirthCost(RebirthLogic.GetRebirths(data), RebirthLogic.GetAnchor(data))
+	return EconomyFormulas.RebirthCostFor(data.Stats)
 end
 
 function RebirthLogic.CanRebirth(data: PlayerData): (boolean, string?)

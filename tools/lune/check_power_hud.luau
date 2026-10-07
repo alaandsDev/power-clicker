@@ -130,9 +130,13 @@ local function makeClient(name: string)
 	C.stubModules[client .. "Controllers.HudController"] = { GetTopStack = function()
 		return topStack
 	end }
-	C.stubModules[client .. "Controllers.UIController"] = { TogglePanel = function() end }
+	C.stubModules[client .. "Controllers.UIController"] = { TogglePanel = function() end, IsTouch = function()
+		return false
+	end }
 	C.stubModules[client .. "Controllers.GameStateController"] = { GetPowerInfo = function()
 		return { PerClick = 10 }
+	end, GetHitDamage = function()
+		return 10
 	end }
 	C.stubModules[client .. "Controllers.DataController"] = { Get = function(k)
 		return if k == "Settings" then settings else nil

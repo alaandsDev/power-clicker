@@ -16,6 +16,12 @@
 	O HP é o das barreiras DESTE jogador (cada um tem o próprio caminho), lido
 	do WallController, que recebe o estado do servidor; este controller não
 	decide nada.
+
+	Colosso (estágio 10): no lugar do aviso "forte demais" (que, com 10
+	fileiras, disparava a partir de ~60 golpes por fileira — até para quem já
+	está PRONTO), a faixa mostra "≈N golpes · 🟢 PRONTO", lido do
+	WallController.ColossusReadout (o mesmo número da placa). Estágios 1–9
+	continuam iguais.
 ]]
 
 local Players = game:GetService("Players")
@@ -25,6 +31,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
 local WallConfig = require(Shared:WaitForChild("Config"):WaitForChild("WallConfig"))
 local CorridorLayout = require(Shared:WaitForChild("Formulas"):WaitForChild("CorridorLayout"))
+local ProgressionUx = require(Shared:WaitForChild("Formulas"):WaitForChild("ProgressionUx"))
 local Text = require(Shared:WaitForChild("Localization"))
 local TextCase = require(Shared:WaitForChild("Utils"):WaitForChild("TextCase"))
 
@@ -186,6 +193,19 @@ local function refresh()
 	-- o aviso de "forte demais" continua olhando o estágio inteiro.
 	local rowHp = math.max(WallController.RowState(row) or 0, 0)
 	local rowHits = if perClick > 0 then math.max(math.ceil(rowHp / perClick), 1) else math.huge
+	if stage.Id == ProgressionUx.Colossus.StageId then
+		local readout = WallController.ColossusReadout()
+		if readout then
+			local compact = WallController.CompactLabels()
+			rewardLabel.Text = Text.Get("corridor.colossus", {
+				hits = if readout.Hits == math.huge then "—" else NumberFormat.Short(readout.Hits),
+				state = Text.Get(ProgressionUx.ColossusLabelKey(readout.Level, compact)),
+			})
+			local color = if readout.Level == "Ready" then Theme.Colors.Good elseif readout.Level == "Preparing" then Theme.Colors.Power else Theme.Colors.Bad
+			Build.paint(rewardLabel, "TextColor3", color)
+			return
+		end
+	end
 	if hits > WEAK_HITS then
 		rewardLabel.Text = Text.Get("corridor.weak")
 		Build.paint(rewardLabel, "TextColor3", Theme.Colors.Bad)

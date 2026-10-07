@@ -66,6 +66,30 @@ function EconomyFormulas.RebirthCost(rebirths: number, anchor: number?): number
 	return math.ceil(math.min(cost, MAX_VALUE))
 end
 
+--[[
+	Leitura saneada do Stats (servidor e cliente usam a MESMA): renascimentos
+	feitos, âncora do C2-E e o custo real do próximo. O RebirthLogic delega
+	para cá, então a tela/selo do cliente nunca diverge do que o servidor cobra.
+]]
+local function wholeOrZero(value: any): number
+	if type(value) ~= "number" or value ~= value or value < 0 then
+		return 0
+	end
+	return math.floor(value)
+end
+
+function EconomyFormulas.RebirthsOf(stats: any): number
+	return wholeOrZero(if type(stats) == "table" then stats.Rebirths else nil)
+end
+
+function EconomyFormulas.RebirthAnchorOf(stats: any): number
+	return wholeOrZero(if type(stats) == "table" then stats.RebirthAnchor else nil)
+end
+
+function EconomyFormulas.RebirthCostFor(stats: any): number
+	return EconomyFormulas.RebirthCost(EconomyFormulas.RebirthsOf(stats), EconomyFormulas.RebirthAnchorOf(stats))
+end
+
 -- Gems awarded for performing the next rebirth, given rebirths already done.
 function EconomyFormulas.RebirthGems(rebirths: number): number
 	if rebirths < 0 then

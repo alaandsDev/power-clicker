@@ -11,13 +11,19 @@
 	um clicker: sem ela, o jogador acha que vai perder os pets e não clica.
 
 	O servidor é quem executa o renascimento ("Rebirth").
+
+	"Já está na hora de renascer?" (ProgressionUx.Rebirth, o mesmo custo do
+	servidor, com a âncora do C2-E): selo "!" no botão, um aviso quando passa
+	a ficar disponível (sem repetir; ver ProgressionUx.NewRebirthNotice) e o
+	altar deste jogador acende de leve (StationFxController.SetRebirthReady).
+	Tudo por evento (DataController.Changed), nenhum loop.
 ]]
 
 local TweenService = game:GetService("TweenService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local NumberFormat = require(Shared:WaitForChild("Utils"):WaitForChild("NumberFormat"))
-local EconomyFormulas = require(Shared:WaitForChild("Formulas"):WaitForChild("EconomyFormulas"))
+local ProgressionUx = require(Shared:WaitForChild("Formulas"):WaitForChild("ProgressionUx"))
 local Text = require(Shared:WaitForChild("Localization"))
 
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -30,6 +36,7 @@ local MenuController = require(script.Parent.MenuController)
 local DataController = require(script.Parent.DataController)
 local SoundController = require(script.Parent.SoundController)
 local NotificationController = require(script.Parent.NotificationController)
+local StationFxController = require(script.Parent.StationFxController)
 
 local PANEL = "Rebirth"
 
@@ -43,6 +50,7 @@ local confirmButton: TextButton
 local menuButton: TextButton
 local flash: Frame
 local busy = false
+local notice = ProgressionUx.NewRebirthNotice()
 
 local function refresh()
 	local currencies = DataController.Get("Currencies")
@@ -50,36 +58,41 @@ local function refresh()
 	if not currencies or not stats then
 		return
 	end
-	local rebirths = stats.Rebirths or 0
-	local power = currencies.Power or 0
-	local cost = EconomyFormulas.RebirthCost(rebirths, stats.RebirthAnchor)
-	local ready = power >= cost
+	local view = ProgressionUx.Rebirth(stats, currencies.Power)
 
-	infoLabel.Text = Text.Get("rebirth.info", {
-		count = rebirths,
-		gems = NumberFormat.Short(EconomyFormulas.RebirthGems(rebirths)),
-		icon = Theme.Icons.Gems,
-		from = NumberFormat.Short(EconomyFormulas.RebirthMultiplier(rebirths)),
-		to = NumberFormat.Short(EconomyFormulas.RebirthMultiplier(rebirths + 1)),
+	-- R atual → próximo, custo real, multiplicador permanente de x para y.
+	infoLabel.Text = Text.Get("rebirth.summary", {
+		count = view.Rebirths,
+		next = view.Next,
+		icon = Theme.Icons.Power,
+		cost = NumberFormat.Short(view.Cost),
+		from = NumberFormat.Short(view.MultiplierNow),
+		to = NumberFormat.Short(view.MultiplierNext),
+		gems = NumberFormat.Short(view.Gems),
+		gemIcon = Theme.Icons.Gems,
 	})
 	progressLabel.Text = Theme.Icons.Power
 		.. " "
-		.. NumberFormat.Short(power)
+		.. NumberFormat.Short(view.Power)
 		.. " / "
-		.. NumberFormat.Short(cost)
-		.. "   "
+		.. NumberFormat.Short(view.Cost)
+		.. "   ·   "
 		.. (
-			if ready
-				then Text.Get("rebirth.ready")
-				else Text.Get("rebirth.missing", {
-					amount = NumberFormat.Short(cost - power),
+			if view.Ready
+				then Text.Get("rebirth.available")
+				else Text.Get("rebirth.missingShort", {
+					amount = NumberFormat.Short(view.Missing),
 					icon = Theme.Icons.Power,
 				})
 		)
-	setProgress(power / cost)
-	Build.paint(confirmButton, "BackgroundColor3", if ready then Theme.Colors.Accent else Theme.Colors.Disabled)
-	confirmButton.Text = Text.Get(if ready then "rebirth.button" else "rebirth.notEnough")
-	MenuController.SetBadge(menuButton, ready)
+	setProgress(view.Fraction)
+	Build.paint(confirmButton, "BackgroundColor3", if view.Ready then Theme.Colors.Accent else Theme.Colors.Disabled)
+	confirmButton.Text = Text.Get(if view.Ready then "rebirth.button" else "rebirth.notEnough")
+	MenuController.SetBadge(menuButton, view.Ready)
+	StationFxController.SetRebirthReady(view.Ready)
+	if notice:Update(view.Ready, os.clock()) then
+		NotificationController.Show(Text.Get("rebirth.availableToast"), "Good")
+	end
 end
 
 local function playFlash()
@@ -118,7 +131,8 @@ function RebirthController.Init()
 
 	infoLabel = Build.label({
 		Text = "",
-		TextSize = 24,
+		TextSize = 22,
+		TextWrapped = true,
 		Size = UDim2.new(1, 0, 0, 150),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
@@ -184,6 +198,8 @@ function RebirthController.Init()
 			refresh()
 		end
 	end)
+	-- Já entrou com Power suficiente: o selo e o aviso aparecem na hora.
+	refresh()
 end
 
 return RebirthController

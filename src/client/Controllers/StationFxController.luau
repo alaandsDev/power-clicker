@@ -27,12 +27,18 @@
 	  jogador perto (atributos IdleRate/EngagedRate);
 	- StationBurst: rajada local quando o jogador RENASCE de verdade — lido
 	  do Stats.Rebirths que o DataController já recebe (nenhuma lógica nova:
-	  só reage ao número subir).
+	  só reage ao número subir);
+	- RENASCER DISPONÍVEL (SetRebirthReady, chamado pelo RebirthController com
+	  o mesmo custo do servidor): o altar deste jogador fica um pouco mais
+	  ativo — núcleo mais intenso e pulsando mais rápido, mais partículas
+	  subindo (nenhuma com Efeitos reduzidos) — e uma etiqueta pequena
+	  "♻ RENASCER DISPONÍVEL" acima do pilar. Local: cada jogador vê o próprio.
 
 	Peças achadas pelas tags (CollectionService) que o servidor põe; funciona
 	com StreamingEnabled (peça que chega/sai é registrada/esquecida). Só mexe
-	no que está a até ACTIVE_DISTANCE da câmera; longe, nada roda. Nunca cria
-	nem destrói instância.
+	no que está a até ACTIVE_DISTANCE da câmera; longe, nada roda. A única
+	instância criada aqui é a etiqueta do renascer (BillboardGui + TextLabel,
+	uma vez, no PlayerGui).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -42,6 +48,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local CutVisuals = require(Shared:WaitForChild("Formulas"):WaitForChild("CutVisuals"))
+local Text = require(Shared:WaitForChild("Localization"))
 
 local DataController = require(script.Parent.DataController)
 
@@ -64,6 +71,14 @@ local FLASH_TRANSPARENCY = 0.3
 local SETTINGS_EVERY = 1 -- "Efeitos reduzidos" conferido a cada tanto
 local HOLO_BOB = 0.18
 local HOLO_SECONDS = 2.6
+-- Renascer disponível: só o altar deste jogador, discreto.
+local REBIRTH_STATION = "Station_Rebirth_Machine"
+local READY_RATE = 2.5 -- quão rápido acende/apaga (por segundo)
+local READY_GLOW = 0.06 -- núcleo um pouco mais intenso
+local READY_PULSE_SECONDS = 1.1 -- pulso mais rápido que o de repouso
+local READY_RISE = 0.45 -- partículas subindo: fração do caminho até EngagedRate
+local READY_TAG_HEIGHT = 3.6 -- etiqueta: entre o pilar e o cristal
+local READY_TAG_DISTANCE = 70
 
 local TAGS = {
 	Spin = "StationSpin",
@@ -88,7 +103,7 @@ type Station = { Weight: number, Phase: number }
 type Spin = { Part: BasePart, Base: CFrame, Speed: number, Angle: number, Station: string? }
 type Ring = { Model: Model, Centre: Vector3, Axis: Vector3, Speed: number, Angle: number, Members: { { Part: BasePart, Offset: CFrame } }, Station: string? }
 type Pulse = { Part: BasePart, Order: number, Station: string? }
-type Core = { Part: BasePart, Base: number, Station: string? }
+type Core = { Part: BasePart, Base: number, Station: string?, Rebirth: boolean }
 type Npc = { Model: Model, Root: CFrame, Members: { { Part: BasePart, Offset: CFrame } }, Yaw: number }
 type Screen = { Part: BasePart, Bars: { Frame }, Arrow: TextLabel?, Station: string? }
 type Flash = { Part: BasePart, Base: number, Offset: number }
@@ -107,13 +122,18 @@ local flashes: { [Instance]: Flash } = {}
 local emitters: { [Instance]: ParticleEmitter } = {}
 local holos: { [Instance]: Holo } = {}
 local anchors: { [Instance]: { Part: BasePart, Station: string? } } = {}
-local risers: { [Instance]: { Emitter: ParticleEmitter, Idle: number, Engaged: number, Station: string? } } = {}
+local risers: { [Instance]: { Emitter: ParticleEmitter, Idle: number, Engaged: number, Station: string?, Rebirth: boolean } } = {}
 local bursts: { [Instance]: ParticleEmitter } = {}
 local lastRebirths: number? = nil
 local BURST_COUNT = 40
 local reducedNow = false
 local nextSettings = 0
 local stations: { [string]: Station } = {}
+local rebirthReady = false
+local readyWeight = 0
+local rebirthCore: BasePart? = nil
+local readyTag: BillboardGui? = nil
+local readyText: TextLabel? = nil
 
 -- A estação (Model "..._Machine") a que uma peça pertence, pela chave.
 local function stationOf(item: Instance): string?
@@ -125,6 +145,10 @@ local function stationOf(item: Instance): string?
 		current = current.Parent
 	end
 	return nil
+end
+
+local function isRebirthStation(station: string?): boolean
+	return station ~= nil and string.sub(station, -#REBIRTH_STATION) == REBIRTH_STATION
 end
 
 local function stateOf(station: string?): Station
@@ -194,7 +218,8 @@ local function register(tag: string, item: Instance)
 	elseif tag == TAGS.Engage and item:IsA("BasePart") then
 		anchors[item] = { Part = item, Station = stationOf(item) }
 	elseif tag == TAGS.Rise and item:IsA("ParticleEmitter") then
-		risers[item] = { Emitter = item, Idle = numberAttribute(item, "IdleRate", 1), Engaged = numberAttribute(item, "EngagedRate", 6), Station = stationOf(item) }
+		local station = stationOf(item)
+		risers[item] = { Emitter = item, Idle = numberAttribute(item, "IdleRate", 1), Engaged = numberAttribute(item, "EngagedRate", 6), Station = station, Rebirth = isRebirthStation(station) }
 	elseif tag == TAGS.Burst and item:IsA("ParticleEmitter") then
 		bursts[item] = item
 	elseif tag == TAGS.Holo and item:IsA("BasePart") then
@@ -221,7 +246,11 @@ local function register(tag: string, item: Instance)
 	elseif tag == TAGS.Pulse and item:IsA("BasePart") then
 		pulses[item] = { Part = item, Order = numberAttribute(item, "Order", 1), Station = stationOf(item) }
 	elseif tag == TAGS.Core and item:IsA("BasePart") then
-		cores[item] = { Part = item, Base = item.Transparency, Station = stationOf(item) }
+		local station = stationOf(item)
+		cores[item] = { Part = item, Base = item.Transparency, Station = station, Rebirth = isRebirthStation(station) }
+		if item.Name == "RebirthCore" and isRebirthStation(station) then
+			rebirthCore = item
+		end
 	elseif tag == TAGS.Screen and item:IsA("BasePart") then
 		local gui = item:FindFirstChildOfClass("SurfaceGui")
 		local bars = {}
@@ -258,6 +287,9 @@ local function forget(item: Instance)
 	risers[item] = nil
 	bursts[item] = nil
 	emitters[item] = nil
+	if item == rebirthCore then
+		rebirthCore = nil
+	end
 end
 
 -- "Efeitos reduzidos": partículas das estações desligadas (o movimento fica).
@@ -307,6 +339,20 @@ function StationFxController.Step(at: number)
 	local eye = camera.CFrame.Position
 	local t = at - started
 	applySettings(at)
+	readyWeight += ((if rebirthReady then 1 else 0) - readyWeight) * (1 - math.exp(-READY_RATE * dt))
+	if readyTag then
+		local show = rebirthReady and rebirthCore ~= nil
+		if readyTag.Adornee ~= rebirthCore then
+			readyTag.Adornee = rebirthCore
+		end
+		if readyTag.Enabled ~= show then
+			readyTag.Enabled = show
+		end
+		if show and readyText then
+			-- Respira com o núcleo; parado com Efeitos reduzidos.
+			readyText.TextTransparency = if reducedNow then 0 else 0.2 * (0.5 + 0.5 * math.sin(t * 2 * math.pi / READY_PULSE_SECONDS))
+		end
+	end
 	for _, holo in holos do
 		if near(holo.Part.Position, eye) then
 			local weight = stateOf(holo.Station).Weight
@@ -341,6 +387,9 @@ function StationFxController.Step(at: number)
 	end
 	for _, riser in risers do
 		local weight = stateOf(riser.Station).Weight
+		if riser.Rebirth and not reducedNow then
+			weight = math.max(weight, READY_RISE * readyWeight)
+		end
 		riser.Emitter.Rate = riser.Idle + (riser.Engaged - riser.Idle) * weight
 	end
 	for _, state in stations do
@@ -366,8 +415,10 @@ function StationFxController.Step(at: number)
 	for _, core in cores do
 		if near(core.Part.Position, eye) then
 			local weight = stateOf(core.Station).Weight
-			local pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi / CORE_PULSE_SECONDS)
-			core.Part.Transparency = core.Base + CORE_PULSE * (1 - 0.5 * weight) * pulse - ENGAGE_GLOW * weight
+			local ready = if core.Rebirth then readyWeight else 0
+			local period = CORE_PULSE_SECONDS + (READY_PULSE_SECONDS - CORE_PULSE_SECONDS) * ready
+			local pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi / period)
+			core.Part.Transparency = math.max(core.Base + CORE_PULSE * (1 - 0.5 * weight) * pulse - ENGAGE_GLOW * weight - READY_GLOW * ready, 0)
 		end
 	end
 	for _, pulse in pulses do
@@ -410,6 +461,58 @@ function StationFxController.Step(at: number)
 			end
 		end
 	end
+end
+
+-- A etiqueta "♻ RENASCER DISPONÍVEL" (criada uma vez, no PlayerGui).
+local function ensureReadyTag()
+	if readyTag then
+		return
+	end
+	local player = Players.LocalPlayer
+	local playerGui = if player then player:FindFirstChildOfClass("PlayerGui") else nil
+	if not playerGui then
+		return
+	end
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "RebirthReadyTag"
+	gui.Size = UDim2.new(6, 40, 0.9, 10)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, -READY_TAG_HEIGHT, 0)
+	gui.MaxDistance = READY_TAG_DISTANCE
+	gui.LightInfluence = 0
+	gui.Enabled = false
+	gui.Adornee = rebirthCore
+	local label = Instance.new("TextLabel")
+	label.Name = "Text"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.FredokaOne -- a mesma fonte das placas (Theme.FontDisplay)
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(150, 255, 190)
+	label.TextStrokeTransparency = 0.35
+	label.Text = Text.Get("station.rebirth.available")
+	label.Parent = gui
+	gui.Parent = playerGui
+	readyTag, readyText = gui, label
+end
+
+--[[
+	Renascer disponível para ESTE jogador? Chamado pelo RebirthController
+	quando o estado muda (Power ≥ custo real do próximo renascimento).
+]]
+function StationFxController.SetRebirthReady(ready: boolean)
+	rebirthReady = ready == true
+	if rebirthReady then
+		ensureReadyTag()
+	end
+	if readyTag then
+		readyTag.Enabled = rebirthReady and rebirthCore ~= nil
+		readyTag.Adornee = rebirthCore
+	end
+end
+
+-- Para os testes: (pedido, intensidade 0..1, etiqueta).
+function StationFxController.RebirthReady(): (boolean, number, BillboardGui?)
+	return rebirthReady, readyWeight, readyTag
 end
 
 -- Rajada local do renascimento (só visual).

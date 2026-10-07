@@ -128,7 +128,13 @@ end, IsLoaded = function()
 end }
 E.stubModules[client .. "Controllers.GameStateController"] = { GetPowerInfo = function()
 	return { PerClick = perClick }
+end, GetHitDamage = function()
+	return perClick
 end }
+-- O Lune não tem UserInputService.TouchEnabled: a placa do Colosso pergunta.
+E.stubModules[client .. "Controllers.UIController"] = { IsTouch = function()
+	return false
+end, TogglePanel = function() end }
 -- O Lune não expõe BasePart.Position (só CFrame): troca só nestes módulos.
 for _, name in { "WallController", "CombatFxController" } do
 	E.patches[client .. "Controllers." .. name] = {
@@ -136,6 +142,9 @@ for _, name in { "WallController", "CombatFxController" } do
 		{ "root.Position", "root.CFrame.Position", "all" },
 	}
 end
+-- A câmera do Lune não tem ViewportSize (a placa do Colosso olha a largura
+-- da tela para o texto curto): tela de PC.
+table.insert(E.patches[client .. "Controllers.WallController"], { "camera.ViewportSize", "Vector2.new(1920, 1080)", "all" })
 E.patches[client .. "Controllers.SwordSwingController"] = { { ".Position", ".CFrame.Position", "all" } }
 local renderStep, heartbeat, preSim, postSim
 E.stubs.RunService.RenderStepped = { Connect = function(_, fn)
