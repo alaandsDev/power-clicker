@@ -43,6 +43,7 @@ lune run tools/lune/check_fx.luau       # efeitos de combate: impacto, rachadura
 lune run tools/lune/check_polish.luau   # sem luz constante no personagem; pets menores em formação atrás
 lune run tools/lune/check_station.luau  # protótipo: estação de Melhorias como máquina (orçamento, posição, prompt, movimento)
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
+lune run tools/lune/check_zones.luau    # zonas dormentes (Build = false) não dão bônus pela posição
 lune run tools/lune/check_econ_model.luau # fidelidade do simulador da auditoria de economia
 lune run tools/lune/econ_audit.luau     # auditoria da progressão 1→10 (Markdown; seções e runs=N, scenario=A|B|C)
 python tools/render_map3d.py            # build/map_parts.json -> build/render/mapa_*.png

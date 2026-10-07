@@ -66,6 +66,16 @@ local function characterPosition(player: Player): Vector3?
 end
 
 local function update(player: Player)
+	--[[
+		Zonas desligadas (ZoneConfig.Build = false: as ilhas não são
+		construídas) não dão bônus nenhum. Antes o serviço ainda aplicava o
+		multiplicador pela POSIÇÃO, então qualquer chão novo naquelas
+		coordenadas ligaria um ×3…×50 escondido.
+	]]
+	if not ZoneConfig.Build then
+		publish(player, nil)
+		return
+	end
 	local data = DataService.GetData(player)
 	local position = characterPosition(player)
 	if not data or not position then
@@ -97,6 +107,9 @@ end
 
 function ZoneService.Init()
 	PowerService.RegisterProvider("Zone", function(player: Player, _data: PlayerData): number
+		if not ZoneConfig.Build then
+			return 1
+		end
 		return ZoneRules.Multiplier(currentZone[player])
 	end)
 
