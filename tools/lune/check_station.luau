@@ -739,8 +739,9 @@ do
 	local want = {
 		BasicEgg = { "Power", 2000, nil, 100 },
 		ForestEgg = { "Gems", 25, nil, 100 },
-		MysticEgg = { "Gems", 150, nil, 100 },
-		TowerEgg = { "Gems", 400, "Gold", 100 },
+		-- C2-E (balanceamento aprovado): Místico 150 → 300, Caminho 400 → 800.
+		MysticEgg = { "Gems", 300, nil, 100 },
+		TowerEgg = { "Gems", 800, "Gold", 100 },
 		ColossusEgg = { "Gems", 2500, "Colossus", 100 },
 	}
 	local sameEggs = true
@@ -755,7 +756,7 @@ do
 			print("      " .. id .. " mudou")
 		end
 	end
-	check(sameEggs, "E. ovos intactos: Básico ⚡2.000, Floresta 💎25, Místico 💎150, Caminho 💎400 (estágio 5), Colosso 💎2.500 (estágio 10), chances somando 100")
+	check(sameEggs, "E. ovos: Básico ⚡2.000, Floresta 💎25, Místico 💎300, Caminho 💎800 (estágio 5), Colosso 💎2.500 (estágio 10), chances somando 100")
 	if area then
 		-- Os mesmos prompts, nos próprios ovos.
 		local eggPrompts, okPrompts = 0, true

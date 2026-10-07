@@ -45,6 +45,22 @@ function BoostService.Add(player: Player, boostId: string, stacks: number, sourc
 	return true, nil
 end
 
+-- Same as Add, but grants an exact duration instead of stacks.
+function BoostService.AddSeconds(player: Player, boostId: string, seconds: number, source: string): (boolean, string?)
+	local data = DataService.GetData(player)
+	if not data then
+		return false, "NotReady"
+	end
+	local ok, code = BoostLogic.AddSeconds(data, boostId, seconds)
+	if not ok then
+		return false, code
+	end
+	BoostService.NotifyChanged(player)
+	log:Debug(string.format("user=%d +%ds %s (%s)", player.UserId, seconds, boostId, source))
+	BoostService.Added:Fire(player, boostId, 1, source)
+	return true, nil
+end
+
 -- For callers that mutated boosts via a Logic module (RewardLogic).
 function BoostService.NotifyChanged(player: Player)
 	DataService.MarkChanged(player, "Boosts")

@@ -515,3 +515,40 @@ em silêncio ("pisei e não ganhei"). Automatizado em `check_corridor` (P1–P3)
    "Este pad só paga logo depois de você quebrar a barreira 1." (uma vez a cada 3 s).
 4. WP.4 Repetindo uma barreira já conquistada: o aviso do prêmio diz a fração
    ("repetição: 20% do prêmio"); abaixo do seu melhor estágio a fração cai.
+
+### Balanceamento C2-E (C2) — REQUER VALIDAÇÃO NO ROBLOX STUDIO
+
+Números aprovados (relatorio_C2): renascimento 1M × 5,5^R (multiplicador 1,75^R
+igual), âncora convergente para saves antigos (Stats.RebirthAnchor, DataVersion 9),
+barreiras 5–10 novas, Ovo Místico 300 💎 / Ovo do Caminho 800 💎, Power2x do
+boss 5 min só para quem bateu. Automatizado: `check_c2e` (regras e serviço real
+do boss) e `check_c2e_economy` (Monte Carlo com as configs reais vs. baseline).
+Para os saves migrados use um save v8 de teste (DataStore do Studio); NUNCA o
+DataStore de produção.
+
+1. C2.1 Jogador novo (R0): o altar mostra o 1º renascimento custando ⚡ 1M.
+2. C2.2 Renascer (R1): o próximo custa ⚡ 5,5M; multiplicador ×1,75; +30 💎.
+3. C2.3 R2 → custo do próximo ⚡ 30,25M.
+4. C2.4 Save v8 migrado com R7: o altar mostra ⚡ 687,2M (igual a antes); depois
+   de renascer, o R8 custa ⚡ 4,91B (687,2M × 7,15). Rebirths, Power, pets,
+   gemas e multiplicador iguais aos de antes do login.
+5. C2.5 Save v8 migrado com R15: próximo renascimento ⚡ 7,56T (igual a antes).
+6. C2.6 Ovos: placa e compra do Ovo Místico 💎300 e do Ovo do Caminho 💎800;
+   Básico ⚡2K, Floresta 💎25, Colosso 💎2,5K e chances iguais.
+7. C2.7 Estágio 7 com 5 fileiras (60M cada), 8 com 6 (960M), 9 com 8 (6B),
+   Colosso com 10 (288B cada) — contar as fileiras e os pontinhos da placa.
+8. C2.8 Placa de HP mostra o HP DA FILEIRA da frente (❤ 288B no Colosso, não
+   2,88T) e "≈ golpes" = HP da fileira ÷ ⚔ golpe.
+9. C2.9 Quebrar uma fileira: a placa passa para a próxima, o progresso da
+   barreira avança e as outras fileiras continuam inteiras.
+10. C2.10 Dois jogadores: cada um com o HP da própria barreira (A quebra uma
+    fileira, B continua vendo a fileira inteira); abertura individual.
+11. C2.11 Boss: A bate e B fica parado perto. Boss morre: A ganha Power2x de 5 min
+    (timer do boost), B não ganha nada; quem entrou depois também não.
+12. C2.12 Power2x do boss termina em 5 min (e outra vitória soma +5 min).
+13. C2.13 Save que já venceu o Colosso: continua com Cleared/Highest, abre o Ovo
+    do Colosso, e quebrar o Colosso de novo NÃO paga as gemas da 1ª vez.
+14. C2.14 Respawn e rejoin no meio de uma barreira: HP parcial some ao sair do
+    servidor (intencional), progresso salvo (Cleared/Highest) fica.
+15. C2.15 Celular: placa do altar (custos longos como 7,56T), placa de HP do
+    Colosso e notificação do boss legíveis.

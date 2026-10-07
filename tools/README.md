@@ -44,6 +44,8 @@ lune run tools/lune/check_polish.luau   # sem luz constante no personagem; pets 
 lune run tools/lune/check_station.luau  # protótipo: estação de Melhorias como máquina (orçamento, posição, prompt, movimento)
 lune run tools/lune/export_map.luau     # mapa -> build/map_parts.json
 lune run tools/lune/check_zones.luau    # zonas dormentes (Build = false) não dão bônus pela posição
+lune run tools/lune/check_c2e.luau      # balanceamento C2-E no jogo: renascimento + âncora, migração v9, barreiras, ovos, boss
+lune run tools/lune/check_c2e_economy.luau # Monte Carlo com as configs REAIS vs. baseline C2-E (runs=N)
 lune run tools/lune/check_econ_model.luau # fidelidade do simulador da auditoria de economia
 lune run tools/lune/econ_audit.luau     # auditoria da progressão 1→10 (Markdown; seções e runs=N, scenario=A|B|C)
 lune run tools/lune/econ_search.luau    # busca automática de parâmetros do cenário C2 (start=C|TwoA|TwoB|TwoC seeds=N evals=N)

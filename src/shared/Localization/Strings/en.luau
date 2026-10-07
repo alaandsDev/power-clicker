@@ -370,7 +370,7 @@ return {
 	-- Live events (boss and orbs)
 	["boss.title"] = "👹 BOSS  {hp} / {max}",
 	["boss.spawned"] = "👹 A boss landed on the plaza! Hit it with everyone else!",
-	["boss.defeated"] = "🏆 Boss defeated! Everyone in that world got a Power boost!",
+	["boss.defeated"] = "🏆 Boss defeated! Everyone who hit it got 5 min of 2x Power!",
 	["boss.escaped"] = "The boss escaped... the next one comes in a few minutes.",
 	["boss.reward"] = "Boss: +{amount} ⚡ ({percent}% of the damage)",
 	["pickup.claimed"] = "Power orb: +{amount} ⚡",

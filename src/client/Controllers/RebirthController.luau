@@ -52,7 +52,7 @@ local function refresh()
 	end
 	local rebirths = stats.Rebirths or 0
 	local power = currencies.Power or 0
-	local cost = EconomyFormulas.RebirthCost(rebirths)
+	local cost = EconomyFormulas.RebirthCost(rebirths, stats.RebirthAnchor)
 	local ready = power >= cost
 
 	infoLabel.Text = Text.Get("rebirth.info", {

@@ -45,6 +45,8 @@ export type StatsData = {
 	TotalGemsEarned: number,
 	TotalWinsEarned: number,
 	Rebirths: number,
+	-- Renascimentos do save na migração do C2-E (0 = save novo). Ver RebirthConfig.Anchor.
+	RebirthAnchor: number,
 	EggsOpened: number,
 	PlaytimeSeconds: number,
 	OverdrivesActivated: number,

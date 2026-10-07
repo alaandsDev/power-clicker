@@ -31,6 +31,23 @@ function BoostLogic.Add(data: PlayerData, boostId: string, stacks: number): (boo
 	return true, nil
 end
 
+--[[
+	Adds `seconds` of a boost (a reward with its own duration, e.g. the boss
+	Power2x of EventConfig.Boss.VictoryBoostSeconds). Same storage cap as Add.
+]]
+function BoostLogic.AddSeconds(data: PlayerData, boostId: string, seconds: number): (boolean, string?)
+	local boost = BoostConfig.Boosts[boostId]
+	if not boost then
+		return false, "UnknownBoost"
+	end
+	if type(seconds) ~= "number" or seconds ~= seconds or seconds <= 0 or seconds > boost.MaxStoredSeconds then
+		return false, "InvalidAmount"
+	end
+	local remaining = data.Boosts.Remaining
+	remaining[boostId] = math.min((remaining[boostId] or 0) + seconds, boost.MaxStoredSeconds)
+	return true, nil
+end
+
 -- Consumes `elapsed` seconds from every active boost. Returns ids that expired.
 function BoostLogic.Tick(data: PlayerData, elapsed: number): { string }
 	local expired: { string } = {}

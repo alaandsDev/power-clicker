@@ -103,6 +103,24 @@ Migrations.Steps[7] = function(data)
 	end
 end
 
+--[[
+	v8 -> v9: curva de renascimento do C2-E. O save guarda quantos
+	renascimentos tinha na troca (Stats.RebirthAnchor): o próximo custa o
+	mesmo que custaria na curva antiga e daí converge para a nova
+	(RebirthConfig.Anchor). Nada é recalculado nem tirado: R, Power, pets,
+	gemas e multiplicadores ficam como estão. Âncora já existente é mantida.
+]]
+Migrations.Steps[8] = function(data)
+	if type(data.Stats) ~= "table" then
+		return
+	end
+	local anchor = data.Stats.RebirthAnchor
+	if type(anchor) ~= "number" or anchor ~= anchor or anchor < 0 then
+		local rebirths = data.Stats.Rebirths
+		data.Stats.RebirthAnchor = if type(rebirths) == "number" and rebirths == rebirths and rebirths > 0 then math.floor(rebirths) else 0
+	end
+end
+
 -- Returns (true) on success, or (false, reason). Mutates `data`.
 function Migrations.Run(data: { [string]: any }, targetVersion: number, steps: { [number]: Step }?): (boolean, string?)
 	local stepTable = steps or Migrations.Steps

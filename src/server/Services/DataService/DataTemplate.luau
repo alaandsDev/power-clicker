@@ -44,6 +44,7 @@ function DataTemplate.Create(now: number): PlayerData
 			TotalGemsEarned = 0,
 			TotalWinsEarned = 0,
 			Rebirths = 0,
+			RebirthAnchor = 0, -- save novo: curva de renascimento nova direto
 			EggsOpened = 0,
 			PlaytimeSeconds = 0,
 			OverdrivesActivated = 0,

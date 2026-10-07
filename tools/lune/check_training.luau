@@ -515,7 +515,8 @@ check(string.find(source, "data.Stats.Rebirths", 1, true) and not string.find(so
 -- Save intacto.
 local template = fs.readFile(E.Root .. "/src/server/Services/DataService/DataTemplate.luau")
 local dataConfig = E.require(E.Server.ServerConfig.DataConfig)
-check(dataConfig.DataVersion == 8 and not string.find(template, "Training", 1, true), "3. save intacto: DataVersion 8, nada de treino no DataTemplate (o requisito é só config)")
+-- DataVersion 9 veio do C2-E (Stats.RebirthAnchor), não do treino.
+check(dataConfig.DataVersion == 9 and not string.find(template, "Training", 1, true), "3. save: DataVersion 9 (C2-E), nada de treino no DataTemplate (o requisito é só config)")
 
 -- ── 4. Cliente ──────────────────────────────────────────────────────────────
 local tagged = {}

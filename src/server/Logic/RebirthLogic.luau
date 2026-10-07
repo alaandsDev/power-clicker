@@ -4,7 +4,7 @@
 	Pure rebirth rules (RebirthConfig). Atomic: either everything below
 	happens or nothing does.
 
-	1. Require Power >= RebirthCost(rebirths) and rebirths < MaxRebirths.
+	1. Require Power >= RebirthCost(rebirths, anchor) and rebirths < MaxRebirths.
 	2. Reset what RebirthConfig.Resets says (Power, temporary upgrades, ...).
 	3. rebirths += 1 and grant RebirthGems(previous rebirths).
 
@@ -33,8 +33,17 @@ function RebirthLogic.GetRebirths(data: PlayerData): number
 	return math.floor(rebirths)
 end
 
+-- Âncora do C2-E (Stats.RebirthAnchor); 0 para saves novos ou inválidos.
+function RebirthLogic.GetAnchor(data: PlayerData): number
+	local anchor = (data.Stats :: any).RebirthAnchor
+	if type(anchor) ~= "number" or anchor ~= anchor or anchor < 0 then
+		return 0
+	end
+	return math.floor(anchor)
+end
+
 function RebirthLogic.GetCost(data: PlayerData): number
-	return EconomyFormulas.RebirthCost(RebirthLogic.GetRebirths(data))
+	return EconomyFormulas.RebirthCost(RebirthLogic.GetRebirths(data), RebirthLogic.GetAnchor(data))
 end
 
 function RebirthLogic.CanRebirth(data: PlayerData): (boolean, string?)
@@ -42,7 +51,7 @@ function RebirthLogic.CanRebirth(data: PlayerData): (boolean, string?)
 	if rebirths >= RebirthConfig.MaxRebirths then
 		return false, "MaxRebirths"
 	end
-	if CurrencyLogic.Get(data, RebirthConfig.Currency) < EconomyFormulas.RebirthCost(rebirths) then
+	if CurrencyLogic.Get(data, RebirthConfig.Currency) < RebirthLogic.GetCost(data) then
 		return false, "NotEnoughCurrency"
 	end
 	return true, nil

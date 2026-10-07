@@ -382,7 +382,7 @@ return {
 	-- Eventos ao vivo (chefe e orbes)
 	["boss.title"] = "👹 CHEFE  {hp} / {max}",
 	["boss.spawned"] = "👹 Um chefe apareceu na praça! Bata nele junto com todo mundo!",
-	["boss.defeated"] = "🏆 Chefe derrotado! Quem estava no mundo ganhou um boost de Poder!",
+	["boss.defeated"] = "🏆 Chefe derrotado! Quem bateu nele ganhou 5 min de Poder x2!",
 	["boss.escaped"] = "O chefe fugiu... o próximo vem em alguns minutos.",
 	["boss.reward"] = "Chefe: +{amount} ⚡ ({percent}% do dano)",
 	["pickup.claimed"] = "Orbe de Poder: +{amount} ⚡",

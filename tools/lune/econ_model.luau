@@ -392,10 +392,19 @@ return function(E)
 		st[key] = math.min(st[key] + boost.DurationSeconds * stacks, boost.MaxStoredSeconds)
 	end
 
-	-- Power2x de quem está no mundo quando o boss morre (BossService.payout).
+	--[[
+		Power2x do boss (BossService.payout). Regra do jogo, lida da config:
+		com EventConfig.Boss.VictoryBoostSeconds (C2-E) só quem causou dano
+		recebe, e por esses segundos; sem ela (economia antiga), 1 stack para
+		todo o mundo. Override de cenário (BossBoostSeconds) tem prioridade.
+	]]
+	local GAME_BOSS_SECONDS = Cfg.Event.Boss.VictoryBoostSeconds
+	local function bossParticipantsOnly(st): boolean
+		return st.Overrides.BossBoostParticipantsOnly == true or (st.Overrides.BossBoostSeconds == nil and GAME_BOSS_SECONDS ~= nil)
+	end
 	local function bossBoost(st)
 		local boss = Cfg.Event.Boss
-		local seconds = st.Overrides.BossBoostSeconds
+		local seconds = st.Overrides.BossBoostSeconds or GAME_BOSS_SECONDS
 		if seconds == nil then
 			addBoost(st, boss.VictoryBoostId, boss.VictoryBoostStacks)
 		elseif seconds > 0 then
@@ -545,7 +554,8 @@ return function(E)
 			local r = st.Rebirths
 			return math.ceil(curve.Base * curve.Early ^ math.min(r, curve.Knee) * curve.Growth ^ math.max(r - curve.Knee, 0))
 		end
-		return F.Economy.RebirthCost(st.Rebirths)
+		-- O custo real do jogo, com a âncora do save (Stats.RebirthAnchor).
+		return F.Economy.RebirthCost(st.Rebirths, st.RebirthAnchor)
 	end
 	Model.RebirthCostOf = rebirthCost
 
@@ -973,7 +983,7 @@ return function(E)
 					end
 				end
 			end
-			local othersCount = not st.Overrides.BossBoostParticipantsOnly
+			local othersCount = not bossParticipantsOnly(st)
 			if joined or (othersCount and st.Rng() < (profile.OthersKillBoss or 0)) then
 				bossBoost(st)
 			end
@@ -1034,7 +1044,7 @@ return function(E)
 		local boss = Cfg.Event.Boss
 		while st.AfkBossClock >= boss.IntervalSeconds do
 			st.AfkBossClock -= boss.IntervalSeconds
-			if not st.Overrides.BossBoostParticipantsOnly and st.Rng() < (profile.OthersKillBoss or 0) then
+			if not bossParticipantsOnly(st) and st.Rng() < (profile.OthersKillBoss or 0) then
 				bossBoost(st)
 			end
 		end

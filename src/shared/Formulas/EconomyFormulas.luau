@@ -42,12 +42,28 @@ function EconomyFormulas.UpgradeEffect(upgrade: UpgradeData, level: number): num
 	return upgrade.EffectPerLevel * clamped
 end
 
--- Power required for the next rebirth, given rebirths already done.
-function EconomyFormulas.RebirthCost(rebirths: number): number
+--[[
+	Power required for the next rebirth, given rebirths already done.
+	`anchor` = Stats.RebirthAnchor (renascimentos do save na migração do C2-E;
+	0/nil = save novo). Ver RebirthConfig.Anchor.
+]]
+function EconomyFormulas.RebirthCost(rebirths: number, anchor: number?): number
 	if rebirths < 0 or rebirths >= RebirthConfig.MaxRebirths then
 		return math.huge
 	end
-	return math.ceil(math.min(RebirthConfig.BaseCost * RebirthConfig.CostGrowth ^ rebirths, MAX_VALUE))
+	local cost = RebirthConfig.BaseCost * RebirthConfig.CostGrowth ^ rebirths
+	local r0 = if type(anchor) == "number" and anchor == anchor then math.floor(math.max(anchor, 0)) else 0
+	if r0 > 0 then
+		local rule = RebirthConfig.Anchor
+		if rebirths < r0 then
+			-- Renascimentos já feitos antes da migração: curva antiga.
+			cost = rule.LegacyBaseCost * rule.LegacyCostGrowth ^ rebirths
+		else
+			local legacy = rule.LegacyBaseCost * rule.LegacyCostGrowth ^ r0
+			cost = math.min(cost, legacy * (rule.GrowthFactor * RebirthConfig.CostGrowth) ^ (rebirths - r0))
+		end
+	end
+	return math.ceil(math.min(cost, MAX_VALUE))
 end
 
 -- Gems awarded for performing the next rebirth, given rebirths already done.

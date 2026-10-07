@@ -85,18 +85,23 @@ end
 	The ten stages. The HP curve is deliberately smooth (about ×6 to ×8 per
 	stage) — the six-stage version jumped ×33 between the fourth and the fifth,
 	which the simulation showed as a wall nobody passed in six hours.
+
+	C2-E (auditoria de economia): o 3º argumento é o HP POR FILEIRA; o HP total
+	do estágio é HP × fileiras. Totais em relação ao anterior: 1–4 iguais,
+	5 ×1,5 (1,65M), 6 ×2,5 (22,5M), 7 ×4 (60M × 5 = 300M), 8 ×8
+	(960M × 6 = 5,76B), 9 ×8 (6B × 8 = 48B), Colosso ×40 (288B × 10 = 2,88T).
 ]]
 local Stages: { WallStage } = {
 	stage("Wood", 1, "Madeira", 60, 3, { 1, 2 }, 0, Color3.fromRGB(150, 106, 62), Enum.Material.Wood, Color3.fromRGB(104, 168, 86), false),
 	stage("Ruins", 2, "Pedra Reforçada", 450, 4, { 3, 6 }, 5, Color3.fromRGB(135, 138, 148), Enum.Material.Slate, Color3.fromRGB(168, 160, 130), false),
 	stage("Ice", 3, "Gelo Eterno", 3_500, 4, { 8, 15 }, 10, Color3.fromRGB(150, 215, 245), Enum.Material.Ice, Color3.fromRGB(120, 180, 230), false),
 	stage("Crystal", 4, "Cristal Energizado", 28_000, 4, { 20, 40 }, 20, Color3.fromRGB(120, 220, 255), Enum.Material.Glass, Color3.fromRGB(80, 200, 255), true),
-	stage("Gold", 5, "Estrutura Dourada", 220_000, 5, { 50, 100 }, 35, Color3.fromRGB(240, 196, 70), Enum.Material.Metal, Color3.fromRGB(255, 220, 120), false),
-	stage("Ancient", 6, "Pedra Antiga", 1_800_000, 5, { 120, 240 }, 60, Color3.fromRGB(126, 118, 96), Enum.Material.Sandstone, Color3.fromRGB(190, 160, 90), true),
-	stage("Volcanic", 7, "Rocha Vulcânica", 15_000_000, 5, { 300, 600 }, 100, Color3.fromRGB(74, 48, 44), Enum.Material.Basalt, Color3.fromRGB(255, 120, 40), false),
-	stage("Magma", 8, "Magma Cristalizado", 120_000_000, 6, { 800, 1_600 }, 170, Color3.fromRGB(200, 50, 30), Enum.Material.CrackedLava, Color3.fromRGB(255, 90, 40), true),
-	stage("Tech", 9, "Barreira Energética", 1_000_000_000, 6, { 2_000, 4_000 }, 280, Color3.fromRGB(90, 120, 200), Enum.Material.DiamondPlate, Color3.fromRGB(120, 230, 255), true),
-	stage("Colossus", 10, "Colosso", 9_000_000_000, 8, { 6_000, 12_000 }, 500, Color3.fromRGB(230, 230, 255), Enum.Material.Neon, Color3.fromRGB(255, 120, 230), true),
+	stage("Gold", 5, "Estrutura Dourada", 330_000, 5, { 50, 100 }, 35, Color3.fromRGB(240, 196, 70), Enum.Material.Metal, Color3.fromRGB(255, 220, 120), false),
+	stage("Ancient", 6, "Pedra Antiga", 4_500_000, 5, { 120, 240 }, 60, Color3.fromRGB(126, 118, 96), Enum.Material.Sandstone, Color3.fromRGB(190, 160, 90), true),
+	stage("Volcanic", 7, "Rocha Vulcânica", 60_000_000, 5, { 300, 600 }, 100, Color3.fromRGB(74, 48, 44), Enum.Material.Basalt, Color3.fromRGB(255, 120, 40), false),
+	stage("Magma", 8, "Magma Cristalizado", 960_000_000, 6, { 800, 1_600 }, 170, Color3.fromRGB(200, 50, 30), Enum.Material.CrackedLava, Color3.fromRGB(255, 90, 40), true),
+	stage("Tech", 9, "Barreira Energética", 6_000_000_000, 8, { 2_000, 4_000 }, 280, Color3.fromRGB(90, 120, 200), Enum.Material.DiamondPlate, Color3.fromRGB(120, 230, 255), true),
+	stage("Colossus", 10, "Colosso", 288_000_000_000, 10, { 6_000, 12_000 }, 500, Color3.fromRGB(230, 230, 255), Enum.Material.Neon, Color3.fromRGB(255, 120, 230), true),
 }
 
 return {

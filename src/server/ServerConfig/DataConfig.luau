@@ -12,7 +12,7 @@
 ]]
 
 return {
-	DataVersion = 8,
+	DataVersion = 9,
 
 	StoreName = "PlayerData_Production",
 	KeyPrefix = "Player_",

@@ -55,7 +55,7 @@ local Eggs: { [string]: EggData } = {
 		DisplayName = "Mystic Egg",
 		WorldId = "Training",
 		Currency = "Gems",
-		Price = 150,
+		Price = 300, -- C2-E: era 150 (freia a bola de neve gemas → pets)
 		Drops = {
 			{ PetId = "SpiritFox", Weight = 50 },
 			{ PetId = "Golem", Weight = 35 },
@@ -75,7 +75,7 @@ local Eggs: { [string]: EggData } = {
 		-- são exatamente o que paga este ovo.
 		RequiredStage = "Gold",
 		Currency = "Gems",
-		Price = 400,
+		Price = 800, -- C2-E: era 400
 		Drops = {
 			{ PetId = "Gargoyle", Weight = 46 },
 			{ PetId = "Knight", Weight = 30 },

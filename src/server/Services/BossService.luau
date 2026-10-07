@@ -121,7 +121,7 @@ local function despawn()
 	broadcast()
 end
 
--- Pays every participant their share and boosts the whole server.
+-- Pays every participant their share and gives each of them the victory boost.
 local function payout()
 	local pool = maxHp * EventConfig.Boss.RewardRatio
 	local winners = 0
@@ -131,11 +131,11 @@ local function payout()
 			local reward = CurrencyService.Add(player, "Power", pool * share, "Boss")
 			NetService.FireClient("Notify", player, "BossReward", { Amount = reward, Share = share })
 			BossService.Defeated:Fire(player, reward, share)
+			-- Só quem participou (dano real registrado pelo servidor) ganha o
+			-- Power2x — estar perto, no servidor ou entrar depois não conta.
+			BoostService.AddSeconds(player, EventConfig.Boss.VictoryBoostId, EventConfig.Boss.VictoryBoostSeconds, "BossVictory")
 			winners += 1
 		end
-	end
-	for _, player in playersIn(worldId) do
-		BoostService.Add(player, EventConfig.Boss.VictoryBoostId, EventConfig.Boss.VictoryBoostStacks, "BossVictory")
 	end
 	NetService.FireAllClients("Notify", "BossDefeated", { Players = winners })
 	log:Info(string.format("boss defeated by %d player(s), pool=%.0f", winners, pool))

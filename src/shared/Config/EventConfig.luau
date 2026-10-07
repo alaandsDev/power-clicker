@@ -39,7 +39,12 @@ return {
 		RewardRatio = 0.75,
 		-- Server-wide reward when it dies.
 		VictoryBoostId = "Power2x",
-		VictoryBoostStacks = 1,
+		--[[
+			C2-E: era 1 stack (15 min) para TODO o mundo — com um boss a cada
+			7 min o Power2x ficava permanente. Agora só quem causou dano real
+			ao boss (BossService.damageBy) recebe, e só 5 min.
+		]]
+		VictoryBoostSeconds = 5 * 60,
 		Height = 14, -- studs above the plaza
 	},
 }
