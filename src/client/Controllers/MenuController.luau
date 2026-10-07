@@ -39,6 +39,39 @@ local BADGE_PULSE_SECONDS = 4
 
 local MenuController = {}
 
+--[[
+	O badge "!" (o mesmo componente em todos os botões, inclusive o "Mais").
+	Sem contorno de texto: o canvas da HUD tem UIScale (0,5–1,6) e o UIStroke
+	de texto não encolhe junto, então num "!" de ~8 px o contorno escuro de
+	2 px fechava o vão entre a barra e o ponto e o glifo virava um "0"
+	(achado no Studio, UX2.3). O círculo vermelho já dá o contraste; o "!"
+	ocupa o círculo (TextScaled) em fonte grossa.
+]]
+local function newBadge(parent: GuiObject): TextLabel
+	local badge = Build.label({
+		Name = "Badge",
+		Text = "!",
+		Font = Enum.Font.GothamBlack,
+		TextScaled = true,
+		BackgroundColor3 = BADGE_COLOR,
+		BackgroundTransparency = 0.05,
+		Size = UDim2.fromOffset(BADGE_SIZE, BADGE_SIZE),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.9, 0.1),
+		Visible = false,
+		Parent = parent,
+	})
+	for _, child in badge:GetChildren() do
+		if child:IsA("UIStroke") then
+			child:Destroy()
+		end
+	end
+	Build.corner(badge, UDim.new(1, 0))
+	-- Respiro interno para o "!" não encostar na borda do círculo.
+	Build.new("UIPadding", { PaddingTop = UDim.new(0.12, 0), PaddingBottom = UDim.new(0.12, 0), Parent = badge })
+	return badge
+end
+
 local TOOLTIP_HEIGHT = 30
 
 -- Os quatro sistemas que o jogador usa o tempo todo (+ o botão "Mais").
@@ -195,19 +228,7 @@ function MenuController.AddButton(name: string, icon: string, color: Color3, ord
 		Size = UDim2.new(1, -6, 0, hud.MenuCaption),
 		Parent = button,
 	})
-	local badge = Build.label({
-		Name = "Badge",
-		Text = "!",
-		TextSize = 13,
-		BackgroundColor3 = BADGE_COLOR,
-		BackgroundTransparency = 0.05,
-		Size = UDim2.fromOffset(BADGE_SIZE, BADGE_SIZE),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.9, 0.1),
-		Visible = false,
-		Parent = button,
-	})
-	Build.corner(badge, UDim.new(1, 0))
+	newBadge(button)
 	if primary then
 		button.Activated:Connect(onActivated)
 		-- Só os principais têm dica: os do painel já mostram o nome inteiro, e a
@@ -295,19 +316,7 @@ function MenuController.GetSecondaryMenu(): Frame
 			Size = UDim2.new(1, -6, 0, hud.MenuCaption),
 			Parent = toggle,
 		})
-		local moreBadge = Build.label({
-			Name = "Badge",
-			Text = "!",
-			TextSize = 13,
-			BackgroundColor3 = BADGE_COLOR,
-			BackgroundTransparency = 0.05,
-			Size = UDim2.fromOffset(BADGE_SIZE, BADGE_SIZE),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.9, 0.1),
-			Visible = false,
-			Parent = toggle,
-		})
-		Build.corner(moreBadge, UDim.new(1, 0))
+		newBadge(toggle)
 		local icon = toggle:FindFirstChild("Icon")
 		local stroke = toggleStroke
 		local idleStrokeColor = stroke.Color

@@ -302,6 +302,89 @@ do
 	check(altar.Calls >= 4, "P8. tudo por evento (DataController.Changed): nenhum loop no painel")
 end
 
+-- ── B. Selo "!" do botão lateral (MenuController REAL + RebirthController) ──
+do
+	local M = require("./env")(root)
+	local client = "StarterPlayer.Client."
+	M.stubs.TweenService = { Create = function()
+		return { Play = function() end, Cancel = function() end, Completed = Sig }
+	end }
+	M.extraGlobals.TweenInfo = { new = function(...)
+		return { ... }
+	end }
+	local store = { Currencies = { Power = 0 }, Stats = { Rebirths = 0, RebirthAnchor = 0 }, Settings = { ReducedEffects = false } }
+	local changed = {}
+	M.stubModules[client .. "Controllers.DataController"] = {
+		Get = function(key)
+			return store[key]
+		end,
+		Changed = { Connect = function(_, fn)
+			table.insert(changed, fn)
+			return { Disconnect = function() end }
+		end },
+	}
+	local canvas = roblox.Instance.new("Frame")
+	M.stubModules[client .. "Controllers.UIController"] = {
+		CreatePanel = function()
+			return roblox.Instance.new("Frame"), roblox.Instance.new("Frame")
+		end,
+		GetCanvas = function()
+			return canvas
+		end,
+		CenterOf = function()
+			return roblox.Vector2.new(0, 0)
+		end,
+		PanelChanged = Sig,
+		TogglePanel = function() end,
+		ClosePanel = function() end,
+		IsTouch = function()
+			return false
+		end,
+	}
+	M.stubModules[client .. "Controllers.NotificationController"] = { Show = function() end }
+	M.stubModules[client .. "Controllers.StationFxController"] = { SetRebirthReady = function() end }
+	M.stubModules[client .. "Controllers.SoundController"] = { Play = function() end }
+	M.stubModules[client .. "Net.ClientNet"] = { Invoke = function()
+		return { Ok = true }
+	end, On = function() end, Fire = function() end }
+	local Menu = M.require(M.Client.Controllers.MenuController)
+	local Rebirth = M.require(M.Client.Controllers.RebirthController)
+	Rebirth.Init()
+	local button = Menu.GetButton("Rebirth")
+	local badge = button and button:FindFirstChild("Badge")
+	local function set(stats, power)
+		store.Stats = stats
+		store.Currencies = { Power = power }
+		for _, fn in changed do
+			fn("Stats", stats)
+			fn("Currencies", store.Currencies)
+		end
+		return badge.Visible
+	end
+	local strokes = 0
+	for _, child in badge:GetChildren() do
+		if child:IsA("UIStroke") then
+			strokes += 1
+		end
+	end
+	check(badge ~= nil and badge.Text == "!" and strokes == 0 and badge.TextScaled, "B0. selo do botão Renascer: \"!\" (componente comum), sem contorno de texto que vire \"0\" com a escala da HUD")
+	local cost0 = F.RebirthCostFor({ Rebirths = 0, RebirthAnchor = 0 })
+	check(set({ Rebirths = 0, RebirthAnchor = 0 }, cost0 - 1) == false, "B1. abaixo do custo: sem \"!\"")
+	check(set({ Rebirths = 0, RebirthAnchor = 0 }, cost0) == true and badge.Text == "!", "B2. exatamente no custo: \"!\"")
+	check(set({ Rebirths = 0, RebirthAnchor = 0 }, cost0 * 10) == true, "B3. acima do custo: \"!\"")
+	-- Renasceu: o servidor zera o Power; o selo recalcula pelo custo seguinte.
+	check(set({ Rebirths = 1, RebirthAnchor = 0 }, 0) == false, "B4. depois do Rebirth sem Power suficiente: \"!\" some (custo seguinte " .. NumberFormat.Short(F.RebirthCostFor({ Rebirths = 1 })) .. ")")
+	local cost1 = F.RebirthCostFor({ Rebirths = 1, RebirthAnchor = 0 })
+	check(set({ Rebirths = 1, RebirthAnchor = 0 }, cost1 + 5) == true, "B5. depois do Rebirth ainda com Power para outro: \"!\" permanece")
+	local cost7 = F.RebirthCostFor({ Rebirths = 7, RebirthAnchor = 7 })
+	check(cost7 == RebirthLogic.GetCost(save(7, 7, 0)) and set({ Rebirths = 7, RebirthAnchor = 7 }, cost7) == true and set({ Rebirths = 7, RebirthAnchor = 7 }, cost7 - 1) == false and set({ Rebirths = 7, RebirthAnchor = 0 }, cost7) == false, "B6. save R7 migrado: \"!\" no custo ancorado " .. NumberFormat.Short(cost7) .. " (sem âncora o mesmo Power não bastaria)")
+	local cost15 = F.RebirthCostFor({ Rebirths = 15, RebirthAnchor = 15 })
+	check(cost15 == RebirthLogic.GetCost(save(15, 15, 0)) and set({ Rebirths = 15, RebirthAnchor = 15 }, cost15) == true and set({ Rebirths = 15, RebirthAnchor = 15 }, cost15 - 1) == false, "B7. save R15 migrado: \"!\" no custo ancorado " .. NumberFormat.Short(cost15))
+	-- O caso do Studio: Power ~6,45B com o próximo custando ~20,97M.
+	local studioCost = F.RebirthCostFor({ Rebirths = 4, RebirthAnchor = 4 })
+	check(math.abs(studioCost - 20.97e6) < 0.01e6 and set({ Rebirths = 4, RebirthAnchor = 4 }, 6.45e9) == true and badge.Text == "!", "B8. caso do Studio (save migrado R4: custo " .. NumberFormat.Short(studioCost) .. ", Power 6,45B): \"!\", nunca \"0\"")
+end
+
 -- ── S. Altar: estado disponível (StationFxController real) ──────────────────
 do
 	local S = require("./env")(root)
