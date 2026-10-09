@@ -645,4 +645,13 @@ return {
 	["colossus.notice.Preparing"] = "⚔ COLOSSO  Sua força agora está em PREPARAÇÃO.",
 	["colossus.notice.Ready"] = "⚔ COLOSSO  VOCÊ ESTÁ PRONTO! Seu dano atual torna o Colosso uma luta viável.",
 	["corridor.colossus"] = "≈{hits} golpes · {state}",
+	-- Debug do Colosso (só Studio; UX2.12–UX2.18)
+	["debug.goColossus"] = "Ir ao Colosso",
+	["debug.hits10k"] = "Colosso ≈10,5K",
+	["debug.hits270"] = "Colosso ≈270",
+	["debug.hits82"] = "Colosso ≈82",
+	["debug.hitsOff"] = "Dano normal",
+	["debug.wentColossus"] = "Debug: na frente do Colosso (fileiras cheias)",
+	["debug.hitsSet"] = "Debug: golpe ⚔ {damage} (≈{hits} golpes/fileira sem combo)",
+	["debug.hitsCleared"] = "Debug: dano normal de volta",
 }

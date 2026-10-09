@@ -20,6 +20,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local Shared = game:GetService("ReplicatedStorage").Shared
 local Types = require(Shared.Types)
@@ -57,6 +58,8 @@ local baseProviders: { [string]: Provider } = {}
 local cache: { [Player]: PowerInfo } = {}
 local pendingPush: { [Player]: boolean } = {}
 local lastProblemLog: { [string]: number } = {}
+-- SÓ NO STUDIO (DebugService "ColossusHits"): golpe fixo para testar a UX.
+local debugPerClick: { [Player]: number } = {}
 
 function PowerService.RegisterProvider(layer: string, provider: Provider)
 	assert(PowerFormula.IsKnownLayer(layer), "Unknown multiplier layer (add it to EconomyConfig.MultiplierLayers): " .. layer)
@@ -108,6 +111,11 @@ local function compute(player: Player, data: PlayerData): PowerInfo
 	end
 
 	local perClick, total, problems = PowerFormula.Compute(base, layers)
+	local override = debugPerClick[player]
+	if override then
+		perClick = override
+		total = if base > 0 then override / base else total
+	end
 	if #problems > 0 then
 		local key = table.concat(problems, ";")
 		local now = os.clock()
@@ -144,6 +152,21 @@ function PowerService.ComputeClick(player: Player, comboMultiplier: number): num
 	return math.min(info.PerClick * combo, GameConfig.Numbers.MaxValue)
 end
 
+--[[
+	FERRAMENTA DE TESTE, SÓ NO STUDIO: fixa o Poder por clique (= dano do
+	golpe, antes do combo) deste jogador; nil volta à fórmula. Recusa fora do
+	Studio. Não é salvo; some ao sair.
+]]
+function PowerService.SetDebugPerClick(player: Player, value: number?): boolean
+	if not RunService:IsStudio() then
+		log:Error("SetDebugPerClick refused outside Studio")
+		return false
+	end
+	debugPerClick[player] = if value and value > 0 and value < math.huge then value else nil
+	PowerService.Invalidate(player)
+	return true
+end
+
 -- Call whenever anything feeding the formula changes.
 function PowerService.Invalidate(player: Player)
 	cache[player] = nil
@@ -156,6 +179,7 @@ function PowerService.Init()
 	Players.PlayerRemoving:Connect(function(player)
 		cache[player] = nil
 		pendingPush[player] = nil
+		debugPerClick[player] = nil
 	end)
 end
 

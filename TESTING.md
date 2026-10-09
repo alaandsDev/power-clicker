@@ -562,6 +562,15 @@ dois jogadores, celular, Efeitos reduzidos, placa fora da HUD). Saves migrados:
 save v8 de teste no DataStore do Studio, NUNCA o de produção. Para ajustar dano
 no Studio use as melhorias/treino normais (ou um save de teste já forte).
 
+Colosso (UX2.12–UX2.18) no Studio, sem farmar: painel de debug (botão vermelho
+ao lado do menu, só no Studio) → "Ir ao Colosso" (marca as barreiras 1–9 como
+atravessadas NESTA tentativa e põe você na frente da 1ª fileira; não abre
+nada, não paga pad, gemas nem progresso; voltar à praça desfaz) e "Colosso
+≈10,5K" / "≈270" / "≈82" (fixa o golpe em 288B ÷ N, SEM combo; segurando o
+clique o combo até ×2 baixa o número, sem trocar de categoria). "Dano normal"
+desfaz; "Resetar dados" também. Multiplayer: Test → Clients and Servers,
+2 Players, cada um com o próprio botão.
+
 1. UX2.1 R0 sem Power: botão Renascer sem selo; painel "Renascimento: R0 → R1",
    "Custo: ⚡ 1M", "⚡ Faltam 1M"; altar normal (sem etiqueta).
 2. UX2.2 Atingir EXATAMENTE o custo (⚡ 1M): o painel muda para

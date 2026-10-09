@@ -40,8 +40,19 @@ local COMMANDS: { Command } = {
 	{ Label = "debug.testPasses", Command = "TestPasses" },
 	{ Label = "debug.testStarter", Command = "TestStarterPack" },
 	{ Label = "debug.testGems", Command = "TestGems" },
+	-- Teste da UX do Colosso (UX2.12–UX2.18), só no Studio: vai até a frente
+	-- do Colosso e fixa o golpe para ≈N golpes por fileira (sem combo).
+	{ Label = "debug.goColossus", Command = "GoToColossus" },
+	{ Label = "debug.hits10k", Command = "ColossusHits", Amount = 10_500 },
+	{ Label = "debug.hits270", Command = "ColossusHits", Amount = 270 },
+	{ Label = "debug.hits82", Command = "ColossusHits", Amount = 82 },
+	{ Label = "debug.hitsOff", Command = "ColossusHits" },
 	{ Label = "debug.reset", Command = "ResetData" },
 }
+local COLUMNS = 3
+local CELL = Vector2.new(102, 38)
+local CELL_GAP = 6
+local PANEL_PADDING = 8
 
 local DebugController = {}
 
@@ -61,6 +72,13 @@ local function run(entry: Command)
 		local petId = type(response.Data) == "table" and response.Data.PetId
 		local pet = if type(petId) == "string" then PetConfig.Pets[petId] else nil
 		NotificationController.Show(Text.Get("debug.gotPet", { name = if pet then Text.Name("pet", pet) else "?" }), "Info")
+	elseif entry.Command == "GoToColossus" then
+		NotificationController.Show(Text.Get("debug.wentColossus"), "Info")
+	elseif entry.Command == "ColossusHits" then
+		local perClick = type(response.Data) == "table" and response.Data.PerClick
+		NotificationController.Show(if type(perClick) == "number"
+			then Text.Get("debug.hitsSet", { hits = NumberFormat.Short(entry.Amount or 0), damage = NumberFormat.Short(perClick) })
+			else Text.Get("debug.hitsCleared"), "Info")
 	elseif entry.Amount then
 		NotificationController.Show(Text.Get("debug.added", { amount = NumberFormat.Short(entry.Amount) }), "Info")
 	end
@@ -79,7 +97,11 @@ local function build()
 		-- Studio only: left of the menu grid and of its toggle.
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -(MENU_EDGE + TOGGLE_SIZE + Theme.Hud.Gap), Theme.Hud.MenuCenterY, 0),
-		Size = UDim2.fromOffset(336, 280),
+		-- Altura pela quantidade de botões (cabe tudo, sem sobrar para fora).
+		Size = UDim2.fromOffset(
+			COLUMNS * CELL.X + (COLUMNS - 1) * CELL_GAP + 2 * PANEL_PADDING,
+			math.ceil(#COMMANDS / COLUMNS) * (CELL.Y + CELL_GAP) - CELL_GAP + 2 * PANEL_PADDING
+		),
 		Visible = false, -- opened by the toggle below; it covers the view
 		Parent = UIController.GetCanvas(),
 	})
@@ -98,10 +120,10 @@ local function build()
 	end)
 	Build.corner(frame, Theme.CornerSmall)
 	Build.stroke(frame, 2, Theme.Colors.Bad)
-	Build.padding(frame, 8)
+	Build.padding(frame, PANEL_PADDING)
 	Build.new("UIGridLayout", {
-		CellSize = UDim2.fromOffset(102, 38),
-		CellPadding = UDim2.fromOffset(6, 6),
+		CellSize = UDim2.fromOffset(CELL.X, CELL.Y),
+		CellPadding = UDim2.fromOffset(CELL_GAP, CELL_GAP),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Parent = frame,
 	})

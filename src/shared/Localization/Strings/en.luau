@@ -633,4 +633,13 @@ return {
 	["colossus.notice.Preparing"] = "⚔ COLOSSUS  Your strength is now PREPARING.",
 	["colossus.notice.Ready"] = "⚔ COLOSSUS  YOU ARE READY! Your current damage makes the Colossus a viable fight.",
 	["corridor.colossus"] = "≈{hits} hits · {state}",
+	-- Colossus debug (Studio only; UX2.12–UX2.18)
+	["debug.goColossus"] = "Go to Colossus",
+	["debug.hits10k"] = "Colossus ≈10.5K",
+	["debug.hits270"] = "Colossus ≈270",
+	["debug.hits82"] = "Colossus ≈82",
+	["debug.hitsOff"] = "Normal damage",
+	["debug.wentColossus"] = "Debug: in front of the Colossus (rows full)",
+	["debug.hitsSet"] = "Debug: hit ⚔ {damage} (≈{hits} hits/row without combo)",
+	["debug.hitsCleared"] = "Debug: normal damage restored",
 }

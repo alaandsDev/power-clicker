@@ -40,6 +40,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = game:GetService("ReplicatedStorage").Shared
@@ -540,6 +541,45 @@ function WallService.OnClick(player: Player, damage: number): number
 end
 
 -- Leitura para testes e ferramentas: HP da fileira `row` para este jogador.
+--[[
+	FERRAMENTA DE TESTE, SÓ NO STUDIO (DebugService "GoToColossus"): conta as
+	barreiras antes de `stageId` como atravessadas NESTA tentativa (run.Passed,
+	o mesmo que atravessar com a passagem aberta; voltar à praça limpa) e põe
+	o jogador na frente da 1ª fileira, com a barreira inteira. Não abre nada,
+	não paga pad, gemas nem progresso salvo (Tower).
+]]
+function WallService.DebugGoTo(player: Player, stageId: string): boolean
+	if not RunService:IsStudio() then
+		log:Error("DebugGoTo refused outside Studio")
+		return false
+	end
+	local geo = geos[stageId]
+	local root = characterRoot(player)
+	local character = player.Character
+	if not scanned or not geo or not root or not character or not inCorridorWorld(player) then
+		return false
+	end
+	local run = runOf(player)
+	for _, other in ordered do
+		if other == geo then
+			break
+		end
+		run.Passed[other.Stage.Id] = true
+	end
+	local state = stateOf(run, geo.Stage)
+	state.Open = false
+	state.OpenUntil = 0
+	for index in state.Hp do
+		state.Hp[index] = geo.Stage.Hp
+	end
+	sendState(player, { stageId })
+	local first = geo.Rows[1]
+	local floor = if first then first.Position.Y - first.Size.Y / 2 else 0
+	local target = Vector3.new(geo.Front - 8, floor + 3, 0)
+	character:PivotTo(CFrame.lookAt(target, target + Vector3.new(1, 0, 0)))
+	return true
+end
+
 function WallService.RowHp(player: Player, stageId: string, row: number): number?
 	local run = runs[player]
 	local state = if run then run.Stages[stageId] else nil

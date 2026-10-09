@@ -24,6 +24,7 @@ local AuraConfig = require(Shared.Config.AuraConfig)
 local RuneConfig = require(Shared.Config.RuneConfig)
 local WorldConfig = require(Shared.Config.WorldConfig)
 local WorldRules = require(Shared.Formulas.WorldRules)
+local WallConfig = require(Shared.Config.WallConfig)
 
 local AdminConfig = require(script.Parent.Parent.ServerConfig.AdminConfig)
 local NetService = require(script.Parent.NetService)
@@ -39,13 +40,15 @@ local BossService = require(script.Parent.BossService)
 local PickupService = require(script.Parent.PickupService)
 local AuraService = require(script.Parent.AuraService)
 local RuneService = require(script.Parent.RuneService)
+local PowerService = require(script.Parent.PowerService)
+local WallService = require(script.Parent.WallService)
 local RebirthLogic = require(script.Parent.Parent.Logic.RebirthLogic)
 
 type RemoteResponse = Types.RemoteResponse
 
 local log = Logger.new("Debug")
 
-local COMMANDS = { "AddPower", "AddGems", "AddWins", "Rebirth", "Overdrive", "ToggleAutoClick", "ResetData", "GiveRandomPet", "UnlockWorlds", "AddBoosts", "SkipDay", "TestPasses", "TestStarterPack", "TestGems", "SpawnBoss", "SpawnOrb", "GiveAuras", "GiveRandomRune" }
+local COMMANDS = { "AddPower", "AddGems", "AddWins", "Rebirth", "Overdrive", "ToggleAutoClick", "ResetData", "GiveRandomPet", "UnlockWorlds", "AddBoosts", "SkipDay", "TestPasses", "TestStarterPack", "TestGems", "SpawnBoss", "SpawnOrb", "GiveAuras", "GiveRandomRune", "GoToColossus", "ColossusHits" }
 
 local DebugService = {}
 
@@ -160,7 +163,31 @@ local function run(player: Player, command: string, amount: number?): RemoteResp
 	elseif command == "TestGems" then
 		return { Ok = MonetizationService.TestGrantProduct(player, "GemsSmall") }
 	elseif command == "ResetData" then
+		PowerService.SetDebugPerClick(player, nil)
 		return { Ok = DataService.ResetForTesting(player) }
+	elseif command == "GoToColossus" or command == "ColossusHits" then
+		-- Teste da UX do Colosso (UX2.12–UX2.18): SÓ NO STUDIO, nem com
+		-- DebugEnabledInLive.
+		if not RunService:IsStudio() then
+			return { Ok = false, Code = "Forbidden" }
+		end
+		if command == "GoToColossus" then
+			return { Ok = WallService.DebugGoTo(player, "Colossus") }
+		end
+		-- Golpe fixo = HP de UMA fileira do Colosso ÷ golpes pedidos (sem
+		-- combo; segurando o clique o combo até ×2 corta o número pela metade).
+		-- Sem `amount`: volta ao dano normal.
+		local colossus = nil
+		for _, stage in WallConfig.Stages do
+			if stage.Id == "Colossus" then
+				colossus = stage
+			end
+		end
+		if not colossus then
+			return { Ok = false, Code = "NotReady" }
+		end
+		local perClick = if amount then colossus.Hp / amount else nil
+		return { Ok = PowerService.SetDebugPerClick(player, perClick), Data = { PerClick = perClick } }
 	end
 	return { Ok = false, Code = "UnknownCommand" }
 end

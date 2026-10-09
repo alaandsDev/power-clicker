@@ -385,6 +385,46 @@ do
 	check(math.abs(studioCost - 20.97e6) < 0.01e6 and set({ Rebirths = 4, RebirthAnchor = 4 }, 6.45e9) == true and badge.Text == "!", "B8. caso do Studio (save migrado R4: custo " .. NumberFormat.Short(studioCost) .. ", Power 6,45B): \"!\", nunca \"0\"")
 end
 
+-- ── D. Debug do Colosso (só Studio): golpe fixo pelo PowerService REAL ─────
+do
+	local Dv = require("./env")(root)
+	local Signal = Dv.require(Dv.Shared.Utils.Signal)
+	local DT = Dv.require(Dv.Server.Services.DataService.DataTemplate)
+	local data = DT.Create(0)
+	Dv.stubModules["ServerScriptService.Server.Services.DataService"] = {
+		GetData = function()
+			return data
+		end,
+		PlayerReady = Signal.new(),
+		DataReset = Signal.new(),
+	}
+	Dv.stubModules["ServerScriptService.Server.Services.NetService"] = { FireClient = function() end }
+	local Power = Dv.require(Dv.Server.Services.PowerService)
+	Power.Init()
+	local player = { UserId = 7, Name = "Teste" }
+	local normal = Power.GetInfo(player).PerClick
+	Dv.SetStudio(false)
+	check(Power.SetDebugPerClick(player, 1e9) == false and Power.GetInfo(player).PerClick == normal, "D1. fora do Studio: golpe fixo recusado, dano normal (" .. NumberFormat.Short(normal) .. ")")
+	Dv.SetStudio(true)
+	local rowHp = WallConfigE.Stages[10].Hp
+	local okAll = true
+	for _, target in { { 10_500, "Extreme" }, { 270, "Preparing" }, { 82, "Ready" } } do
+		Power.SetDebugPerClick(player, rowHp / target[1])
+		local info = Power.GetInfo(player)
+		local level, hits = PU.ColossusState(rowHp, info.PerClick)
+		local combo = Power.ComputeClick(player, 2)
+		local comboLevel = PU.ColossusState(rowHp, combo)
+		print(string.format("      ≈%s: golpe ⚔ %s → %s (%d golpes); com combo ×2: %s", NumberFormat.Short(target[1]), NumberFormat.Short(info.PerClick), level, hits, comboLevel))
+		if level ~= target[2] or hits ~= target[1] or comboLevel ~= target[2] or combo ~= info.PerClick * 2 then
+			okAll = false
+		end
+	end
+	check(okAll, "D2. no Studio: botões ≈10,5K / ≈270 / ≈82 dão EXTREMO / PREPARANDO / PRONTO, e o combo (até ×2) não muda a categoria")
+	Power.SetDebugPerClick(player, nil)
+	check(Power.GetInfo(player).PerClick == normal, "D3. \"Dano normal\": volta exatamente à fórmula")
+	Dv.SetStudio(false)
+end
+
 -- ── S. Altar: estado disponível (StationFxController real) ──────────────────
 do
 	local S = require("./env")(root)

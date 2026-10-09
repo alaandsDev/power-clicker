@@ -165,7 +165,7 @@ E.stubModules["ServerScriptService.Server.Services.WorldService"] = {
 E.patches["ServerScriptService.Server.Services.WallService"] = {
 	{ ".Position", ".CFrame.Position", "all" },
 	{ "WallConfig.OpenSeconds", "0.5", "all" },
-	{ "character:PivotTo(CFrame.lookAt(target, target + Vector3.new(1, 0, 0)))", "root.CFrame = CFrame.new(target)" },
+	{ "character:PivotTo(CFrame.lookAt(target, target + Vector3.new(1, 0, 0)))", "root.CFrame = CFrame.new(target)", "all" },
 }
 local WallService = E.require(E.Server.Services.WallService)
 WallService.Init()
@@ -669,6 +669,43 @@ for _, message in bypassProblems do
 	print("      " .. message)
 end
 check(#bypassProblems == 0, "9. não dá para contornar nem pular as barreiras (largura toda, paredes laterais coladas e altas)")
+
+-- D. Debug do Colosso (só Studio): "Ir ao Colosso" não abre nada nem paga nada.
+do
+	local colossus = WallConfig.Stages[#WallConfig.Stages]
+	local D1 = newPlayer(41)
+	local D2 = newPlayer(42)
+	respawn(D1, spawnPosition)
+	respawn(D2, spawnPosition)
+	E.SetStudio(false)
+	check(WallService.DebugGoTo(D1, colossus.Id) == false, "D1. fora do Studio: \"Ir ao Colosso\" recusado")
+	E.SetStudio(true)
+	local gemsBefore = gems(D1)
+	check(WallService.DebugGoTo(D1, colossus.Id), "D2. no Studio: \"Ir ao Colosso\" leva o jogador")
+	local front = rows[colossus.Id][1]
+	local face = front.CFrame.Position.X - front.Size.X / 2
+	local at = positionOf(D1)
+	check(at.X < face and face - at.X <= 10 and WallService.Validate(D1), string.format("D3. na frente da 1ª fileira do Colosso (%.0f studs) e posição válida para o servidor", face - at.X))
+	local full = true
+	for index = 1, colossus.Rows do
+		if WallService.RowHp(D1, colossus.Id, index) ~= colossus.Hp then
+			full = false
+		end
+	end
+	check(full and not WallService.IsOpen(D1, colossus.Id), "D4. Colosso inteiro (10 × 288B) e fechado")
+	local opened = false
+	for _, stage in WallConfig.Stages do
+		if stage.Id ~= colossus.Id and WallService.IsOpen(D1, stage.Id) then
+			opened = true
+		end
+	end
+	check(not opened and next(datas[D1].Tower.Cleared) == nil and datas[D1].Tower.Highest == 0 and gems(D1) == gemsBefore, "D5. nenhuma barreira aberta, nenhum progresso salvo (Tower), nenhuma gema")
+	WallService.OnClick(D1, colossus.Hp / 82)
+	check(WallService.RowHp(D1, colossus.Id, 1) == colossus.Hp - colossus.Hp / 82 and WallService.RowHp(D2, colossus.Id, 1) == colossus.Hp, "D6. golpe de D1 no Colosso tira só do Colosso DELE (D2 intacto)")
+	moveTo(D2, at)
+	check(not WallService.Validate(D2) and positionOf(D2).X < at.X - 100, "D7. outro jogador no mesmo lugar sem o comando: levado de volta (o comando é por jogador)")
+	E.SetStudio(false)
+end
 
 -- 10. Distância do spawn até cada barreira
 print("")
